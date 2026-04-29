@@ -19,6 +19,7 @@ every request/response to a local JSONL log + SQLite index for later review.`,
 	root.AddCommand(proxyCmd())
 	root.AddCommand(certCmd())
 	root.AddCommand(tailCmd())
+	root.AddCommand(dashboardCmd())
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
