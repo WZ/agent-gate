@@ -19,11 +19,12 @@ var assets embed.FS
 
 // Options are the dependencies for a dashboard server.
 type Options struct {
-	Addr       string                 // "127.0.0.1:7878". Required for Run; optional for NewServer.
-	Listener   net.Listener           // Optional pre-bound listener; tests use this.
-	Store      *store.Store           // Required.
-	Allowlist  *allowlist.Allowlist   // Required.
-	Dismissals *dismissals.Dismissals // Required.
+	Addr             string                 // "127.0.0.1:7878". Required for Run; optional for NewServer.
+	Listener         net.Listener           // Optional pre-bound listener; tests use this.
+	Store            *store.Store           // Required.
+	Allowlist        *allowlist.Allowlist   // Required.
+	Dismissals       *dismissals.Dismissals // Required.
+	LivePollInterval time.Duration          // optional; defaults to 500ms
 }
 
 // NewServer returns an http.Handler for the dashboard. Embeds templates + static assets.
@@ -41,6 +42,7 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("/events/", handleEventDetail(opts, r))
 	mux.HandleFunc("/api/dismiss", handleDismiss(opts))
 	mux.HandleFunc("/api/trust", handleTrust(opts))
+	mux.HandleFunc("/api/live", handleLive(opts))
 
 	return mux
 }
