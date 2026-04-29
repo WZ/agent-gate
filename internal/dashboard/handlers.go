@@ -16,11 +16,21 @@ import (
 )
 
 type sessionRow struct {
-	SessionID  string
+	Label      string
+	Key        string
 	Host       string
 	StartedAt  time.Time
 	EventCount int
 	HasFlags   bool
+}
+
+// normalizeHost strips any port suffix from a stored host value so that
+// legacy rows with ":443" collapse into the same bucket as new rows.
+func normalizeHost(h string) string {
+	if idx := strings.LastIndex(h, ":"); idx >= 0 {
+		return h[:idx]
+	}
+	return h
 }
 
 func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
@@ -46,14 +56,19 @@ func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
 		}
 		groups := map[string]*sessionRow{}
 		for _, ix := range rows {
-			sid := ix.SessionID
-			if sid == "" {
-				sid = "(no session)"
+			normHost := normalizeHost(ix.Host)
+			var key, label string
+			if ix.SessionID != "" {
+				key = ix.SessionID
+				label = ix.SessionID
+			} else {
+				key = "host:" + normHost
+				label = "(host) " + normHost
 			}
-			g, ok := groups[sid]
+			g, ok := groups[key]
 			if !ok {
-				g = &sessionRow{SessionID: sid, Host: ix.Host, StartedAt: ix.StartedAt}
-				groups[sid] = g
+				g = &sessionRow{Label: label, Key: key, Host: normHost, StartedAt: ix.StartedAt}
+				groups[key] = g
 			}
 			g.EventCount++
 			if ix.StartedAt.After(g.StartedAt) {
@@ -93,25 +108,66 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 			http.NotFound(w, req)
 			return
 		}
-		rows, err := opts.Store.Index().Query(store.QueryFilter{SessionID: sid, Limit: 1000})
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			return
+
+		var (
+			label   string
+			allRows []store.IndexRow
+			err     error
+		)
+
+		if strings.HasPrefix(sid, "host:") {
+			// Host-bucket: query by host (with and without port) and filter to empty session_id.
+			h := strings.TrimPrefix(sid, "host:")
+			label = "(host) " + h
+
+			// Fetch rows matching the bare hostname.
+			allRows, err = opts.Store.Index().Query(store.QueryFilter{Host: h, Limit: 1000})
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			// Also fetch rows stored with the port-suffixed form (legacy data).
+			// We try both :80 and :443 as well as a LIKE query via in-memory filter.
+			// Simpler: fetch all rows, then in-memory filter by normalizeHost == h and SessionID == "".
+			allWithPort, err2 := opts.Store.Index().Query(store.QueryFilter{Host: h + ":443", Limit: 1000})
+			if err2 == nil {
+				allRows = append(allRows, allWithPort...)
+			}
+			allWithPort80, err3 := opts.Store.Index().Query(store.QueryFilter{Host: h + ":80", Limit: 1000})
+			if err3 == nil {
+				allRows = append(allRows, allWithPort80...)
+			}
+		} else {
+			label = sid
+			allRows, err = opts.Store.Index().Query(store.QueryFilter{SessionID: sid, Limit: 1000})
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
 		}
-		// Reverse to oldest-first for readability.
-		events := make([]eventRow, 0, len(rows))
-		for i := len(rows) - 1; i >= 0; i-- {
-			ix := rows[i]
+
+		// Build events list (oldest-first).
+		// For host-bucket, only include rows with empty SessionID.
+		isHostBucket := strings.HasPrefix(sid, "host:")
+		// Sort allRows by StartedAt ascending (they come back DESC from query).
+		sort.Slice(allRows, func(i, j int) bool {
+			return allRows[i].StartedAt.Before(allRows[j].StartedAt)
+		})
+		events := make([]eventRow, 0, len(allRows))
+		for _, ix := range allRows {
+			if isHostBucket && ix.SessionID != "" {
+				continue
+			}
 			var codes []string
 			if ix.FlagCodes != "" {
 				codes = strings.Split(ix.FlagCodes, ",")
 			}
 			events = append(events, eventRow{
 				ID: ix.ID, StartedAt: ix.StartedAt, Method: ix.Method,
-				Host: ix.Host, Path: ix.Path, Status: ix.Status, FlagCodes: codes,
+				Host: normalizeHost(ix.Host), Path: ix.Path, Status: ix.Status, FlagCodes: codes,
 			})
 		}
-		r.Render(w, req, "session_detail", map[string]any{"SessionID": sid, "Events": events})
+		r.Render(w, req, "session_detail", map[string]any{"SessionID": sid, "Label": label, "Events": events})
 	}
 }
 

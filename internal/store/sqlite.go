@@ -194,7 +194,7 @@ func splitURL(rawURL string) (host, path string, err error) {
 	if u.Host == "" {
 		return "", "", errors.New("url has no host")
 	}
-	return u.Host, u.Path, nil
+	return u.Hostname(), u.Path, nil
 }
 
 func (i *Index) QueryByID(id string) (IndexRow, error) {

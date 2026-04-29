@@ -1,6 +1,6 @@
 {{ define "session_detail" }}
 <section>
-  <h2><a href="/">Sessions</a> / {{ .SessionID }}</h2>
+  <h2><a href="/">Sessions</a> / {{ .Label }}</h2>
   {{ if not .Events }}
     <p>No events for this session.</p>
   {{ else }}
