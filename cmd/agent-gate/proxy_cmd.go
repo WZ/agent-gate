@@ -26,25 +26,27 @@ import (
 
 func proxyCmd() *cobra.Command {
 	var (
-		configPath  string
-		captureMode string
-		addr        string
+		configPath              string
+		captureMode             string
+		addr                    string
+		upstreamInsecureSkipVer bool
 	)
 	cmd := &cobra.Command{
 		Use:   "proxy",
 		Short: "Run the TLS-intercepting proxy (foreground)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runProxy(configPath, captureMode, addr)
+			return runProxy(configPath, captureMode, addr, upstreamInsecureSkipVer)
 		},
 	}
 	home, _ := os.UserHomeDir()
 	cmd.Flags().StringVar(&configPath, "config", filepath.Join(home, ".config", "agent-gate", "config.toml"), "Path to config.toml")
 	cmd.Flags().StringVar(&captureMode, "capture-mode", "permissive", `"airtight" or "permissive"; recorded on every event`)
 	cmd.Flags().StringVar(&addr, "addr", "", "Override proxy listen addr (default from config: 127.0.0.1:<port>)")
+	cmd.Flags().BoolVar(&upstreamInsecureSkipVer, "upstream-insecure-skip-verify", false, `skip TLS verification on the proxy→upstream connection. Testing only — captures the data but you can't trust the upstream identity.`)
 	return cmd
 }
 
-func runProxy(configPath, captureMode, addrOverride string) error {
+func runProxy(configPath, captureMode, addrOverride string, upstreamInsecure bool) error {
 	cfg, err := config.LoadFromFile(configPath)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -145,13 +147,18 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 
 	fmt.Fprintf(os.Stderr, "agent-gate proxy listening on %s (capture-mode=%s)\n", addr, captureMode)
 
+	if upstreamInsecure {
+		fmt.Fprintln(os.Stderr, "⚠ upstream TLS verification DISABLED. Captures still happen, but upstream identity is NOT validated. Use only for testing self-hosted endpoints.")
+	}
+
 	runErr := proxy.Run(proxy.Options{
-		Listener:    ln,
-		CA:          root,
-		Out:         flowCh,
-		IDGen:       idgen.NewGenerator(),
-		CaptureMode: captureMode,
-		Logger:      func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+		Listener:                   ln,
+		CA:                         root,
+		Out:                        flowCh,
+		IDGen:                      idgen.NewGenerator(),
+		CaptureMode:                captureMode,
+		UpstreamInsecureSkipVerify: upstreamInsecure,
+		Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 	})
 	close(flowCh)
 	<-done
