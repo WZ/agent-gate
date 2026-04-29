@@ -46,7 +46,9 @@ func TestEndToEndAnthropicLikeRequest(t *testing.T) {
 	defer st.Close()
 
 	flowCh := make(chan types.RawFlow, 8)
+	parsed := make(chan struct{})
 	go func() {
+		defer close(parsed)
 		for f := range flowCh {
 			ev := parser.Parse(f)
 			require.NoError(t, st.Append(types.StoredEvent{ParsedEvent: ev}))
@@ -89,8 +91,11 @@ func TestEndToEndAnthropicLikeRequest(t *testing.T) {
 	resp.Body.Close()
 	assert.Equal(t, 200, resp.StatusCode)
 
-	// Wait briefly for the pipeline goroutine to persist.
-	time.Sleep(100 * time.Millisecond)
+	// Poll until the pipeline goroutine has persisted the flow, with a 5-second cap.
+	require.Eventually(t, func() bool {
+		rows, err := st.Index().Query(store.QueryFilter{Limit: 10})
+		return err == nil && len(rows) == 1
+	}, 5*time.Second, 10*time.Millisecond, "expected one row in index")
 
 	rows, err := st.Index().Query(store.QueryFilter{Limit: 10})
 	require.NoError(t, err)
@@ -98,6 +103,10 @@ func TestEndToEndAnthropicLikeRequest(t *testing.T) {
 	assert.Equal(t, "POST", rows[0].Method)
 	assert.Equal(t, 200, rows[0].Status)
 	assert.Equal(t, "permissive", rows[0].CaptureMode)
+
+	// Close flowCh so the goroutine can exit, then wait for it to finish.
+	close(flowCh)
+	<-parsed
 
 	// JSONL exists and contains the body.
 	files, err := os.ReadDir(dataDir)
