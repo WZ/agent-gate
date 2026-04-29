@@ -1,0 +1,15 @@
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; max-width: 1000px; margin: 0 auto; padding: 1rem; color: #222; }
+header h1 { font-size: 1.2rem; margin: 0 0 1rem 0; }
+section { margin: 1rem 0; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #eee; text-align: left; font-size: 0.9rem; }
+th { background: #fafafa; }
+.flag { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.75rem; margin-right: 0.25rem; }
+.flag.high { background: #fee; color: #800; }
+.flag.medium { background: #ffe; color: #850; }
+.flag.low { background: #eef; color: #035; }
+.flag.info { background: #eee; color: #555; }
+.flag.dismissed { opacity: 0.4; text-decoration: line-through; }
+.body-pane { background: #fafafa; padding: 0.5rem; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+.banner { padding: 0.5rem; background: #ffe9e0; border: 1px solid #f60; border-radius: 4px; margin: 0.5rem 0; }
+button.action { font-size: 0.75rem; padding: 0.1rem 0.4rem; }
