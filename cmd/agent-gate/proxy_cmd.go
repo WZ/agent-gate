@@ -11,10 +11,13 @@ import (
 	"syscall"
 	"time"
 
+	"agent-gate/internal/allowlist"
 	"agent-gate/internal/ca"
 	"agent-gate/internal/config"
+	"agent-gate/internal/dismissals"
 	"agent-gate/internal/idgen"
 	"agent-gate/internal/parser"
+	"agent-gate/internal/policy"
 	"agent-gate/internal/proxy"
 	"agent-gate/internal/store"
 	"agent-gate/internal/types"
@@ -59,6 +62,35 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 	}
 	defer st.Close()
 
+	// Load allowlist + dismissals (file-backed; missing files are fine).
+	configDir := filepath.Dir(configPath)
+	al, err := allowlist.Load(filepath.Join(configDir, "allowlist.txt"))
+	if err != nil {
+		return fmt.Errorf("load allowlist: %w", err)
+	}
+	// Default-trust the Anthropic API on first run so existing setups aren't noisy.
+	if !al.Contains("api.anthropic.com") {
+		if err := al.Add("api.anthropic.com"); err != nil {
+			fmt.Fprintf(os.Stderr, "seed allowlist: %v\n", err)
+		}
+	}
+	di, err := dismissals.Load(filepath.Join(configDir, "dismissals.json"))
+	if err != nil {
+		return fmt.Errorf("load dismissals: %w", err)
+	}
+
+	// Engine with the eight built-in rules.
+	engine := policy.NewEngine(al, di,
+		policy.NewHostNotAllowlistedRule(al),
+		policy.PermissiveCaptureRule{},
+		policy.SecretInRequestRule{},
+		policy.EnvInToolResultRule{},
+		policy.OversizedRequestRule{Limit: 5 << 20},
+		policy.OversizedResponseRule{Limit: 5 << 20},
+		policy.NewUnknownMCPEndpointRule(map[string]struct{}{}),
+		policy.ParseErrorRule{},
+	)
+
 	addr := addrOverride
 	if addr == "" {
 		addr = fmt.Sprintf("127.0.0.1:%d", cfg.Ports.Proxy)
@@ -75,7 +107,7 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 
 	flowCh := make(chan types.RawFlow, 64)
 
-	// Pipeline goroutine: parse + persist.
+	// Pipeline goroutine: parse + evaluate + persist.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	done := make(chan struct{})
@@ -90,7 +122,8 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 					return
 				}
 				ev := parser.Parse(f)
-				stored := types.StoredEvent{ParsedEvent: ev}
+				flags := engine.Evaluate(&ev)
+				stored := types.StoredEvent{ParsedEvent: ev, Flags: flags}
 				if err := st.Append(stored); err != nil {
 					fmt.Fprintf(os.Stderr, "store append: %v\n", err)
 				}
