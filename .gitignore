@@ -19,3 +19,6 @@ events.db-*
 *.jsonl
 *.jsonl.gz
 .env
+
+# Local working notes — design specs, implementation plans, etc.
+docs/superpowers/
