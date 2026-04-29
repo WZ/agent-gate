@@ -44,6 +44,7 @@ func runTail(configPath string, interval time.Duration) error {
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sig)
 
 	since := time.Now().Add(-1 * time.Minute) // start from last minute
 	t := time.NewTicker(interval)
