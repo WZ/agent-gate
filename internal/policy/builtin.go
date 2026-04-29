@@ -90,3 +90,69 @@ func (EnvInToolResultRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
 }
 
 var envLineRegexp = regexp.MustCompile(`^[A-Z][A-Z0-9_]*=.+$`)
+
+// OversizedRequestRule fires when the request body exceeds Limit bytes.
+type OversizedRequestRule struct{ Limit int64 }
+
+func (OversizedRequestRule) Code() string       { return "oversized_request" }
+func (OversizedRequestRule) Severity() Severity { return SevMedium }
+func (r OversizedRequestRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
+	if int64(len(ev.RawFlow.ReqBody)) > r.Limit {
+		return true, fmt.Sprintf("request body %d bytes exceeds limit %d", len(ev.RawFlow.ReqBody), r.Limit)
+	}
+	return false, ""
+}
+
+// OversizedResponseRule fires when the response body exceeds Limit bytes.
+type OversizedResponseRule struct{ Limit int64 }
+
+func (OversizedResponseRule) Code() string       { return "oversized_response" }
+func (OversizedResponseRule) Severity() Severity { return SevLow }
+func (r OversizedResponseRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
+	if int64(len(ev.RawFlow.RespBody)) > r.Limit {
+		return true, fmt.Sprintf("response body %d bytes exceeds limit %d", len(ev.RawFlow.RespBody), r.Limit)
+	}
+	return false, ""
+}
+
+// UnknownMCPEndpointRule fires when a response is text/event-stream and the
+// host is not in the known-MCP allowlist.
+type UnknownMCPEndpointRule struct{ knownMCP map[string]struct{} }
+
+func NewUnknownMCPEndpointRule(known map[string]struct{}) Rule {
+	return UnknownMCPEndpointRule{knownMCP: known}
+}
+
+func (UnknownMCPEndpointRule) Code() string       { return "unknown_mcp_endpoint" }
+func (UnknownMCPEndpointRule) Severity() Severity { return SevMedium }
+func (r UnknownMCPEndpointRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
+	if !isSSEHeader(ev.RawFlow.RespHeaders) {
+		return false, ""
+	}
+	host := hostFromURL(ev.RawFlow.URL)
+	if _, ok := r.knownMCP[host]; ok {
+		return false, ""
+	}
+	return true, "SSE response from " + host + " (not in known MCP list)"
+}
+
+func isSSEHeader(h map[string][]string) bool {
+	for _, v := range h["Content-Type"] {
+		if strings.Contains(strings.ToLower(v), "text/event-stream") {
+			return true
+		}
+	}
+	return false
+}
+
+// ParseErrorRule fires when the parser left an error annotation on the raw flow.
+type ParseErrorRule struct{}
+
+func (ParseErrorRule) Code() string       { return "parse_error" }
+func (ParseErrorRule) Severity() Severity { return SevInfo }
+func (ParseErrorRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
+	if ev.RawFlow.Err != "" {
+		return true, ev.RawFlow.Err
+	}
+	return false, ""
+}
