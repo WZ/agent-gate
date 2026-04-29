@@ -46,10 +46,13 @@ func Ensure(dir string) (*CA, error) {
 	keyPath := filepath.Join(dir, "key.pem")
 
 	if _, err := os.Stat(certPath); err == nil {
-		// Validate key permissions before loading.
-		st, err := os.Stat(keyPath)
+		// Validate key file is a regular file with 0600 permissions before loading.
+		st, err := os.Lstat(keyPath)
 		if err != nil {
 			return nil, err
+		}
+		if !st.Mode().IsRegular() {
+			return nil, fmt.Errorf("ca key %s must be a regular file (got mode %v)", keyPath, st.Mode())
 		}
 		if st.Mode().Perm() != 0o600 {
 			return nil, fmt.Errorf("ca key %s must be mode 0600, got %v", keyPath, st.Mode().Perm())

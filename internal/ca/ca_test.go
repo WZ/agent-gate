@@ -62,3 +62,18 @@ func TestSignLeafProducesValidCert(t *testing.T) {
 	tlsCert := tls.Certificate{Certificate: [][]byte{leaf.Cert.Raw}, PrivateKey: leaf.Key}
 	assert.NotNil(t, tlsCert.PrivateKey)
 }
+
+func TestEnsureRejectsKeySymlink(t *testing.T) {
+	dir := t.TempDir()
+	_, err := Ensure(dir)
+	require.NoError(t, err)
+	keyPath := filepath.Join(dir, "key.pem")
+	target := filepath.Join(dir, "evil-target.pem")
+	// Move the real key out, replace it with a symlink to a permissive copy.
+	require.NoError(t, os.Rename(keyPath, target))
+	require.NoError(t, os.Chmod(target, 0o644))
+	require.NoError(t, os.Symlink(target, keyPath))
+	_, err = Ensure(dir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "regular file")
+}
