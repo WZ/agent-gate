@@ -235,13 +235,9 @@ func parseAnthropicSSEResponse(ev *types.ParsedEvent) {
 				currentToolJSON.Reset()
 			}
 		case "message_delta":
-			var d struct {
-				Usage struct {
-					OutputTokens int `json:"output_tokens"`
-				} `json:"usage"`
-			}
-			_ = json.Unmarshal(evt.Delta, &d)
-			outputTokens = d.Usage.OutputTokens
+			// Anthropic emits usage as a top-level sibling of delta in message_delta events
+			// (see SSE docs: https://docs.anthropic.com/en/api/messages-streaming).
+			outputTokens = evt.Usage.OutputTokens
 		}
 	}
 
