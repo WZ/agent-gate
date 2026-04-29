@@ -1,0 +1,44 @@
+{{ define "event_detail" }}
+<section>
+  <h2>
+    <a href="/">Sessions</a>
+    {{ if .SessionID }} / <a href="/sessions/{{ .SessionID }}">{{ .SessionID }}</a>{{ end }}
+    / {{ .ID }}
+  </h2>
+  <p>
+    <strong>{{ .Method }}</strong> {{ .URL }}
+    → <strong>{{ .Status }}</strong>
+    · {{ .StartedAt.Format "2006-01-02 15:04:05" }}
+    · capture-mode: <code>{{ .CaptureMode }}</code>
+  </p>
+
+  {{ if .Flags }}
+    <p>
+      Flags:
+      {{ range .Flags }}
+        <span class="flag {{ .Severity }}">{{ .Code }}</span>
+      {{ end }}
+    </p>
+  {{ end }}
+
+  {{ if .Raw }}
+    <p class="banner">⚠ raw view — secrets visible. <a href="/events/{{ .ID }}">switch back to redacted</a></p>
+  {{ else }}
+    <p><a href="/events/{{ .ID }}?raw=1">show raw bytes (logs the peek)</a></p>
+  {{ end }}
+
+  <h3>Request</h3>
+  <details><summary>Headers</summary>
+    <pre class="body-pane">{{ range $k, $v := .ReqHeaders }}{{ $k }}: {{ index $v 0 }}
+{{ end }}</pre>
+  </details>
+  <pre class="body-pane">{{ .ReqBody }}</pre>
+
+  <h3>Response</h3>
+  <details><summary>Headers</summary>
+    <pre class="body-pane">{{ range $k, $v := .RespHeaders }}{{ $k }}: {{ index $v 0 }}
+{{ end }}</pre>
+  </details>
+  <pre class="body-pane">{{ .RespBody }}</pre>
+</section>
+{{ end }}

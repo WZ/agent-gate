@@ -1,12 +1,17 @@
 package dashboard
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"agent-gate/internal/dismissals"
+	"agent-gate/internal/redactor"
 	"agent-gate/internal/store"
+	"agent-gate/internal/types"
 )
 
 type sessionRow struct {
@@ -89,5 +94,76 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 			})
 		}
 		r.Render(w, req, "session_detail", map[string]any{"SessionID": sid, "Events": events})
+	}
+}
+
+type eventDetail struct {
+	ID          string
+	SessionID   string
+	Method      string
+	URL         string
+	Status      int
+	StartedAt   time.Time
+	ReqHeaders  http.Header
+	RespHeaders http.Header
+	ReqBody     string
+	RespBody    string
+	Flags       []types.Flag
+	Raw         bool
+	CaptureMode string
+}
+
+func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		id := strings.TrimPrefix(req.URL.Path, "/events/")
+		if id == "" {
+			http.NotFound(w, req)
+			return
+		}
+		raw := req.URL.Query().Get("raw") == "1"
+
+		ix, err := opts.Store.Index().QueryByID(id)
+		if err != nil {
+			http.NotFound(w, req)
+			return
+		}
+		bodyR, err := opts.Store.Body(id)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		defer bodyR.Close()
+		rawBytes, err := io.ReadAll(bodyR)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		var stored types.StoredEvent
+		if err := json.Unmarshal(rawBytes, &stored); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		var reqBodyStr, respBodyStr string
+		if raw {
+			reqBodyStr = string(stored.ReqBody)
+			respBodyStr = string(stored.RespBody)
+			_ = opts.Dismissals.Add(dismissals.ScopeEvent, id, "raw_peek", ix.Host,
+				"reviewer requested raw view of event "+id)
+		} else {
+			reqBodyStr = redactor.Redact(string(stored.ReqBody))
+			respBodyStr = redactor.Redact(string(stored.RespBody))
+		}
+
+		detail := eventDetail{
+			ID: id, SessionID: ix.SessionID, Method: ix.Method, URL: stored.URL,
+			Status: ix.Status, StartedAt: ix.StartedAt,
+			ReqHeaders:  redactor.RedactHeaders(stored.ReqHeaders),
+			RespHeaders: redactor.RedactHeaders(stored.RespHeaders),
+			ReqBody:     reqBodyStr, RespBody: respBodyStr,
+			Flags: stored.Flags, Raw: raw,
+			CaptureMode: ix.CaptureMode,
+		}
+		r.Render(w, req, "event_detail", detail)
 	}
 }
