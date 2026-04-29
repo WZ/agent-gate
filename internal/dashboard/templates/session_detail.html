@@ -1,0 +1,29 @@
+{{ define "session_detail" }}
+<section>
+  <h2><a href="/">Sessions</a> / {{ .SessionID }}</h2>
+  {{ if not .Events }}
+    <p>No events for this session.</p>
+  {{ else }}
+    <table>
+      <thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Path</th><th>Status</th><th>Flags</th><th></th></tr></thead>
+      <tbody>
+        {{ range .Events }}
+          <tr>
+            <td>{{ .StartedAt.Format "15:04:05.000" }}</td>
+            <td>{{ .Method }}</td>
+            <td>{{ .Host }}</td>
+            <td>{{ .Path }}</td>
+            <td>{{ .Status }}</td>
+            <td>
+              {{ range .FlagCodes }}
+                <span class="flag info">{{ . }}</span>
+              {{ end }}
+            </td>
+            <td><a href="/events/{{ .ID }}">view</a></td>
+          </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  {{ end }}
+</section>
+{{ end }}
