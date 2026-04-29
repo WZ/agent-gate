@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -57,7 +59,6 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 	}
 	defer st.Close()
 
-	flowCh := make(chan types.RawFlow, 64)
 	addr := addrOverride
 	if addr == "" {
 		addr = fmt.Sprintf("127.0.0.1:%d", cfg.Ports.Proxy)
@@ -65,6 +66,14 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 	if !isLoopbackAddr(addr) {
 		return fmt.Errorf("refusing to bind non-loopback addr %q (security policy)", addr)
 	}
+
+	// Bind the listener up front so we can close it from the signal handler.
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	flowCh := make(chan types.RawFlow, 64)
 
 	// Pipeline goroutine: parse + persist.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -89,30 +98,35 @@ func runProxy(configPath, captureMode, addrOverride string) error {
 		}
 	}()
 
-	// Signal handling for clean shutdown.
+	// Signal handling: close the listener (which makes proxy.Run return) and cancel ctx.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
 	go func() {
 		<-sigCh
 		fmt.Fprintln(os.Stderr, "shutting down...")
+		ln.Close()
 		cancel()
 	}()
 
 	fmt.Fprintf(os.Stderr, "agent-gate proxy listening on %s (capture-mode=%s)\n", addr, captureMode)
 
-	if err := proxy.Run(proxy.Options{
-		Addr:        addr,
+	runErr := proxy.Run(proxy.Options{
+		Listener:    ln,
 		CA:          root,
 		Out:         flowCh,
 		IDGen:       idgen.NewGenerator(),
 		CaptureMode: captureMode,
 		Logger:      func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-	}); err != nil {
-		return fmt.Errorf("proxy: %w", err)
-	}
+	})
 	close(flowCh)
 	<-done
+
+	// net.ErrClosed is the expected outcome of graceful shutdown via ln.Close.
+	if runErr != nil && !errors.Is(runErr, net.ErrClosed) {
+		return fmt.Errorf("proxy: %w", runErr)
+	}
 	return nil
 }
 
