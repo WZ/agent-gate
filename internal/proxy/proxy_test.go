@@ -78,6 +78,54 @@ func TestProxyCapturesRoundTrip(t *testing.T) {
 	}
 }
 
+func TestProxyWithUpstreamInsecureSkipVerify(t *testing.T) {
+	upstream := startUpstream(t)
+
+	root, err := ca.Ensure(t.TempDir())
+	require.NoError(t, err)
+
+	out := make(chan types.RawFlow, 8)
+	pAddr := startProxy(t, Options{
+		Addr:                       "127.0.0.1:0",
+		CA:                         root,
+		Out:                        out,
+		IDGen:                      idgen.NewGenerator(),
+		CaptureMode:                "permissive",
+		UpstreamInsecureSkipVerify: true,
+		// NOTE: NOT setting UpstreamRootCAs, so the proxy can't verify the upstream cert normally.
+	})
+
+	// Build a client that uses our proxy and trusts our root CA.
+	pool := x509.NewCertPool()
+	pool.AddCert(root.Cert)
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(mustURL(t, "http://"+pAddr)),
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	resp, err := client.Get(upstream.URL + "/v1/messages")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Contains(t, string(body), "msg_1")
+
+	// One flow should be on the channel.
+	select {
+	case f := <-out:
+		assert.NotEmpty(t, f.ID)
+		assert.Equal(t, "GET", f.Method)
+		assert.Equal(t, 200, f.RespStatus)
+		assert.Contains(t, string(f.RespBody), "msg_1")
+		assert.Equal(t, "permissive", f.CaptureMode)
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected RawFlow on channel")
+	}
+}
+
 // helpers
 func mustURL(t *testing.T, s string) *url.URL {
 	u, err := url.Parse(s)

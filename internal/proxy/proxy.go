@@ -20,15 +20,16 @@ import (
 
 // Options configure the proxy.
 type Options struct {
-	Addr            string                        // "127.0.0.1:8888". Required if Listener is nil.
-	Listener        net.Listener                  // Optional pre-bound listener (used by tests).
-	CA              *ca.CA                        // Required.
-	Out             chan<- types.RawFlow          // Required: parser inbox.
-	IDGen           *idgen.Generator              // Required.
-	CaptureMode     string                        // "airtight" | "permissive". Required.
-	UpstreamRootCAs *x509.CertPool                // Optional: trust roots for upstream TLS (tests use this).
-	BodyLimit       int64                         // Optional: max body size to keep in memory. Default 8 MiB.
-	Logger          func(format string, a ...any) // Optional.
+	Addr                       string                        // "127.0.0.1:8888". Required if Listener is nil.
+	Listener                   net.Listener                  // Optional pre-bound listener (used by tests).
+	CA                         *ca.CA                        // Required.
+	Out                        chan<- types.RawFlow          // Required: parser inbox.
+	IDGen                      *idgen.Generator              // Required.
+	CaptureMode                string                        // "airtight" | "permissive". Required.
+	UpstreamRootCAs            *x509.CertPool                // Optional: trust roots for upstream TLS (tests use this).
+	UpstreamInsecureSkipVerify bool                          // Optional: if true, skip TLS verification on upstream connection. Testing only.
+	BodyLimit                  int64                         // Optional: max body size to keep in memory. Default 8 MiB.
+	Logger                     func(format string, a ...any) // Optional.
 }
 
 const defaultBodyLimit = 8 << 20
@@ -85,7 +86,10 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 
 	// Configure upstream Transport with our optional root pool (for tests; nil in prod).
 	gp.Tr = &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: opts.UpstreamRootCAs},
+		TLSClientConfig: &tls.Config{
+			RootCAs:            opts.UpstreamRootCAs,
+			InsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+		},
 	}
 
 	// Inflight tracker so that the request and response phases can find each other.
