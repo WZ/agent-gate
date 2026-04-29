@@ -296,6 +296,42 @@ func TestSessionDetailServesHostBucket(t *testing.T) {
 	assert.NotContains(t, body, "real-event")
 }
 
+func TestClearWipesEvents(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "e", URL: "https://x.com/y", StartedAt: time.Now()},
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	// Use a client that doesn't follow redirects so we can see the 303.
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	resp, err := client.Post(srv.URL+"/api/clear", "application/x-www-form-urlencoded", nil)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusSeeOther, resp.StatusCode, "should redirect after clear")
+
+	rows, err := opts.Store.Index().Query(store.QueryFilter{Limit: 10})
+	require.NoError(t, err)
+	assert.Empty(t, rows, "events should be empty after clear")
+}
+
+func TestClearRequiresPOST(t *testing.T) {
+	opts := freshOpts(t)
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/clear")
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, 405, resp.StatusCode)
+}
+
 func TestSessionsListFilteredByHost(t *testing.T) {
 	opts := freshOpts(t)
 	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{

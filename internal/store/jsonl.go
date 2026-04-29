@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -88,6 +89,35 @@ func (w *JSONLWriter) Close() error {
 		err := w.current.Close()
 		w.current = nil
 		return err
+	}
+	return nil
+}
+
+// Truncate closes any open file, removes all .jsonl/.jsonl.gz files in the dir,
+// and resets internal state so the next Append starts fresh.
+func (w *JSONLWriter) Truncate() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.current != nil {
+		if err := w.current.Close(); err != nil {
+			return err
+		}
+		w.current = nil
+	}
+	w.curDate = ""
+	w.curSize = 0
+
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasSuffix(name, ".jsonl") || strings.HasSuffix(name, ".jsonl.gz") {
+			if err := os.Remove(filepath.Join(w.dir, name)); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

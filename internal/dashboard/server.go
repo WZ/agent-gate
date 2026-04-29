@@ -43,6 +43,7 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("/api/dismiss", handleDismiss(opts))
 	mux.HandleFunc("/api/trust", handleTrust(opts))
 	mux.HandleFunc("/api/live", handleLive(opts))
+	mux.HandleFunc("/api/clear", handleClear(opts))
 
 	return mux
 }
