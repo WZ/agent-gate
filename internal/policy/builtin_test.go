@@ -104,3 +104,53 @@ func TestEnvInToolResultSilentBelowThreshold(t *testing.T) {
 	}}}
 	assert.Empty(t, e.Evaluate(ev))
 }
+
+func TestOversizedRequestFiresAbove5MB(t *testing.T) {
+	e, _ := mkengine(t, OversizedRequestRule{Limit: 5 << 20})
+	body := make([]byte, (5<<20)+1)
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{ID: "e", ReqBody: body}})
+	require.Len(t, flags, 1)
+	assert.Equal(t, "oversized_request", flags[0].Code)
+	assert.Equal(t, "medium", flags[0].Severity)
+}
+
+func TestOversizedResponseFiresAbove5MB(t *testing.T) {
+	e, _ := mkengine(t, OversizedResponseRule{Limit: 5 << 20})
+	body := make([]byte, (5<<20)+1)
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{ID: "e", RespBody: body}})
+	require.Len(t, flags, 1)
+	assert.Equal(t, "oversized_response", flags[0].Code)
+	assert.Equal(t, "low", flags[0].Severity)
+}
+
+func TestUnknownMCPEndpointFires(t *testing.T) {
+	e, _ := mkengine(t, NewUnknownMCPEndpointRule(map[string]struct{}{"mcp.known.com": {}}))
+	flags := e.Evaluate(&types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "e",
+			URL:         "https://strange.example.com/sse",
+			RespHeaders: map[string][]string{"Content-Type": {"text/event-stream"}},
+		},
+	})
+	require.Len(t, flags, 1)
+	assert.Equal(t, "unknown_mcp_endpoint", flags[0].Code)
+	assert.Equal(t, "medium", flags[0].Severity)
+}
+
+func TestUnknownMCPEndpointSilentForNonSSE(t *testing.T) {
+	e, _ := mkengine(t, NewUnknownMCPEndpointRule(nil))
+	flags := e.Evaluate(&types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "e",
+			URL:         "https://strange.example.com/api",
+			RespHeaders: map[string][]string{"Content-Type": {"application/json"}},
+		},
+	})
+	assert.Empty(t, flags)
+}
+
+func TestParseErrorFiresWhenRawFlowErrIsSet(t *testing.T) {
+	e, _ := mkengine(t, ParseErrorRule{})
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{Err: "decode failed: ..."}})
+	require.Len(t, flags, 1)
+	assert.Equal(t, "parse_error", flags[0].Code)
+	assert.Equal(t, "info", flags[0].Severity)
+}
