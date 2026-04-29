@@ -2,6 +2,7 @@ package policy
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"agent-gate/internal/allowlist"
@@ -60,4 +61,46 @@ func TestPermissiveCaptureSilentInAirtight(t *testing.T) {
 	e, _ := mkengine(t, PermissiveCaptureRule{})
 	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{ID: "e", CaptureMode: "airtight"}})
 	assert.Empty(t, flags)
+}
+
+func TestSecretInRequestFiresOnAnthropicKey(t *testing.T) {
+	e, _ := mkengine(t, SecretInRequestRule{})
+	body := []byte(`{"prompt":"my key is sk-ant-` + strings.Repeat("a", 60) + `"}`)
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{ID: "e", ReqBody: body}})
+	require.Len(t, flags, 1)
+	assert.Equal(t, "secret_in_request", flags[0].Code)
+	assert.Equal(t, "high", flags[0].Severity)
+	assert.Contains(t, flags[0].Detail, "anthropic_key")
+}
+
+func TestSecretInRequestSilentOnInnocuousBody(t *testing.T) {
+	e, _ := mkengine(t, SecretInRequestRule{})
+	flags := e.Evaluate(&types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "e", ReqBody: []byte(`{"prompt":"hello world"}`)},
+	})
+	assert.Empty(t, flags)
+}
+
+func TestEnvInToolResultFiresOnDotEnvShape(t *testing.T) {
+	e, _ := mkengine(t, EnvInToolResultRule{})
+	ev := &types.ParsedEvent{ToolResults: []types.ToolResult{{
+		ToolUseID: "tool-1",
+		Content: `DATABASE_URL=postgres://x:y@host/db
+API_KEY=abc123
+SECRET_TOKEN=topsecret
+DEBUG=1`,
+	}}}
+	flags := e.Evaluate(ev)
+	require.Len(t, flags, 1)
+	assert.Equal(t, "env_in_tool_result", flags[0].Code)
+	assert.Equal(t, "high", flags[0].Severity)
+}
+
+func TestEnvInToolResultSilentBelowThreshold(t *testing.T) {
+	e, _ := mkengine(t, EnvInToolResultRule{})
+	ev := &types.ParsedEvent{ToolResults: []types.ToolResult{{
+		ToolUseID: "tool-1",
+		Content:   `KEY=value`,
+	}}}
+	assert.Empty(t, e.Evaluate(ev))
 }
