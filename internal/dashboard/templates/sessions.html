@@ -18,7 +18,11 @@
     </form>
     <table>
       <thead><tr><th>Session</th><th>Latest host</th><th>Events</th><th>Flags</th><th>Latest event</th></tr></thead>
-      <tbody hx-ext="sse" sse-connect="/api/live" sse-swap="message">
+      <tbody hx-ext="sse" sse-connect="/api/live"
+             hx-trigger="sse:message"
+             hx-get="/"
+             hx-select="tbody"
+             hx-swap="outerHTML">
         {{ range .Sessions }}
           <tr>
             <td><a href="/sessions/{{ .Key }}">{{ .Label }}</a></td>
