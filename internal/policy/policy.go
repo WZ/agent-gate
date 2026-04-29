@@ -2,6 +2,7 @@ package policy
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"agent-gate/internal/allowlist"
@@ -52,7 +53,7 @@ func (e *Engine) Evaluate(ev *types.ParsedEvent) []types.Flag {
 			code = "rule_error"
 			severity = string(SevInfo)
 		}
-		host := ev.RawFlow.URL
+		host := hostFromURL(ev.RawFlow.URL)
 		if e.dismissals != nil && e.dismissals.Has(ev.ID, code, host) {
 			continue
 		}
@@ -72,3 +73,15 @@ func safeEvaluate(r Rule, ev *types.ParsedEvent) (matched bool, detail string) {
 }
 
 func isRuleErrorDetail(d string) bool { return strings.HasPrefix(d, "rule \"") }
+
+func hostFromURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	h := u.Host
+	if i := strings.IndexByte(h, ':'); i >= 0 {
+		h = h[:i]
+	}
+	return strings.ToLower(h)
+}
