@@ -54,3 +54,16 @@ func TestParseHandlesMalformedAnthropicBody(t *testing.T) {
 	assert.Equal(t, "anthropic_messages", ev.Kind)
 	assert.Equal(t, 0, ev.Usage.InputTokens)
 }
+
+func TestParseAnthropicMessagesStreaming(t *testing.T) {
+	flow := loadFlow(t, "../../testdata/flows/anthropic_messages_streaming.json")
+	ev := Parse(flow)
+
+	assert.Equal(t, "anthropic_messages", ev.Kind)
+	assert.Equal(t, "claude-opus-4-7", ev.Model)
+	assert.Equal(t, 20, ev.Usage.InputTokens)
+	assert.Equal(t, 7, ev.Usage.OutputTokens)
+	assert.Equal(t, 4, ev.Usage.CacheRead)
+	assert.True(t, ev.IsStreamed)
+	assert.Empty(t, ev.Tools, "no tool_use in this fixture")
+}
