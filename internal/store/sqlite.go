@@ -82,7 +82,7 @@ func OpenIndex(path string) (*Index, error) {
 	}
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("create schema: %w", err)
 	}
 	return &Index{db: db}, nil
 }
