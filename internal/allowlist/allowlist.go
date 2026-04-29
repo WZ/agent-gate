@@ -10,7 +10,10 @@ import (
 )
 
 // Allowlist is a file-backed set of hostnames the user has explicitly trusted.
-// Safe for concurrent use.
+// Safe for concurrent use within a single process. Cross-process safety is NOT
+// guaranteed: if two processes mutate the same allowlist file simultaneously,
+// the last writer wins. Acceptable for a single-user local tool; revisit if
+// multi-process coordination is ever needed.
 type Allowlist struct {
 	mu    sync.RWMutex
 	path  string
@@ -81,7 +84,10 @@ func (a *Allowlist) Add(host string) error {
 			return err
 		}
 		if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-			tmp.Write([]byte{'\n'})
+			if _, err := tmp.Write([]byte{'\n'}); err != nil {
+				tmp.Close()
+				return err
+			}
 		}
 	}
 	if _, err := tmp.Write([]byte(host + "\n")); err != nil {
