@@ -124,7 +124,18 @@ func (w *JSONLWriter) Truncate() error {
 
 func (w *JSONLWriter) ensureFile(date string) error {
 	if w.current != nil && w.curDate == date {
-		return nil
+		// Path may have been unlinked from disk by another process (e.g., the
+		// dashboard's "Clear all events" action). Our open handle still works
+		// for the writer's POV, but on-disk readers can't find the file.
+		// Detect via Stat; if the path is gone, drop the handle so we reopen
+		// (and recreate) below.
+		if _, err := os.Stat(w.current.Name()); err == nil {
+			return nil
+		}
+		w.current.Close()
+		w.current = nil
+		w.curDate = ""
+		w.curSize = 0
 	}
 	if w.current != nil {
 		if err := w.current.Close(); err != nil {
