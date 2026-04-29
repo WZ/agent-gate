@@ -11,6 +11,7 @@ import (
 	"agent-gate/internal/allowlist"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/store"
+	"agent-gate/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,4 +64,24 @@ func TestServerRefusesNonLoopbackBind(t *testing.T) {
 	err := Run(opts)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "loopback")
+}
+
+func TestSessionsListShowsRowFromStore(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow:   types.RawFlow{ID: "evt-1", Method: "POST", URL: "https://api.anthropic.com/v1/messages", RespStatus: 200, StartedAt: time.Now()},
+		Kind:      "anthropic_messages",
+		SessionID: "sess-A",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(body)
+	assert.Contains(t, bodyStr, "sess-A")
+	assert.Contains(t, bodyStr, "api.anthropic.com")
 }
