@@ -82,7 +82,6 @@ internal/parser/     Anthropic Messages decoder + generic fallback
 internal/store/      JSONL + SQLite persistence
 internal/e2e/        End-to-end integration test
 testdata/flows/      Recorded flow fixtures
-docs/superpowers/    Spec + per-plan implementation plans
 ```
 
 ## Development
