@@ -197,6 +197,24 @@ func splitURL(rawURL string) (host, path string, err error) {
 	return u.Host, u.Path, nil
 }
 
+func (i *Index) QueryByID(id string) (IndexRow, error) {
+	row := i.db.QueryRow(`SELECT id, started_at, host, method, path, status, kind, session_id, model,
+		input_tokens, output_tokens, cache_read, capture_mode, flag_codes,
+		jsonl_path, jsonl_offset, jsonl_length FROM events WHERE id = ?`, id)
+	var r IndexRow
+	var startedMs int64
+	if err := row.Scan(
+		&r.ID, &startedMs, &r.Host, &r.Method, &r.Path, &r.Status, &r.Kind,
+		&r.SessionID, &r.Model, &r.InputTokens, &r.OutputTokens, &r.CacheRead,
+		&r.CaptureMode, &r.FlagCodes,
+		&r.JSONLPath, &r.JSONLOffset, &r.JSONLLength,
+	); err != nil {
+		return IndexRow{}, err
+	}
+	r.StartedAt = time.UnixMilli(startedMs).UTC()
+	return r, nil
+}
+
 func flagCodes(flags []types.Flag) string {
 	codes := make([]string, len(flags))
 	for i, f := range flags {
