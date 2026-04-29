@@ -67,3 +67,26 @@ func TestSQLiteFilterByHostAndTime(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, rows, 2)
 }
+
+func TestInsertStripsPortFromHost(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "events.db")
+	idx, err := OpenIndex(dbPath)
+	require.NoError(t, err)
+	defer idx.Close()
+
+	ev := types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID:     "port-test",
+			Method: "POST",
+			URL:    "https://api.anthropic.com:443/v1/messages",
+		},
+		Kind: "anthropic_messages",
+	}}
+	require.NoError(t, idx.Insert(ev, Location{}))
+
+	// Query with no-port host — must find the row.
+	rows, err := idx.Query(QueryFilter{Host: "api.anthropic.com"})
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "event stored with :443 should be found by host without port")
+	assert.Equal(t, "api.anthropic.com", rows[0].Host)
+}

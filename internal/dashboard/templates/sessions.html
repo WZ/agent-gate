@@ -17,7 +17,7 @@
       <tbody hx-ext="sse" sse-connect="/api/live" sse-swap="message">
         {{ range .Sessions }}
           <tr>
-            <td><a href="/sessions/{{ .SessionID }}">{{ .SessionID }}</a></td>
+            <td><a href="/sessions/{{ .Key }}">{{ .Label }}</a></td>
             <td>{{ .Host }}</td>
             <td>{{ .EventCount }}</td>
             <td>{{ if .HasFlags }}⚠{{ end }}</td>

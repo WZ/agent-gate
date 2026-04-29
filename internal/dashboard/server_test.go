@@ -201,6 +201,101 @@ func TestTrustHostAddsToAllowlist(t *testing.T) {
 	assert.True(t, opts.Allowlist.Contains("safe.example.com"))
 }
 
+// TestSessionsListGroupsEmptySessionByHost verifies that events with empty SessionID are
+// grouped per-host (with port stripped) and appear as separate rows labelled "(host) <h>".
+// The sentinel string "(no session)" must NOT appear.
+func TestSessionsListGroupsEmptySessionByHost(t *testing.T) {
+	opts := freshOpts(t)
+	base := time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)
+
+	for i, u := range []string{
+		"https://api.github.com:443/repos",
+		"https://api.github.com:443/issues",
+		"https://api.anthropic.com:443/v1/messages",
+		"https://api.anthropic.com:443/v1/complete",
+	} {
+		require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         strings.Repeat("g", i+1),
+				Method:     "POST",
+				URL:        u,
+				RespStatus: 200,
+				StartedAt:  base.Add(time.Duration(i) * time.Minute),
+			},
+			// SessionID intentionally left empty.
+		}}))
+	}
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/")
+	require.NoError(t, err)
+	bs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	body := string(bs)
+
+	// Two separate host rows, port stripped.
+	assert.Contains(t, body, "(host) api.github.com")
+	assert.Contains(t, body, "(host) api.anthropic.com")
+
+	// The old sentinel must not appear.
+	assert.NotContains(t, body, "(no session)")
+
+	// Each host should show EventCount=2; the template renders the number directly.
+	// We verify by checking the links use the host: prefix key.
+	assert.Contains(t, body, `href="/sessions/host:api.github.com"`)
+	assert.Contains(t, body, `href="/sessions/host:api.anthropic.com"`)
+}
+
+// TestSessionDetailServesHostBucket verifies that GET /sessions/host:<h> returns only
+// the events with empty SessionID for that host, not events with a real SessionID.
+func TestSessionDetailServesHostBucket(t *testing.T) {
+	opts := freshOpts(t)
+	base := time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)
+
+	// 3 empty-session events on api.github.com.
+	for i := 0; i < 3; i++ {
+		require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "empty-" + strings.Repeat("x", i+1),
+				Method:     "GET",
+				URL:        "https://api.github.com/repos",
+				RespStatus: 200,
+				StartedAt:  base.Add(time.Duration(i) * time.Minute),
+			},
+		}}))
+	}
+	// 1 event on api.github.com with a real SessionID — must NOT appear.
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID:         "real-event",
+			Method:     "POST",
+			URL:        "https://api.github.com/gql",
+			RespStatus: 200,
+			StartedAt:  base.Add(10 * time.Minute),
+		},
+		SessionID: "real",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/sessions/host:api.github.com")
+	require.NoError(t, err)
+	bs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	body := string(bs)
+
+	// All 3 empty-session events should be listed.
+	assert.Contains(t, body, "empty-x")
+	assert.Contains(t, body, "empty-xx")
+	assert.Contains(t, body, "empty-xxx")
+
+	// The real-session event must NOT appear.
+	assert.NotContains(t, body, "real-event")
+}
+
 func TestSessionsListFilteredByHost(t *testing.T) {
 	opts := freshOpts(t)
 	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
