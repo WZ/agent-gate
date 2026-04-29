@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,4 +108,55 @@ func TestSessionDetailListsEvents(t *testing.T) {
 	for _, id := range []string{"e1", "e2", "e3"} {
 		assert.Contains(t, bodyStr, id)
 	}
+}
+
+func TestEventDetailDefaultsToRedacted(t *testing.T) {
+	opts := freshOpts(t)
+	body := `{"prompt":"my key sk-ant-` + strings.Repeat("a", 60) + `"}`
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID: "e", Method: "POST", URL: "https://api.anthropic.com/v1/messages",
+			RespStatus: 200, ReqBody: []byte(body), StartedAt: time.Now(),
+		},
+		SessionID: "sess-A",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/events/e")
+	require.NoError(t, err)
+	bs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(bs)
+	assert.NotContains(t, bodyStr, "sk-ant-aaaaaaaa")
+	assert.Contains(t, bodyStr, "REDACTED")
+}
+
+func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
+	opts := freshOpts(t)
+	body := `{"prompt":"my key sk-ant-` + strings.Repeat("a", 60) + `"}`
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID: "e", Method: "POST", URL: "https://api.anthropic.com/v1/messages",
+			RespStatus: 200, ReqBody: []byte(body), StartedAt: time.Now(),
+		},
+		SessionID: "sess-A",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/events/e?raw=1")
+	require.NoError(t, err)
+	bs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(bs)
+	assert.Contains(t, bodyStr, "sk-ant-aaaaaaaa", "raw view should expose secrets")
+	assert.Contains(t, bodyStr, "raw view")
+
+	entries := opts.Dismissals.Entries()
+	require.Len(t, entries, 1)
+	assert.Equal(t, "raw_peek", entries[0].Code)
+	assert.Equal(t, "e", entries[0].EventID)
 }
