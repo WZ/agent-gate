@@ -85,3 +85,26 @@ func TestSessionsListShowsRowFromStore(t *testing.T) {
 	assert.Contains(t, bodyStr, "sess-A")
 	assert.Contains(t, bodyStr, "api.anthropic.com")
 }
+
+func TestSessionDetailListsEvents(t *testing.T) {
+	opts := freshOpts(t)
+	for i, id := range []string{"e1", "e2", "e3"} {
+		require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{ID: id, Method: "POST", URL: "https://api.anthropic.com/v1/messages",
+				RespStatus: 200, StartedAt: time.Date(2026, 4, 29, 0, i, 0, 0, time.UTC)},
+			SessionID: "sess-A",
+		}}))
+	}
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/sessions/sess-A")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(body)
+	for _, id := range []string{"e1", "e2", "e3"} {
+		assert.Contains(t, bodyStr, id)
+	}
+}

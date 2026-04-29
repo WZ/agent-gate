@@ -37,6 +37,7 @@ func NewServer(opts Options) http.Handler {
 
 	// Routes.
 	mux.HandleFunc("/", handleSessionsList(opts, r))
+	mux.HandleFunc("/sessions/", handleSessionDetail(opts, r))
 
 	return mux
 }
