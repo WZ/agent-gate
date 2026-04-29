@@ -131,6 +131,7 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 			}
 		}
 
+		respHeaders := resp.Header.Clone()
 		flow := types.RawFlow{
 			ID:            inf.id,
 			StartedAt:     inf.startedAt,
@@ -140,9 +141,9 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 			ReqHeaders:    inf.req.Header,
 			ReqBody:       inf.reqBody,
 			RespStatus:    resp.StatusCode,
-			RespHeaders:   resp.Header,
+			RespHeaders:   respHeaders,
 			RespBody:      respBytes,
-			IsStreamed:    isSSE(resp.Header),
+			IsStreamed:    isSSE(respHeaders),
 			BodyTruncated: inf.reqTruncated || respTrunc,
 			CaptureMode:   opts.CaptureMode,
 		}
