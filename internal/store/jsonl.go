@@ -63,6 +63,11 @@ func (w *JSONLWriter) Append(ev types.StoredEvent) (Location, error) {
 	if err != nil {
 		return Location{}, err
 	}
+	// Defensive: os.File.Write reports short writes via io.ErrShortWrite, but
+	// keep an explicit check so future readers don't have to verify that semantics.
+	if n != len(data) {
+		return Location{}, fmt.Errorf("short write: %d of %d bytes", n, len(data))
+	}
 	w.curSize += int64(n)
 
 	return Location{
@@ -72,7 +77,10 @@ func (w *JSONLWriter) Append(ev types.StoredEvent) (Location, error) {
 	}, nil
 }
 
-// Close flushes and closes the current file.
+// Close closes the current file. Note: writes are not fsync'd; a crash between
+// Append returning and the OS flushing buffers may lose recently appended lines.
+// Acceptable for MVP — JSONL is the source of truth and an explicit Sync() can
+// be added later if durability requirements tighten.
 func (w *JSONLWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
