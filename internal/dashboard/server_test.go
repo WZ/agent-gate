@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -159,4 +160,43 @@ func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "raw_peek", entries[0].Code)
 	assert.Equal(t, "e", entries[0].EventID)
+}
+
+func TestDismissFlag(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{ID: "e", URL: "https://x.com/y", StartedAt: time.Now()},
+		},
+		Flags: []types.Flag{{Code: "host_not_allowlisted", Severity: "high", Detail: "x.com"}},
+	}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	form := url.Values{
+		"event_id": {"e"},
+		"code":     {"host_not_allowlisted"},
+		"host":     {"x.com"},
+		"scope":    {"host_code"},
+		"reason":   {"private monitoring"},
+	}
+	resp, err := http.PostForm(srv.URL+"/api/dismiss", form)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, 200, resp.StatusCode)
+
+	assert.True(t, opts.Dismissals.Has("any", "host_not_allowlisted", "x.com"))
+}
+
+func TestTrustHostAddsToAllowlist(t *testing.T) {
+	opts := freshOpts(t)
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.PostForm(srv.URL+"/api/trust", url.Values{"host": {"safe.example.com"}})
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.True(t, opts.Allowlist.Contains("safe.example.com"))
 }

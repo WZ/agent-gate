@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"encoding/json"
+	"html"
 	"io"
 	"net/http"
 	"sort"
@@ -165,5 +166,51 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			CaptureMode: ix.CaptureMode,
 		}
 		r.Render(w, req, "event_detail", detail)
+	}
+}
+
+func handleDismiss(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		scope := dismissals.Scope(req.FormValue("scope"))
+		err := opts.Dismissals.Add(scope,
+			req.FormValue("event_id"),
+			req.FormValue("code"),
+			req.FormValue("host"),
+			req.FormValue("reason"),
+		)
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<span class="flag dismissed">dismissed</span>`))
+	}
+}
+
+func handleTrust(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		host := req.FormValue("host")
+		if err := opts.Allowlist.Add(host); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<span class="ok">trusted ` + html.EscapeString(host) + `</span>`))
 	}
 }
