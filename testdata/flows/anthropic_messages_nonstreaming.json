@@ -1,0 +1,14 @@
+{
+  "id": "01HXSTREAM",
+  "started_at": "2026-04-28T10:00:00Z",
+  "ended_at":   "2026-04-28T10:00:01Z",
+  "method": "POST",
+  "url": "https://api.anthropic.com/v1/messages",
+  "req_headers": {"Content-Type": ["application/json"], "X-Claude-Session-Id": ["sess-abc"]},
+  "req_body": "eyJtb2RlbCI6ImNsYXVkZS1vcHVzLTQtNyIsIm1lc3NhZ2VzIjpbeyJyb2xlIjoidXNlciIsImNvbnRlbnQiOiJoaSJ9XSwic3lzdGVtIjoidGVzdCJ9",
+  "resp_status": 200,
+  "resp_headers": {"Content-Type": ["application/json"]},
+  "resp_body": "eyJpZCI6Im1zZ18xIiwidHlwZSI6Im1lc3NhZ2UiLCJyb2xlIjoiYXNzaXN0YW50IiwibW9kZWwiOiJjbGF1ZGUtb3B1cy00LTciLCJjb250ZW50IjpbeyJ0eXBlIjoidGV4dCIsInRleHQiOiJoZWxsbyJ9XSwic3RvcF9yZWFzb24iOiJlbmRfdHVybiIsInVzYWdlIjp7ImlucHV0X3Rva2VucyI6MTAsIm91dHB1dF90b2tlbnMiOjUsImNhY2hlX3JlYWRfaW5wdXRfdG9rZW5zIjowfX0=",
+  "is_streamed": false,
+  "capture_mode": "permissive"
+}
