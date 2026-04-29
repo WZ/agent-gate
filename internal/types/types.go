@@ -7,20 +7,21 @@ import (
 
 // RawFlow is one HTTP exchange captured by the proxy. It is the input to the parser.
 type RawFlow struct {
-	ID           string      `json:"id"` // ULID
-	StartedAt    time.Time   `json:"started_at"`
-	EndedAt      time.Time   `json:"ended_at"`
-	Method       string      `json:"method"`
-	URL          string      `json:"url"`
-	ReqHeaders   http.Header `json:"req_headers"`
-	ReqBody      []byte      `json:"req_body"` // base64 in JSON
-	RespStatus   int         `json:"resp_status"`
-	RespHeaders  http.Header `json:"resp_headers"`
-	RespBody     []byte      `json:"resp_body"`
-	IsStreamed   bool        `json:"is_streamed"`
-	CaptureMode  string      `json:"capture_mode"` // "airtight" | "permissive"
-	Err          string      `json:"err,omitempty"`
-	ClientConnID string      `json:"client_conn_id,omitempty"`
+	ID            string      `json:"id"` // ULID
+	StartedAt     time.Time   `json:"started_at"`
+	EndedAt       time.Time   `json:"ended_at"`
+	Method        string      `json:"method"`
+	URL           string      `json:"url"`
+	ReqHeaders    http.Header `json:"req_headers"`
+	ReqBody       []byte      `json:"req_body"` // base64 in JSON
+	RespStatus    int         `json:"resp_status"`
+	RespHeaders   http.Header `json:"resp_headers"`
+	RespBody      []byte      `json:"resp_body"`
+	IsStreamed    bool        `json:"is_streamed"`
+	BodyTruncated bool        `json:"body_truncated,omitempty"` // true if req or resp body exceeded BodyLimit
+	CaptureMode   string      `json:"capture_mode"`             // "airtight" | "permissive"
+	Err           string      `json:"err,omitempty"`
+	ClientConnID  string      `json:"client_conn_id,omitempty"`
 }
 
 // Usage tracks Anthropic-style token accounting.

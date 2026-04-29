@@ -33,6 +33,22 @@ type Options struct {
 
 const defaultBodyLimit = 8 << 20
 
+// readLimited reads up to limit bytes from r. Returns (buf, truncated, err).
+// truncated is true if r had more bytes than limit.
+func readLimited(r io.Reader, limit int64) ([]byte, bool, error) {
+	if r == nil {
+		return nil, false, nil
+	}
+	buf, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return buf, false, err
+	}
+	if int64(len(buf)) > limit {
+		return buf[:limit], true, nil
+	}
+	return buf, false, nil
+}
+
 // Run starts the proxy and blocks until the listener is closed.
 func Run(opts Options) error {
 	if opts.CA == nil || opts.Out == nil || opts.IDGen == nil {
@@ -79,18 +95,20 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 		id := opts.IDGen.New()
 		ctx.UserData = id
 
-		var reqBuf bytes.Buffer
+		reqBytes, reqTrunc, _ := readLimited(req.Body, opts.BodyLimit)
 		if req.Body != nil {
-			io.Copy(&reqBuf, io.LimitReader(req.Body, opts.BodyLimit))
 			req.Body.Close()
-			req.Body = io.NopCloser(bytes.NewReader(reqBuf.Bytes()))
+		}
+		if reqBytes != nil {
+			req.Body = io.NopCloser(bytes.NewReader(reqBytes))
 		}
 
 		tracker.set(id, &inflight{
-			id:        id,
-			startedAt: time.Now(),
-			req:       cloneRequestMeta(req),
-			reqBody:   reqBuf.Bytes(),
+			id:           id,
+			startedAt:    time.Now(),
+			req:          cloneRequestMeta(req),
+			reqBody:      reqBytes,
+			reqTruncated: reqTrunc,
 		})
 		return req, nil
 	})
@@ -101,33 +119,39 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 		if inf == nil {
 			return resp
 		}
-		var respBuf bytes.Buffer
-		if resp != nil && resp.Body != nil {
-			io.Copy(&respBuf, io.LimitReader(resp.Body, opts.BodyLimit))
-			resp.Body.Close()
-			resp.Body = io.NopCloser(bytes.NewReader(respBuf.Bytes()))
+		var respBytes []byte
+		var respTrunc bool
+		if resp != nil {
+			respBytes, respTrunc, _ = readLimited(resp.Body, opts.BodyLimit)
+			if resp.Body != nil {
+				resp.Body.Close()
+			}
+			if respBytes != nil {
+				resp.Body = io.NopCloser(bytes.NewReader(respBytes))
+			}
 		}
 
 		flow := types.RawFlow{
-			ID:          inf.id,
-			StartedAt:   inf.startedAt,
-			EndedAt:     time.Now(),
-			Method:      inf.req.Method,
-			URL:         inf.req.URL.String(),
-			ReqHeaders:  inf.req.Header,
-			ReqBody:     inf.reqBody,
-			RespStatus:  resp.StatusCode,
-			RespHeaders: resp.Header,
-			RespBody:    respBuf.Bytes(),
-			IsStreamed:  isSSE(resp.Header),
-			CaptureMode: opts.CaptureMode,
+			ID:            inf.id,
+			StartedAt:     inf.startedAt,
+			EndedAt:       time.Now(),
+			Method:        inf.req.Method,
+			URL:           inf.req.URL.String(),
+			ReqHeaders:    inf.req.Header,
+			ReqBody:       inf.reqBody,
+			RespStatus:    resp.StatusCode,
+			RespHeaders:   resp.Header,
+			RespBody:      respBytes,
+			IsStreamed:    isSSE(resp.Header),
+			BodyTruncated: inf.reqTruncated || respTrunc,
+			CaptureMode:   opts.CaptureMode,
 		}
 
-		select {
-		case opts.Out <- flow:
-		default:
-			opts.Logger("proxy: dropped flow %s — Out channel full", flow.ID)
-		}
+		// Audit posture: block rather than drop. The Out channel is buffered by the
+		// caller; if the parser/store falls behind, the proxy slows down (and
+		// upstream requests may eventually time out), but we never silently lose
+		// flows. Drop-on-full would be a correctness bug for an audit tool.
+		opts.Out <- flow
 		return resp
 	})
 	return gp
@@ -142,6 +166,7 @@ func mitmConnect(opts Options) func(host string, ctx *goproxy.ProxyCtx) (*goprox
 		// Sign a leaf for this hostname using our local CA.
 		leaf, err := opts.CA.SignLeaf(serverName)
 		if err != nil {
+			opts.Logger("proxy: failed to sign leaf for %s: %v", serverName, err)
 			return goproxy.RejectConnect, host
 		}
 		tlsCfg := &tls.Config{
@@ -159,10 +184,11 @@ func mitmConnect(opts Options) func(host string, ctx *goproxy.ProxyCtx) (*goprox
 
 // inflight is one in-progress request awaiting its response.
 type inflight struct {
-	id        string
-	startedAt time.Time
-	req       requestMeta
-	reqBody   []byte
+	id           string
+	startedAt    time.Time
+	req          requestMeta
+	reqBody      []byte
+	reqTruncated bool
 }
 
 type requestMeta struct {
