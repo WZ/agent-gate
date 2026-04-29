@@ -242,6 +242,21 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 	}
 }
 
+func handleClear(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if err := opts.Store.Clear(); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		// Plain-form POST: redirect back to /. (HTMX-aware clients can also follow this.)
+		http.Redirect(w, req, "/", http.StatusSeeOther)
+	}
+}
+
 func handleDismiss(opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		if req.Method != "POST" {

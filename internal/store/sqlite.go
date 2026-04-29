@@ -89,6 +89,17 @@ func OpenIndex(path string) (*Index, error) {
 
 func (i *Index) Close() error { return i.db.Close() }
 
+// Truncate removes all rows from the events table and reclaims disk space.
+func (i *Index) Truncate() error {
+	if _, err := i.db.Exec("DELETE FROM events"); err != nil {
+		return err
+	}
+	if _, err := i.db.Exec("VACUUM"); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (i *Index) Insert(ev types.StoredEvent, loc Location) error {
 	host, path, err := splitURL(ev.URL)
 	if err != nil {

@@ -12,6 +12,10 @@
   {{ if not .Sessions }}
     <p>No sessions match.</p>
   {{ else }}
+    <form method="post" action="/api/clear" class="clear-form"
+          onsubmit="return confirm('Delete all captured events? CA, allowlist, and dismissals are kept. This cannot be undone.');">
+      <button type="submit" class="action danger">Clear all events ({{ len .Sessions }} {{ if eq (len .Sessions) 1 }}group{{ else }}groups{{ end }})</button>
+    </form>
     <table>
       <thead><tr><th>Session</th><th>Latest host</th><th>Events</th><th>Flags</th><th>Latest event</th></tr></thead>
       <tbody hx-ext="sse" sse-connect="/api/live" sse-swap="message">

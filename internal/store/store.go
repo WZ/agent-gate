@@ -79,6 +79,21 @@ type limitedReadCloser struct {
 	io.Closer
 }
 
+// Clear truncates the index and removes all JSONL files. Caller must serialize
+// against concurrent Appends (the writer's internal mutex handles its part).
+// Used by the dashboard's "clear all" action.
+func (s *Store) Clear() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.w.Truncate(); err != nil {
+		return fmt.Errorf("truncate jsonl: %w", err)
+	}
+	if err := s.idx.Truncate(); err != nil {
+		return fmt.Errorf("truncate index: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) Index() *Index             { return s.idx }
 func (s *Store) JSONLWriter() *JSONLWriter { return s.w }
 func (s *Store) IndexPath() string         { return s.dbPath }

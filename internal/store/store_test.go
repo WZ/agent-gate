@@ -2,6 +2,7 @@ package store
 
 import (
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -38,6 +39,59 @@ func TestStoreAppendIndexesAndPersists(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"id":"01HX"`)
 	assert.True(t, strings.HasSuffix(string(data), "\n"))
+}
+
+func TestStoreClearWipesEventsAndJSONL(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	// Append a few events.
+	for _, id := range []string{"e1", "e2", "e3"} {
+		require.NoError(t, s.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{ID: id, URL: "https://example.com/", Method: "GET"},
+			Kind:    "generic",
+		}}))
+	}
+
+	rows, err := s.Index().Query(QueryFilter{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, rows, 3, "precondition: events appended")
+
+	// Files should exist.
+	entries, _ := os.ReadDir(dir)
+	var jsonlBefore int
+	for _, e := range entries {
+		if filepath.Ext(e.Name()) == ".jsonl" {
+			jsonlBefore++
+		}
+	}
+	require.Equal(t, 1, jsonlBefore, "precondition: one jsonl file")
+
+	// Clear.
+	require.NoError(t, s.Clear())
+
+	// Index empty.
+	rows, err = s.Index().Query(QueryFilter{Limit: 10})
+	require.NoError(t, err)
+	assert.Empty(t, rows, "index should be empty after Clear")
+
+	// No JSONL files.
+	entries, _ = os.ReadDir(dir)
+	for _, e := range entries {
+		assert.NotEqual(t, ".jsonl", filepath.Ext(e.Name()),
+			"no jsonl files should remain after Clear")
+	}
+
+	// Subsequent Append should work (writer state reset cleanly).
+	require.NoError(t, s.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "post-clear", URL: "https://example.com/x", Method: "GET"},
+		Kind:    "generic",
+	}}))
+	rows, err = s.Index().Query(QueryFilter{Limit: 10})
+	require.NoError(t, err)
+	assert.Len(t, rows, 1, "Append after Clear should work")
 }
 
 func TestStoreOpenInitializesPaths(t *testing.T) {
