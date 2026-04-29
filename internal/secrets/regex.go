@@ -15,7 +15,10 @@ type Match struct {
 }
 
 // Patterns is the canonical set used by both the policy engine and the redactor.
-// Order does not matter; FindAll deduplicates by offset.
+// Multiple patterns may match the same byte range; FindAll returns every match
+// without deduplication. Downstream consumers (the redactor in particular)
+// should sort + merge by [Start,End] if they need a single redaction per
+// overlapping range.
 var Patterns = []Pattern{
 	{Code: "anthropic_key", Regexp: regexp.MustCompile(`sk-ant-[A-Za-z0-9_\-]{40,}`)},
 	{Code: "openai_key", Regexp: regexp.MustCompile(`sk-[A-Za-z0-9]{20,}`)},
