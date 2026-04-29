@@ -91,3 +91,26 @@ func flagCodes(flags []types.Flag) []string {
 	}
 	return out
 }
+
+func TestEngineHostScopedDismissalMatchesByHost(t *testing.T) {
+	dir := t.TempDir()
+	al, err := allowlist.Load(filepath.Join(dir, "a.txt"))
+	require.NoError(t, err)
+	di, err := dismissals.Load(filepath.Join(dir, "d.json"))
+	require.NoError(t, err)
+	require.NoError(t, di.Add(dismissals.ScopeHostCode, "", "noisy", "metrics.example.com", "internal"))
+
+	e := NewEngine(al, di, fakeRule{code: "noisy", severity: SevHigh, match: true, detail: "fired"})
+
+	// Different URL on the SAME host should be filtered out by the host-scoped dismissal.
+	flags := e.Evaluate(&types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "any", URL: "https://metrics.example.com/v1/different/path"},
+	})
+	assert.Empty(t, flags, "host-scoped dismissal should match different paths on same host")
+
+	// A different host on the same code should NOT be filtered.
+	flags2 := e.Evaluate(&types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "any", URL: "https://other.example.com/x"},
+	})
+	assert.Len(t, flags2, 1)
+}
