@@ -1,12 +1,20 @@
 {{ define "sessions" }}
 <section class="sessions">
   <h2>Sessions</h2>
+  <form method="get" action="/" class="filters">
+    <label>host: <input type="text" name="host" value="{{ .Filter.Host }}" placeholder="api.anthropic.com"></label>
+    <label>since (RFC3339): <input type="text" name="since" placeholder="2026-04-29T00:00:00Z"></label>
+    <label>until: <input type="text" name="until" placeholder="2026-04-30T00:00:00Z"></label>
+    <button type="submit">Filter</button>
+    <a href="/">clear</a>
+  </form>
+
   {{ if not .Sessions }}
-    <p>No sessions yet.</p>
+    <p>No sessions match.</p>
   {{ else }}
     <table>
       <thead><tr><th>Session</th><th>Latest host</th><th>Events</th><th>Flags</th><th>Latest event</th></tr></thead>
-      <tbody>
+      <tbody hx-ext="sse" sse-connect="/api/live" sse-swap="message">
         {{ range .Sessions }}
           <tr>
             <td><a href="/sessions/{{ .SessionID }}">{{ .SessionID }}</a></td>

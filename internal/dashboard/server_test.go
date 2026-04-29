@@ -200,3 +200,26 @@ func TestTrustHostAddsToAllowlist(t *testing.T) {
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.True(t, opts.Allowlist.Contains("safe.example.com"))
 }
+
+func TestSessionsListFilteredByHost(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow:   types.RawFlow{ID: "a", URL: "https://api.anthropic.com/v1", StartedAt: time.Now()},
+		SessionID: "S1",
+	}}))
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow:   types.RawFlow{ID: "b", URL: "https://github.com/x", StartedAt: time.Now()},
+		SessionID: "S2",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/?host=github.com")
+	require.NoError(t, err)
+	bs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	body := string(bs)
+	assert.Contains(t, body, "S2")
+	assert.NotContains(t, body, "S1")
+}

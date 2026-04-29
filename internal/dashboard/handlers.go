@@ -25,7 +25,21 @@ type sessionRow struct {
 
 func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		rows, err := opts.Store.Index().Query(store.QueryFilter{Limit: 1000})
+		filter := store.QueryFilter{Limit: 1000}
+		q := req.URL.Query()
+		filter.Host = q.Get("host")
+		if v := q.Get("since"); v != "" {
+			if ts, err := time.Parse(time.RFC3339, v); err == nil {
+				filter.Since = ts
+			}
+		}
+		if v := q.Get("until"); v != "" {
+			if ts, err := time.Parse(time.RFC3339, v); err == nil {
+				filter.Until = ts
+			}
+		}
+
+		rows, err := opts.Store.Index().Query(filter)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -55,7 +69,10 @@ func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
 		}
 		sort.Slice(out, func(i, j int) bool { return out[i].StartedAt.After(out[j].StartedAt) })
 
-		r.Render(w, req, "sessions", map[string]any{"Sessions": out})
+		r.Render(w, req, "sessions", map[string]any{
+			"Sessions": out,
+			"Filter":   filter,
+		})
 	}
 }
 
