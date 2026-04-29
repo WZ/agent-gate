@@ -1,0 +1,21 @@
+# Binaries
+/agent-gate
+/agent-gate.exe
+/dist/
+
+# Go build artifacts
+*.test
+*.out
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Local config / data (never check in real CA keys)
+*.pem
+events.db
+events.db-*
+*.jsonl
+*.jsonl.gz
+.env
