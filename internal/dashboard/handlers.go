@@ -15,13 +15,39 @@ import (
 	"agent-gate/internal/types"
 )
 
+type severitySummary struct {
+	High    int
+	Medium  int
+	Low     int
+	Info    int
+	Unknown int
+}
+
+type dashboardSummary struct {
+	EventCount        int
+	GroupCount        int
+	FlaggedGroupCount int
+	LatestEvent       time.Time
+	LatestEventLabel  string
+	Severity          severitySummary
+	TopFlags          []flagSummary
+}
+
+type flagSummary struct {
+	Code     string
+	Severity string
+	Count    int
+}
+
 type sessionRow struct {
 	Label      string
 	Key        string
 	Host       string
 	StartedAt  time.Time
 	EventCount int
+	FlagCount  int
 	HasFlags   bool
+	Severity   string
 }
 
 // normalizeHost strips any port suffix from a stored host value so that
@@ -31,6 +57,110 @@ func normalizeHost(h string) string {
 		return h[:idx]
 	}
 	return h
+}
+
+func severityForFlagCode(code string) string {
+	switch code {
+	case "host_not_allowlisted", "secret_in_request", "env_in_tool_result":
+		return "high"
+	case "oversized_request", "unknown_mcp_endpoint":
+		return "medium"
+	case "oversized_response":
+		return "low"
+	case "permissive_capture", "parse_error":
+		return "info"
+	default:
+		return "unknown"
+	}
+}
+
+func splitFlagCodes(codes string) []string {
+	if codes == "" {
+		return nil
+	}
+	parts := strings.Split(codes, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		code := strings.TrimSpace(part)
+		if code != "" {
+			out = append(out, code)
+		}
+	}
+	return out
+}
+
+func maxSeverity(a, b string) string {
+	rank := map[string]int{
+		"":        0,
+		"info":    1,
+		"low":     2,
+		"unknown": 3,
+		"medium":  4,
+		"high":    5,
+	}
+	if rank[b] > rank[a] {
+		return b
+	}
+	return a
+}
+
+func buildDashboardSummary(rows []store.IndexRow, groups []*sessionRow) dashboardSummary {
+	summary := dashboardSummary{
+		EventCount: len(rows),
+		GroupCount: len(groups),
+	}
+	for _, g := range groups {
+		if g.HasFlags {
+			summary.FlaggedGroupCount++
+		}
+	}
+
+	flagCounts := map[string]int{}
+	flagSeverity := map[string]string{}
+	for _, ix := range rows {
+		if ix.StartedAt.After(summary.LatestEvent) {
+			summary.LatestEvent = ix.StartedAt
+		}
+		for _, code := range splitFlagCodes(ix.FlagCodes) {
+			severity := severityForFlagCode(code)
+			switch severity {
+			case "high":
+				summary.Severity.High++
+			case "medium":
+				summary.Severity.Medium++
+			case "low":
+				summary.Severity.Low++
+			case "info":
+				summary.Severity.Info++
+			default:
+				summary.Severity.Unknown++
+			}
+			flagCounts[code]++
+			flagSeverity[code] = maxSeverity(flagSeverity[code], severity)
+		}
+	}
+
+	summary.TopFlags = make([]flagSummary, 0, len(flagCounts))
+	for code, count := range flagCounts {
+		summary.TopFlags = append(summary.TopFlags, flagSummary{
+			Code:     code,
+			Severity: flagSeverity[code],
+			Count:    count,
+		})
+	}
+	sort.Slice(summary.TopFlags, func(i, j int) bool {
+		if summary.TopFlags[i].Count == summary.TopFlags[j].Count {
+			return summary.TopFlags[i].Code < summary.TopFlags[j].Code
+		}
+		return summary.TopFlags[i].Count > summary.TopFlags[j].Count
+	})
+	if len(summary.TopFlags) > 5 {
+		summary.TopFlags = summary.TopFlags[:5]
+	}
+	if !summary.LatestEvent.IsZero() {
+		summary.LatestEventLabel = summary.LatestEvent.Format("2006-01-02 15:04:05")
+	}
+	return summary
 }
 
 func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
@@ -74,8 +204,10 @@ func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
 			if ix.StartedAt.After(g.StartedAt) {
 				g.StartedAt = ix.StartedAt
 			}
-			if ix.FlagCodes != "" {
+			for _, code := range splitFlagCodes(ix.FlagCodes) {
 				g.HasFlags = true
+				g.FlagCount++
+				g.Severity = maxSeverity(g.Severity, severityForFlagCode(code))
 			}
 		}
 		out := make([]*sessionRow, 0, len(groups))
@@ -87,6 +219,7 @@ func handleSessionsList(opts Options, r *renderer) http.HandlerFunc {
 		r.Render(w, req, "sessions", map[string]any{
 			"Sessions": out,
 			"Filter":   filter,
+			"Summary":  buildDashboardSummary(rows, out),
 		})
 	}
 }
@@ -99,6 +232,13 @@ type eventRow struct {
 	Path      string
 	Status    int
 	FlagCodes []string
+}
+
+type sessionDetailSummary struct {
+	EventCount       int
+	FlagCount        int
+	LatestEvent      time.Time
+	LatestEventLabel string
 }
 
 func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
@@ -158,16 +298,28 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 			if isHostBucket && ix.SessionID != "" {
 				continue
 			}
-			var codes []string
-			if ix.FlagCodes != "" {
-				codes = strings.Split(ix.FlagCodes, ",")
-			}
+			codes := splitFlagCodes(ix.FlagCodes)
 			events = append(events, eventRow{
 				ID: ix.ID, StartedAt: ix.StartedAt, Method: ix.Method,
 				Host: normalizeHost(ix.Host), Path: ix.Path, Status: ix.Status, FlagCodes: codes,
 			})
 		}
-		r.Render(w, req, "session_detail", map[string]any{"SessionID": sid, "Label": label, "Events": events})
+		summary := sessionDetailSummary{EventCount: len(events)}
+		for _, ev := range events {
+			if ev.StartedAt.After(summary.LatestEvent) {
+				summary.LatestEvent = ev.StartedAt
+			}
+			summary.FlagCount += len(ev.FlagCodes)
+		}
+		if !summary.LatestEvent.IsZero() {
+			summary.LatestEventLabel = summary.LatestEvent.Format("2006-01-02 15:04:05")
+		}
+		r.Render(w, req, "session_detail", map[string]any{
+			"SessionID": sid,
+			"Label":     label,
+			"Events":    events,
+			"Summary":   summary,
+		})
 	}
 }
 

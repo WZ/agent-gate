@@ -88,14 +88,82 @@ func TestSessionsListShowsRowFromStore(t *testing.T) {
 	assert.Contains(t, bodyStr, "api.anthropic.com")
 }
 
+func TestSessionsListRendersSOCSummary(t *testing.T) {
+	opts := freshOpts(t)
+	base := time.Date(2026, 5, 1, 15, 30, 0, 0, time.UTC)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:          "evt-high",
+				Method:      "POST",
+				URL:         "https://api.anthropic.com/v1/messages",
+				RespStatus:  200,
+				StartedAt:   base,
+				CaptureMode: "permissive",
+			},
+			SessionID: "sess-A",
+		},
+		Flags: []types.Flag{{Code: "secret_in_request", Severity: "high", Detail: "secret"}},
+	}))
+	require.NoError(t, opts.Store.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:          "evt-medium",
+				Method:      "GET",
+				URL:         "https://api.github.com/repos",
+				RespStatus:  200,
+				StartedAt:   base.Add(-time.Minute),
+				CaptureMode: "permissive",
+			},
+			SessionID: "sess-B",
+		},
+		Flags: []types.Flag{{Code: "unknown_mcp_endpoint", Severity: "medium", Detail: "stream"}},
+	}))
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID:          "evt-clear",
+			Method:      "GET",
+			URL:         "https://safe.example.com/ok",
+			RespStatus:  200,
+			StartedAt:   base.Add(-2 * time.Minute),
+			CaptureMode: "permissive",
+		},
+		SessionID: "sess-C",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(body)
+
+	assert.Contains(t, bodyStr, "SOC Console")
+	assert.Contains(t, bodyStr, "Captured events")
+	assert.Contains(t, bodyStr, ">3<")
+	assert.Contains(t, bodyStr, "Session groups")
+	assert.Contains(t, bodyStr, "Flagged groups")
+	assert.Contains(t, bodyStr, "High severity")
+	assert.Contains(t, bodyStr, "Medium severity")
+	assert.Contains(t, bodyStr, "secret_in_request")
+	assert.Contains(t, bodyStr, "unknown_mcp_endpoint")
+	assert.Contains(t, bodyStr, "2026-05-01 15:30:00")
+}
+
 func TestSessionDetailListsEvents(t *testing.T) {
 	opts := freshOpts(t)
 	for i, id := range []string{"e1", "e2", "e3"} {
-		require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		stored := types.StoredEvent{ParsedEvent: types.ParsedEvent{
 			RawFlow: types.RawFlow{ID: id, Method: "POST", URL: "https://api.anthropic.com/v1/messages",
 				RespStatus: 200, StartedAt: time.Date(2026, 4, 29, 0, i, 0, 0, time.UTC)},
 			SessionID: "sess-A",
-		}}))
+		}}
+		if id == "e2" {
+			stored.Flags = []types.Flag{{Code: "host_not_allowlisted", Severity: "high", Detail: "api.anthropic.com"}}
+		}
+		require.NoError(t, opts.Store.Append(stored))
 	}
 
 	srv := httptest.NewServer(NewServer(opts))
@@ -106,6 +174,13 @@ func TestSessionDetailListsEvents(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	bodyStr := string(body)
+	assert.Contains(t, bodyStr, "Investigation timeline")
+	assert.Contains(t, bodyStr, "Total events")
+	assert.Contains(t, bodyStr, ">3<")
+	assert.Contains(t, bodyStr, "Flag hits")
+	assert.Contains(t, bodyStr, ">1<")
+	assert.Contains(t, bodyStr, "latest event 2026-04-29 00:02:00")
+	assert.Contains(t, bodyStr, "host_not_allowlisted")
 	for _, id := range []string{"e1", "e2", "e3"} {
 		assert.Contains(t, bodyStr, id)
 	}
@@ -132,6 +207,8 @@ func TestEventDetailDefaultsToRedacted(t *testing.T) {
 	bodyStr := string(bs)
 	assert.NotContains(t, bodyStr, "sk-ant-aaaaaaaa")
 	assert.Contains(t, bodyStr, "REDACTED")
+	assert.Contains(t, bodyStr, "Event inspection")
+	assert.Contains(t, bodyStr, "Redacted view")
 }
 
 func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
@@ -155,6 +232,7 @@ func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
 	bodyStr := string(bs)
 	assert.Contains(t, bodyStr, "sk-ant-aaaaaaaa", "raw view should expose secrets")
 	assert.Contains(t, bodyStr, "raw view")
+	assert.Contains(t, bodyStr, "Secrets visible")
 
 	entries := opts.Dismissals.Entries()
 	require.Len(t, entries, 1)
