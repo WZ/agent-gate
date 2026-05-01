@@ -1,39 +1,122 @@
 {{ define "sessions" }}
-<section class="sessions">
-  <h2>Sessions</h2>
-  <form method="get" action="/" class="filters">
-    <label>host: <input type="text" name="host" value="{{ .Filter.Host }}" placeholder="api.anthropic.com"></label>
-    <label>since (RFC3339): <input type="text" name="since" placeholder="2026-04-29T00:00:00Z"></label>
-    <label>until: <input type="text" name="until" placeholder="2026-04-30T00:00:00Z"></label>
-    <button type="submit">Filter</button>
-    <a href="/">clear</a>
-  </form>
+<section class="dashboard-page">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">SOC Console</p>
+      <h2>Outbound traffic review</h2>
+    </div>
+    {{ if .Summary.LatestEventLabel }}
+      <p class="timestamp">latest event {{ .Summary.LatestEventLabel }}</p>
+    {{ else }}
+      <p class="timestamp">waiting for captured traffic</p>
+    {{ end }}
+  </div>
 
-  {{ if not .Sessions }}
-    <p>No sessions match.</p>
-  {{ else }}
-    <form method="post" action="/api/clear" class="clear-form"
-          onsubmit="return confirm('Delete all captured events? CA, allowlist, and dismissals are kept. This cannot be undone.');">
-      <button type="submit" class="action danger">Clear all events ({{ len .Sessions }} {{ if eq (len .Sessions) 1 }}group{{ else }}groups{{ end }})</button>
-    </form>
-    <table>
-      <thead><tr><th>Session</th><th>Latest host</th><th>Events</th><th>Flags</th><th>Latest event</th></tr></thead>
-      <tbody hx-ext="sse" sse-connect="/api/live"
-             hx-trigger="sse:message"
-             hx-get="/"
-             hx-select="tbody"
-             hx-swap="outerHTML">
-        {{ range .Sessions }}
-          <tr>
-            <td><a href="/sessions/{{ .Key }}">{{ .Label }}</a></td>
-            <td>{{ .Host }}</td>
-            <td>{{ .EventCount }}</td>
-            <td>{{ if .HasFlags }}⚠{{ end }}</td>
-            <td>{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
-          </tr>
+  <div class="telemetry-grid" aria-label="dashboard summary">
+    <div class="metric-card">
+      <span>Captured events</span>
+      <strong>{{ .Summary.EventCount }}</strong>
+    </div>
+    <div class="metric-card">
+      <span>Session groups</span>
+      <strong>{{ .Summary.GroupCount }}</strong>
+    </div>
+    <div class="metric-card warning">
+      <span>Flagged groups</span>
+      <strong>{{ .Summary.FlaggedGroupCount }}</strong>
+    </div>
+    <div class="metric-card danger">
+      <span>High severity</span>
+      <strong>{{ .Summary.Severity.High }}</strong>
+    </div>
+    <div class="metric-card caution">
+      <span>Medium severity</span>
+      <strong>{{ .Summary.Severity.Medium }}</strong>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <section class="panel sessions-panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Review queue</p>
+          <h3>Sessions</h3>
+        </div>
+        {{ if .Sessions }}
+          <form method="post" action="/api/clear" class="clear-form"
+                onsubmit="return confirm('Delete all captured events? CA, allowlist, and dismissals are kept. This cannot be undone.');">
+            <button type="submit" class="action danger">Clear all events</button>
+          </form>
         {{ end }}
-      </tbody>
-    </table>
-  {{ end }}
+      </div>
+
+      <form method="get" action="/" class="filters">
+        <label><span>host</span><input type="text" name="host" value="{{ .Filter.Host }}" placeholder="api.anthropic.com"></label>
+        <label><span>since</span><input type="text" name="since" placeholder="2026-04-29T00:00:00Z"></label>
+        <label><span>until</span><input type="text" name="until" placeholder="2026-04-30T00:00:00Z"></label>
+        <button type="submit">Filter</button>
+        <a class="muted-link" href="/">clear</a>
+      </form>
+
+      {{ if not .Sessions }}
+        <div class="empty-state">
+          <strong>No sessions match.</strong>
+          <span>Adjust filters or capture new traffic through the proxy.</span>
+        </div>
+      {{ else }}
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Session</th><th>Latest host</th><th>Events</th><th>Flags</th><th>Latest event</th></tr></thead>
+            <tbody hx-ext="sse" sse-connect="/api/live"
+                   hx-trigger="sse:message"
+                   hx-get="/"
+                   hx-select="tbody"
+                   hx-swap="outerHTML">
+              {{ range .Sessions }}
+                <tr class="{{ if .HasFlags }}row-flagged{{ end }}">
+                  <td><a href="/sessions/{{ .Key }}">{{ .Label }}</a></td>
+                  <td>{{ .Host }}</td>
+                  <td>{{ .EventCount }}</td>
+                  <td>
+                    {{ if .HasFlags }}
+                      <span class="flag {{ .Severity }}">{{ .FlagCount }} {{ .Severity }}</span>
+                    {{ else }}
+                      <span class="flag clear">clear</span>
+                    {{ end }}
+                  </td>
+                  <td>{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
+                </tr>
+              {{ end }}
+            </tbody>
+          </table>
+        </div>
+      {{ end }}
+    </section>
+
+    <aside class="panel risk-panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Signal</p>
+          <h3>Risk feed</h3>
+        </div>
+      </div>
+      {{ if .Summary.TopFlags }}
+        <ol class="risk-list">
+          {{ range .Summary.TopFlags }}
+            <li>
+              <span class="flag {{ .Severity }}">{{ .Severity }}</span>
+              <strong>{{ .Code }}</strong>
+              <em>{{ .Count }} hits</em>
+            </li>
+          {{ end }}
+        </ol>
+      {{ else }}
+        <div class="empty-state compact">
+          <strong>No active flags.</strong>
+          <span>Captured traffic has not triggered policy rules.</span>
+        </div>
+      {{ end }}
+    </aside>
+  </div>
 </section>
 {{ end }}
