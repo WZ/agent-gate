@@ -1,10 +1,20 @@
 package launcher
 
-import "agent-gate/internal/ca"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+
+	"agent-gate/internal/ca"
+)
 
 // checkCATrusted returns ("", true) if our CA cert is in the system trust
-// store, or (warningMessage, false) otherwise. Real per-platform impls land
-// in Task 17; this stub assumes trusted (no warning) so Phase 1 can run.
+// store, or (warningMessage, false) if not. Per design Q5 it never blocks
+// startup — caller writes the warning to stderr and continues.
 func checkCATrusted(c *ca.CA) (string, bool) {
-	return "", true
+	if c == nil || c.Cert == nil {
+		return "", true
+	}
+	sum := sha256.Sum256(c.Cert.Raw)
+	fingerprint := hex.EncodeToString(sum[:])
+	return checkCATrustedOS(fingerprint)
 }
