@@ -63,8 +63,8 @@ func TestSandboxLinux_RunIsolatesNonProxyEgress(t *testing.T) {
 	port := pickFreePort(t)
 	dashPort := pickFreePort(t)
 	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(
-		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = %q\n",
-		port, dashPort, tmp+"/data")), 0o600); err != nil {
+		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = '%s'\n",
+		port, dashPort, filepath.ToSlash(tmp)+"/data")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,8 +97,8 @@ func TestSandboxLinux_DescendantInheritsNetns(t *testing.T) {
 	port := pickFreePort(t)
 	dashPort := pickFreePort(t)
 	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(
-		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = %q\n",
-		port, dashPort, tmp+"/data")), 0o600); err != nil {
+		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = '%s'\n",
+		port, dashPort, filepath.ToSlash(tmp)+"/data")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,8 +134,8 @@ func TestSandboxLinux_AirtightFailAbortsWhenUnsupported(t *testing.T) {
 	port := pickFreePort(t)
 	dashPort := pickFreePort(t)
 	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(
-		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = %q\n",
-		port, dashPort, tmp+"/data")), 0o600); err != nil {
+		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = '%s'\n",
+		port, dashPort, filepath.ToSlash(tmp)+"/data")), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

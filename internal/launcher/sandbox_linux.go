@@ -35,16 +35,50 @@ func (h *childHandle) kill() error {
 }
 
 func airtightFeasible() (bool, string) {
-	// Probe by forking /bin/true with CLONE_NEWUSER. Cheap and accurate.
-	cmd := exec.Command("/bin/true")
+	// Probe by re-execing ourselves with the same Cloneflags + ExtraFiles
+	// shape that spawnAirtight uses, plus an extra "--probe" arg. The probed
+	// process tries: (1) bring lo up, (2) bind 127.0.0.1:0, (3) report success
+	// via FD 3. If any step fails we fall back to permissive (or abort if
+	// --airtight-fail). This catches Ubuntu 24's apparmor_restrict_unprivileged_userns
+	// which permits unshare but blocks bind() inside the namespace.
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return false, fmt.Sprintf("socketpair: %v", err)
+	}
+	supEnd := os.NewFile(uintptr(pair[0]), "probe-sup")
+	helperEnd := os.NewFile(uintptr(pair[1]), "probe-helper")
+	defer supEnd.Close()
+
+	self, err := os.Executable()
+	if err != nil {
+		helperEnd.Close()
+		return false, fmt.Sprintf("os.Executable: %v", err)
+	}
+	self, err = filepath.EvalSymlinks(self)
+	if err != nil {
+		helperEnd.Close()
+		return false, fmt.Sprintf("EvalSymlinks: %v", err)
+	}
+
+	cmd := exec.Command(self, "__netns-helper", "0") // port 0 = "probe mode"
+	cmd.ExtraFiles = []*os.File{helperEnd}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags:                 unix.CLONE_NEWUSER,
+		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNET,
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}},
+		Pdeathsig:                  unix.SIGKILL,
 		GidMappingsEnableSetgroups: false,
 	}
-	if err := cmd.Run(); err != nil {
-		return false, fmt.Sprintf("unprivileged user namespaces unavailable: %v (try `sudo sysctl -w kernel.unprivileged_userns_clone=1`)", err)
+	if err := cmd.Start(); err != nil {
+		helperEnd.Close()
+		return false, fmt.Sprintf("user+net namespace unavailable: %v (try `sudo sysctl -w kernel.unprivileged_userns_clone=1`; on Ubuntu 24 also `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`)", err)
+	}
+	helperEnd.Close()
+
+	// Helper does port=0 → bind to ephemeral port; if that fails it returns
+	// non-zero. We just wait for it to finish and report.
+	if err := cmd.Wait(); err != nil {
+		return false, fmt.Sprintf("airtight probe failed inside namespace (likely AppArmor unprivileged-userns restriction): %v", err)
 	}
 	return true, ""
 }

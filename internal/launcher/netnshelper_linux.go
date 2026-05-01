@@ -25,6 +25,11 @@ import (
 //	(d) send listener FD back to supervisor via FD 3 (the socketpair end)
 //	(e) read EXEC <argc> <argv...> from FD 3
 //	(f) syscall.Exec the requested target
+//
+// PROBE MODE (port == 0): only steps (b)+(c) — bind to ephemeral port — then
+// exit 0. No FD-passing, no EXEC frame. Used by airtightFeasible to detect
+// distros (e.g., Ubuntu 24 with apparmor_restrict_unprivileged_userns=1) that
+// permit unshare but block bind() inside the namespace.
 func RunNetnsHelper(args []string) error {
 	if len(args) < 1 {
 		return errors.New("__netns-helper: missing port arg")
@@ -41,6 +46,11 @@ func RunNetnsHelper(args []string) error {
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		return fmt.Errorf("bind %d: %w", port, err)
+	}
+	if port == 0 {
+		// Probe mode — bind succeeded; that's the proof we needed. Exit 0.
+		_ = ln.Close()
+		return nil
 	}
 	tcpLn, ok := ln.(*net.TCPListener)
 	if !ok {
