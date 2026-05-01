@@ -119,10 +119,15 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		}
 	}()
 
-	// 7. Build child env.
+	// 7. Carry resolved addresses back into opts so spawnAirtight/spawnPermissive
+	// can read the actual port (e.g. for the sandbox profile).
+	opts.ProxyAddr = proxyAddr
+	opts.DashboardAddr = dashAddr
+
+	// 8. Build child env.
 	childEnv := buildChildEnv(opts.Env, proxyAddr)
 
-	// 8. Spawn child.
+	// 9. Spawn child.
 	var child *childHandle
 	switch opts.Mode {
 	case Airtight:
@@ -142,7 +147,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 
 	fmt.Fprintf(os.Stderr, "agent-gate run: %s mode; proxy %s; dashboard %s\n", captureMode, proxyAddr, dashAddr)
 
-	// 9. Signal handler.
+	// 10. Signal handler.
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigCh)
@@ -154,7 +159,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		}
 	}()
 
-	// 10. Wait for child exit or ctx cancel.
+	// 11. Wait for child exit or ctx cancel.
 	exitCode, waitErr := child.wait(supCtx)
 	if errors.Is(waitErr, context.Canceled) {
 		_ = child.kill()
@@ -163,7 +168,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		killCancel()
 	}
 
-	// 11. Teardown.
+	// 12. Teardown.
 	cancel()
 	teardown(proxyLn, proxyDone, flowCh, pipelineDone, dashHTTP)
 

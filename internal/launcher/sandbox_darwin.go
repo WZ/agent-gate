@@ -5,8 +5,77 @@ package launcher
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
+	"os"
 	"os/exec"
+	"strconv"
+	"syscall"
 )
+
+const sandboxExecPath = "/usr/bin/sandbox-exec"
+
+// sandboxProfileTemplate is the SBPL profile applied to the target process.
+// %d is replaced with the proxy port (3 occurrences).
+const sandboxProfileTemplate = `(version 1)
+(allow default)
+
+(deny network*)
+
+(allow network*
+  (remote ip "localhost:%d")
+  (remote ip "127.0.0.1:%d")
+  (remote ip "[::1]:%d"))
+
+(allow network-bind (local ip "127.0.0.1:*"))
+(allow network-bind (local ip "[::1]:*"))
+`
+
+func buildSandboxProfile(port int) string {
+	return fmt.Sprintf(sandboxProfileTemplate, port, port, port)
+}
+
+// airtightFeasible checks that sandbox-exec exists. Almost always true on macOS.
+func airtightFeasible() (bool, string) {
+	if _, err := os.Stat(sandboxExecPath); err != nil {
+		return false, fmt.Sprintf("%s missing: %v", sandboxExecPath, err)
+	}
+	return true, ""
+}
+
+func spawnAirtight(ctx context.Context, opts Options, env []string) (*childHandle, error) {
+	port, err := portFromAddr(opts.ProxyAddr)
+	if err != nil {
+		return nil, err
+	}
+	profile := buildSandboxProfile(port)
+
+	args := []string{"-p", profile, opts.Cmd}
+	args = append(args, opts.Args...)
+	cmd := exec.CommandContext(ctx, sandboxExecPath, args...)
+	cmd.Env = env
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = opts.Stdin, opts.Stdout, opts.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("sandbox-exec start: %w", err)
+	}
+	return &childHandle{cmd: cmd}, nil
+}
+
+func portFromAddr(addr string) (int, error) {
+	if addr == "" {
+		return 8888, nil
+	}
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		return 0, err
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port <= 0 || port > 65535 {
+		return 0, errors.New("invalid port in ProxyAddr")
+	}
+	return port, nil
+}
 
 type childHandle struct {
 	cmd *exec.Cmd
@@ -24,12 +93,4 @@ func (h *childHandle) kill() error {
 		return nil
 	}
 	return h.cmd.Process.Kill()
-}
-
-func spawnAirtight(ctx context.Context, opts Options, env []string) (*childHandle, error) {
-	return nil, errors.New("launcher: macOS sandbox not implemented yet")
-}
-
-func airtightFeasible() (ok bool, reason string) {
-	return false, "darwin sandbox not yet implemented"
 }
