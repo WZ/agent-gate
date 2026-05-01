@@ -158,7 +158,9 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	exitCode, waitErr := child.wait(supCtx)
 	if errors.Is(waitErr, context.Canceled) {
 		_ = child.kill()
-		exitCode, _ = child.wait(context.Background())
+		killCtx, killCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		exitCode, _ = child.wait(killCtx)
+		killCancel()
 	}
 
 	// 11. Teardown.
