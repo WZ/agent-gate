@@ -104,8 +104,11 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	})
 	dashLn, err := net.Listen("tcp", dashAddr)
 	if err != nil {
-		proxyLn.Close()
+		cancel()
+		_ = proxyLn.Close()
 		<-proxyDone
+		close(flowCh)
+		<-pipelineDone
 		return 1, fmt.Errorf("dashboard listener bind %q: %w", dashAddr, err)
 	}
 	dashHTTP := &http.Server{Handler: dashHandler, ReadHeaderTimeout: 30 * time.Second}
@@ -128,9 +131,12 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		child, err = spawnPermissive(supCtx, opts, childEnv)
 	}
 	if err != nil {
+		cancel()
 		_ = dashHTTP.Close()
-		proxyLn.Close()
+		_ = proxyLn.Close()
 		<-proxyDone
+		close(flowCh)
+		<-pipelineDone
 		return 1, fmt.Errorf("spawn child: %w", err)
 	}
 
