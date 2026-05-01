@@ -2,14 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>agent-gate</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js"></script>
   <script src="/static/htmx-sse.js"></script>
 </head>
 <body>
-  <header><h1>agent-gate</h1></header>
-  <main>
+  <header class="shell-header">
+    <div>
+      <p class="eyebrow">Local traffic audit</p>
+      <h1>agent-gate</h1>
+    </div>
+    <div class="live-pill"><span aria-hidden="true"></span> capture live</div>
+  </header>
+  <main class="shell-main">
     {{ .Content }}
   </main>
 </body>
