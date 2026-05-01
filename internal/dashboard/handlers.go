@@ -298,10 +298,7 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 			if isHostBucket && ix.SessionID != "" {
 				continue
 			}
-			var codes []string
-			if ix.FlagCodes != "" {
-				codes = strings.Split(ix.FlagCodes, ",")
-			}
+			codes := splitFlagCodes(ix.FlagCodes)
 			events = append(events, eventRow{
 				ID: ix.ID, StartedAt: ix.StartedAt, Method: ix.Method,
 				Host: normalizeHost(ix.Host), Path: ix.Path, Status: ix.Status, FlagCodes: codes,
