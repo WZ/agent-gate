@@ -1,29 +1,68 @@
 {{ define "session_detail" }}
-<section>
-  <h2><a href="/">Sessions</a> / {{ .Label }}</h2>
-  {{ if not .Events }}
-    <p>No events for this session.</p>
-  {{ else }}
-    <table>
-      <thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Path</th><th>Status</th><th>Flags</th><th></th></tr></thead>
-      <tbody>
-        {{ range .Events }}
-          <tr>
-            <td>{{ .StartedAt.Format "15:04:05.000" }}</td>
-            <td>{{ .Method }}</td>
-            <td>{{ .Host }}</td>
-            <td>{{ .Path }}</td>
-            <td>{{ .Status }}</td>
-            <td>
-              {{ range .FlagCodes }}
-                <span class="flag info">{{ . }}</span>
-              {{ end }}
-            </td>
-            <td><a href="/events/{{ .ID }}">view</a></td>
-          </tr>
-        {{ end }}
-      </tbody>
-    </table>
-  {{ end }}
+<section class="detail-page">
+  <nav class="breadcrumbs"><a href="/">Sessions</a><span>/</span><strong>{{ .Label }}</strong></nav>
+
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Investigation timeline</p>
+      <h2>{{ .Label }}</h2>
+    </div>
+    {{ if .Summary.LatestEventLabel }}
+      <p class="timestamp">latest event {{ .Summary.LatestEventLabel }}</p>
+    {{ end }}
+  </div>
+
+  <div class="telemetry-grid compact-grid">
+    <div class="metric-card">
+      <span>Total events</span>
+      <strong>{{ .Summary.EventCount }}</strong>
+    </div>
+    <div class="metric-card warning">
+      <span>Flag hits</span>
+      <strong>{{ .Summary.FlagCount }}</strong>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">Requests</p>
+        <h3>Event stream</h3>
+      </div>
+    </div>
+    {{ if not .Events }}
+      <div class="empty-state">
+        <strong>No events for this session.</strong>
+        <span>New traffic for this session will appear after capture.</span>
+      </div>
+    {{ else }}
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Time</th><th>Method</th><th>Host</th><th>Path</th><th>Status</th><th>Flags</th><th></th></tr></thead>
+          <tbody>
+            {{ range .Events }}
+              <tr class="{{ if .FlagCodes }}row-flagged{{ end }}">
+                <td>{{ .StartedAt.Format "15:04:05.000" }}</td>
+                <td><span class="method">{{ .Method }}</span></td>
+                <td>{{ .Host }}</td>
+                <td class="path-cell">{{ .Path }}</td>
+                <td><span class="status-code">{{ .Status }}</span></td>
+                <td>
+                  {{ if .FlagCodes }}
+                    {{ range .FlagCodes }}
+                      <span class="flag info">{{ . }}</span>
+                    {{ end }}
+                  {{ else }}
+                    <span class="flag clear">clear</span>
+                  {{ end }}
+                </td>
+                <td><a class="row-action" href="/events/{{ .ID }}">view</a></td>
+              </tr>
+            {{ end }}
+          </tbody>
+        </table>
+      </div>
+    {{ end }}
+  </section>
 </section>
 {{ end }}

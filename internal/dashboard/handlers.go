@@ -234,6 +234,13 @@ type eventRow struct {
 	FlagCodes []string
 }
 
+type sessionDetailSummary struct {
+	EventCount       int
+	FlagCount        int
+	LatestEvent      time.Time
+	LatestEventLabel string
+}
+
 func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		sid := strings.TrimPrefix(req.URL.Path, "/sessions/")
@@ -300,7 +307,22 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 				Host: normalizeHost(ix.Host), Path: ix.Path, Status: ix.Status, FlagCodes: codes,
 			})
 		}
-		r.Render(w, req, "session_detail", map[string]any{"SessionID": sid, "Label": label, "Events": events})
+		summary := sessionDetailSummary{EventCount: len(events)}
+		for _, ev := range events {
+			if ev.StartedAt.After(summary.LatestEvent) {
+				summary.LatestEvent = ev.StartedAt
+			}
+			summary.FlagCount += len(ev.FlagCodes)
+		}
+		if !summary.LatestEvent.IsZero() {
+			summary.LatestEventLabel = summary.LatestEvent.Format("2006-01-02 15:04:05")
+		}
+		r.Render(w, req, "session_detail", map[string]any{
+			"SessionID": sid,
+			"Label":     label,
+			"Events":    events,
+			"Summary":   summary,
+		})
 	}
 }
 

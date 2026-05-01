@@ -170,6 +170,8 @@ func TestSessionDetailListsEvents(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	bodyStr := string(body)
+	assert.Contains(t, bodyStr, "Investigation timeline")
+	assert.Contains(t, bodyStr, "Total events")
 	for _, id := range []string{"e1", "e2", "e3"} {
 		assert.Contains(t, bodyStr, id)
 	}
