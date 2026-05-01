@@ -90,6 +90,31 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		})
 	}()
 
+	// 5b. Allocate the netns-listener channel; on Linux, spawnAirtight will send
+	// a netns-bound listener on it. On other platforms, no one sends; the goroutine
+	// below sits on the select forever and exits on ctx cancellation.
+	opts.nsListener = make(chan net.Listener, 1)
+	go func() {
+		select {
+		case nsLn := <-opts.nsListener:
+			if nsLn == nil {
+				return
+			}
+			if err := proxy.Run(proxy.Options{
+				Listener:    nsLn,
+				CA:          common.CA,
+				Out:         flowCh,
+				IDGen:       idgen.NewGenerator(),
+				CaptureMode: captureMode,
+				Logger:      func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+			}); err != nil && !errors.Is(err, net.ErrClosed) {
+				fmt.Fprintf(os.Stderr, "ns proxy: %v\n", err)
+			}
+		case <-supCtx.Done():
+			return
+		}
+	}()
+
 	// 6. Start dashboard goroutine. ADAPTED: dashboard.NewServer returns
 	// http.Handler, so we wrap it in our own *http.Server for Shutdown support.
 	dashAddr := opts.DashboardAddr
