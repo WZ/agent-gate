@@ -16,23 +16,22 @@ import (
 const sandboxExecPath = "/usr/bin/sandbox-exec"
 
 // sandboxProfileTemplate is the SBPL profile applied to the target process.
-// %d is replaced with the proxy port (3 occurrences).
+// %d is replaced with the proxy port (1 occurrence).
+// sandbox-exec only accepts "localhost" or "*" as host in remote ip rules;
+// "127.0.0.1" is rejected. "localhost" covers both IPv4 and IPv6 loopback.
 const sandboxProfileTemplate = `(version 1)
 (allow default)
 
 (deny network*)
 
 (allow network*
-  (remote ip "localhost:%d")
-  (remote ip "127.0.0.1:%d")
-  (remote ip "[::1]:%d"))
+  (remote ip "localhost:%d"))
 
-(allow network-bind (local ip "127.0.0.1:*"))
-(allow network-bind (local ip "[::1]:*"))
+(allow network-bind (local ip "localhost:*"))
 `
 
 func buildSandboxProfile(port int) string {
-	return fmt.Sprintf(sandboxProfileTemplate, port, port, port)
+	return fmt.Sprintf(sandboxProfileTemplate, port)
 }
 
 // airtightFeasible checks that sandbox-exec exists. Almost always true on macOS.
