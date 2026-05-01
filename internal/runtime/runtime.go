@@ -131,7 +131,13 @@ var nowFunc = defaultNow
 
 func defaultNow() time.Time { return time.Now() }
 
-// SetNow overrides the timestamp source (tests only).
+// SetNow overrides the timestamp source for the runtime package. Tests only.
+//
+// Must be called BEFORE LoadCommon for the override to reach store.Open
+// (which snapshots the function pointer at construction time).
+//
+// NOT safe for concurrent use; tests using SetNow must not run with
+// t.Parallel(). Returns a restore closure to reset to the previous value.
 func SetNow(fn func() time.Time) (restore func()) {
 	prev := nowFunc
 	nowFunc = fn
