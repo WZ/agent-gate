@@ -1,44 +1,80 @@
 {{ define "event_detail" }}
-<section>
-  <h2>
+<section class="detail-page">
+  <nav class="breadcrumbs">
     <a href="/">Sessions</a>
-    {{ if .SessionID }} / <a href="/sessions/{{ .SessionID }}">{{ .SessionID }}</a>{{ end }}
-    / {{ .ID }}
-  </h2>
-  <p>
-    <strong>{{ .Method }}</strong> {{ .URL }}
-    → <strong>{{ .Status }}</strong>
-    · {{ .StartedAt.Format "2006-01-02 15:04:05" }}
-    · capture-mode: <code>{{ .CaptureMode }}</code>
-  </p>
+    {{ if .SessionID }}<span>/</span><a href="/sessions/{{ .SessionID }}">{{ .SessionID }}</a>{{ end }}
+    <span>/</span><strong>{{ .ID }}</strong>
+  </nav>
 
-  {{ if .Flags }}
-    <p>
-      Flags:
-      {{ range .Flags }}
-        <span class="flag {{ .Severity }}">{{ .Code }}</span>
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Event inspection</p>
+      <h2><span class="method">{{ .Method }}</span> {{ .URL }}</h2>
+    </div>
+    <p class="timestamp">{{ .StartedAt.Format "2006-01-02 15:04:05" }}</p>
+  </div>
+
+  <section class="panel event-summary">
+    <div class="summary-line">
+      <span>Status <strong>{{ .Status }}</strong></span>
+      <span>Capture mode <code>{{ .CaptureMode }}</code></span>
+      {{ if .Raw }}
+        <span class="flag high">Raw view</span>
+      {{ else }}
+        <span class="flag clear">Redacted view</span>
       {{ end }}
-    </p>
-  {{ end }}
+    </div>
+    {{ if .Flags }}
+      <div class="flag-row">
+        {{ range .Flags }}
+          <span class="flag {{ .Severity }}">{{ .Code }}</span>
+        {{ end }}
+      </div>
+    {{ end }}
+  </section>
 
   {{ if .Raw }}
-    <p class="banner">⚠ raw view — secrets visible. <a href="/events/{{ .ID }}">switch back to redacted</a></p>
+    <div class="banner danger-banner">
+      <strong>Secrets visible.</strong>
+      <span>raw view request and response bytes are displayed and this peek has been logged.</span>
+      <a href="/events/{{ .ID }}">switch back to redacted</a>
+    </div>
   {{ else }}
-    <p><a href="/events/{{ .ID }}?raw=1">show raw bytes (logs the peek)</a></p>
+    <div class="banner">
+      <strong>Redacted view.</strong>
+      <span>Credential-like values are masked during rendering.</span>
+      <a href="/events/{{ .ID }}?raw=1">show raw bytes (logs the peek)</a>
+    </div>
   {{ end }}
 
-  <h3>Request</h3>
-  <details><summary>Headers</summary>
-    <pre class="body-pane">{{ range $k, $v := .ReqHeaders }}{{ $k }}: {{ index $v 0 }}
+  <div class="inspection-grid">
+    <section class="panel inspector-pane">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Request</p>
+          <h3>Payload</h3>
+        </div>
+      </div>
+      <details><summary>Headers</summary>
+        <pre class="body-pane headers-pane">{{ range $k, $v := .ReqHeaders }}{{ $k }}: {{ index $v 0 }}
 {{ end }}</pre>
-  </details>
-  <pre class="body-pane">{{ .ReqBody }}</pre>
+      </details>
+      <pre class="body-pane">{{ .ReqBody }}</pre>
+    </section>
 
-  <h3>Response</h3>
-  <details><summary>Headers</summary>
-    <pre class="body-pane">{{ range $k, $v := .RespHeaders }}{{ $k }}: {{ index $v 0 }}
+    <section class="panel inspector-pane">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Response</p>
+          <h3>Payload</h3>
+        </div>
+      </div>
+      <details><summary>Headers</summary>
+        <pre class="body-pane headers-pane">{{ range $k, $v := .RespHeaders }}{{ $k }}: {{ index $v 0 }}
 {{ end }}</pre>
-  </details>
-  <pre class="body-pane">{{ .RespBody }}</pre>
+      </details>
+      <pre class="body-pane">{{ .RespBody }}</pre>
+    </section>
+  </div>
 </section>
 {{ end }}

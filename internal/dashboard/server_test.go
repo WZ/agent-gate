@@ -207,6 +207,8 @@ func TestEventDetailDefaultsToRedacted(t *testing.T) {
 	bodyStr := string(bs)
 	assert.NotContains(t, bodyStr, "sk-ant-aaaaaaaa")
 	assert.Contains(t, bodyStr, "REDACTED")
+	assert.Contains(t, bodyStr, "Event inspection")
+	assert.Contains(t, bodyStr, "Redacted view")
 }
 
 func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
@@ -230,6 +232,7 @@ func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
 	bodyStr := string(bs)
 	assert.Contains(t, bodyStr, "sk-ant-aaaaaaaa", "raw view should expose secrets")
 	assert.Contains(t, bodyStr, "raw view")
+	assert.Contains(t, bodyStr, "Secrets visible")
 
 	entries := opts.Dismissals.Entries()
 	require.Len(t, entries, 1)
