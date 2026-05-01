@@ -155,11 +155,15 @@ func TestSessionsListRendersSOCSummary(t *testing.T) {
 func TestSessionDetailListsEvents(t *testing.T) {
 	opts := freshOpts(t)
 	for i, id := range []string{"e1", "e2", "e3"} {
-		require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		stored := types.StoredEvent{ParsedEvent: types.ParsedEvent{
 			RawFlow: types.RawFlow{ID: id, Method: "POST", URL: "https://api.anthropic.com/v1/messages",
 				RespStatus: 200, StartedAt: time.Date(2026, 4, 29, 0, i, 0, 0, time.UTC)},
 			SessionID: "sess-A",
-		}}))
+		}}
+		if id == "e2" {
+			stored.Flags = []types.Flag{{Code: "host_not_allowlisted", Severity: "high", Detail: "api.anthropic.com"}}
+		}
+		require.NoError(t, opts.Store.Append(stored))
 	}
 
 	srv := httptest.NewServer(NewServer(opts))
@@ -172,6 +176,11 @@ func TestSessionDetailListsEvents(t *testing.T) {
 	bodyStr := string(body)
 	assert.Contains(t, bodyStr, "Investigation timeline")
 	assert.Contains(t, bodyStr, "Total events")
+	assert.Contains(t, bodyStr, ">3<")
+	assert.Contains(t, bodyStr, "Flag hits")
+	assert.Contains(t, bodyStr, ">1<")
+	assert.Contains(t, bodyStr, "latest event 2026-04-29 00:02:00")
+	assert.Contains(t, bodyStr, "host_not_allowlisted")
 	for _, id := range []string{"e1", "e2", "e3"} {
 		assert.Contains(t, bodyStr, id)
 	}
