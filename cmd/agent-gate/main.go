@@ -8,6 +8,9 @@ import (
 )
 
 func main() {
+	if maybeRunNetnsHelper() {
+		return
+	}
 	root := &cobra.Command{
 		Use:   "agent-gate",
 		Short: "Personal audit gate for Claude Code outbound traffic",
