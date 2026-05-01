@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 )
 
 // Mode is the capture posture: airtight (kernel-enforced) or permissive (env-only).
@@ -35,6 +36,11 @@ type Options struct {
 	// Test seams. Production code never sets these.
 	proxyHook     func(error) // called if proxy goroutine panics
 	dashboardHook func(error) // ditto for dashboard
+
+	// Internal: supervisor → linux spawn channel for the netns listener FD.
+	// Exposed unexported only because Go build tags restrict where the field
+	// is set. Production callers do not touch this.
+	nsListener chan net.Listener
 }
 
 // Run blocks until the child exits. Returns the child's exit code.
