@@ -20,7 +20,7 @@ func TestLoadCommon_FreshConfig(t *testing.T) {
 proxy = 8888
 dashboard = 7878
 [storage]
-data_dir = "`+tmp+`/data"
+data_dir = '`+filepath.ToSlash(tmp)+`/data'
 `), 0o600))
 
 	rt, err := runtime.LoadCommon(configPath)
@@ -44,7 +44,7 @@ func TestRunPipeline_PersistsFlow(t *testing.T) {
 proxy = 8888
 dashboard = 7878
 [storage]
-data_dir = "`+tmp+`/data"
+data_dir = '`+filepath.ToSlash(tmp)+`/data'
 `), 0o600))
 
 	rt, err := runtime.LoadCommon(configPath)
@@ -93,7 +93,7 @@ func TestRunPipeline_DrainsOnCancel(t *testing.T) {
 proxy = 8888
 dashboard = 7878
 [storage]
-data_dir = "`+tmp+`/data"
+data_dir = '`+filepath.ToSlash(tmp)+`/data'
 `), 0o600))
 
 	rt, err := runtime.LoadCommon(configPath)

@@ -109,7 +109,7 @@ func TestSandboxDarwin_RunIntegration(t *testing.T) {
 	tmp := t.TempDir()
 	configPath := filepath.Join(tmp, "config.toml")
 	if err := os.WriteFile(configPath, []byte(
-		"[ports]\nproxy = 18888\ndashboard = 17878\n[storage]\ndata_dir = \""+tmp+"/data\"\n"), 0o600); err != nil {
+		"[ports]\nproxy = 18888\ndashboard = 17878\n[storage]\ndata_dir = '"+filepath.ToSlash(tmp)+"/data'\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	bin := buildTestHelper(t)

@@ -17,8 +17,8 @@ func writeMinimalConfig(t *testing.T) (configPath, dataDir string) {
 	tmp := t.TempDir()
 	dataDir = filepath.Join(tmp, "data")
 	configPath = filepath.Join(tmp, "config.toml")
-	body := fmt.Sprintf("[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = %q\n",
-		freePort(t), freePort(t), dataDir)
+	body := fmt.Sprintf("[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = '%s'\n",
+		freePort(t), freePort(t), filepath.ToSlash(dataDir))
 	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

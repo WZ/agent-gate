@@ -83,8 +83,8 @@ func writeAirtightConfig(t *testing.T, root string) string {
 		t.Fatal(err)
 	}
 	configPath := filepath.Join(configDir, "config.toml")
-	body := fmt.Sprintf("[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = %q\n",
-		pickFreePortE2E(t), pickFreePortE2E(t), dataDir)
+	body := fmt.Sprintf("[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = '%s'\n",
+		pickFreePortE2E(t), pickFreePortE2E(t), filepath.ToSlash(dataDir))
 	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
