@@ -33,6 +33,11 @@ type Options struct {
 	Stderr        io.Writer
 	Env           []string
 
+	// Upstream TLS knobs for self-hosted Anthropic-compatible endpoints
+	// reached via ANTHROPIC_BASE_URL with a self-signed cert.
+	UpstreamCAFile             string // PEM file added to the system trust pool for the proxy→upstream connection
+	UpstreamInsecureSkipVerify bool   // skip upstream cert verification entirely (testing only — captures still happen)
+
 	// Test seams. Production code never sets these.
 	proxyHook     func(error) // called if proxy goroutine panics
 	dashboardHook func(error) // ditto for dashboard

@@ -12,9 +12,11 @@ import (
 
 func runCmd() *cobra.Command {
 	var (
-		configPath   string
-		permissive   bool
-		airtightFail bool
+		configPath       string
+		permissive       bool
+		airtightFail     bool
+		upstreamCAFile   string
+		upstreamInsecure bool
 	)
 	cmd := &cobra.Command{
 		Use:                   "run [flags] -- <cmd> [args...]",
@@ -28,14 +30,16 @@ func runCmd() *cobra.Command {
 				mode = launcher.Permissive
 			}
 			opts := launcher.Options{
-				Mode:         mode,
-				AirtightFail: airtightFail,
-				ConfigPath:   configPath,
-				Cmd:          args[0],
-				Args:         args[1:],
-				Stdin:        os.Stdin,
-				Stdout:       os.Stdout,
-				Stderr:       os.Stderr,
+				Mode:                       mode,
+				AirtightFail:               airtightFail,
+				ConfigPath:                 configPath,
+				Cmd:                        args[0],
+				Args:                       args[1:],
+				Stdin:                      os.Stdin,
+				Stdout:                     os.Stdout,
+				Stderr:                     os.Stderr,
+				UpstreamCAFile:             upstreamCAFile,
+				UpstreamInsecureSkipVerify: upstreamInsecure,
 			}
 			exit, err := launcher.Run(context.Background(), opts)
 			if err != nil {
@@ -51,5 +55,7 @@ func runCmd() *cobra.Command {
 	cmd.Flags().StringVar(&configPath, "config", filepath.Join(home, ".config", "agent-gate", "config.toml"), "Path to config.toml")
 	cmd.Flags().BoolVar(&permissive, "permissive", false, "Downgrade to env-only enforcement (HTTPS_PROXY)")
 	cmd.Flags().BoolVar(&airtightFail, "airtight-fail", false, "Require airtight; abort if unsupported on this platform")
+	cmd.Flags().StringVar(&upstreamCAFile, "upstream-ca", "", "PEM file with extra root CA(s) to trust for proxy→upstream TLS (use for self-signed ANTHROPIC_BASE_URL)")
+	cmd.Flags().BoolVar(&upstreamInsecure, "upstream-insecure-skip-verify", false, "Skip upstream cert verification entirely (testing only — captures still happen)")
 	return cmd
 }
