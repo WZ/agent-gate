@@ -699,13 +699,15 @@ summary:hover { color: hsl(var(--foreground)); }
   max-height: 34rem;
   overflow: auto;
   padding: 1rem 1.1rem;
-  background: hsl(var(--muted) / 0.5);
+  background: hsl(var(--secondary));
   color: hsl(var(--foreground));
   white-space: pre-wrap;
-  word-break: break-word;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.55;
+  tab-size: 2;
+  font-variant-numeric: tabular-nums;
   border-top: 1px solid hsl(var(--border));
 }
 
