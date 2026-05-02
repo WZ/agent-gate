@@ -3,6 +3,7 @@ package dismissals
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,6 +68,9 @@ func TestRejectsUnknownScope(t *testing.T) {
 }
 
 func TestFileWrittenAt0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not honor unix file mode bits")
+	}
 	path := filepath.Join(t.TempDir(), "d.json")
 	d, err := Load(path)
 	require.NoError(t, err)

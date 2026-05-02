@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ import (
 )
 
 func TestJSONLRecreatesFileIfExternallyUnlinked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows locks open files: os.Remove of a held handle returns 'file in use', so this unix-only scenario can't be reproduced")
+	}
 	dir := t.TempDir()
 	w, err := NewJSONLWriter(dir, fixedClock(time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)))
 	require.NoError(t, err)
