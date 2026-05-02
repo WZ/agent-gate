@@ -103,6 +103,9 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		}
 		return false
 	}
+	passthroughHost := func(host string) bool {
+		return common.Passthrough != nil && common.Passthrough.Contains(host)
+	}
 	if enforce {
 		fmt.Fprintln(os.Stderr, "allowlist enforcement ON: requests to non-allowlisted hosts will receive 403 from the proxy")
 	}
@@ -119,6 +122,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 			UpstreamRootCAs:            upstreamRoots,
 			UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
 			HostGuard:                  hostGuard,
+			PassthroughHost:            passthroughHost,
 			Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 		})
 	}()

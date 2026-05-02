@@ -190,6 +190,76 @@ func TestProxyHostGuardBlocksAndRecords(t *testing.T) {
 	}
 }
 
+// TestProxyPassthroughTunnelsRaw verifies that when PassthroughHost returns
+// true for a hostname, the proxy returns goproxy.OkConnect (raw TCP tunnel)
+// instead of attempting TLS MITM. This is the path used for cert-pinned
+// upstreams (mcp-proxy.anthropic.com etc.) where MITM would fail.
+//
+// We assert this indirectly: with passthrough enabled, our proxy does NOT
+// present its CA-signed leaf during TLS — so a client that ONLY trusts our
+// CA fails the handshake (because the upstream's real cert isn't CA-signed
+// by us). With passthrough disabled, the same client succeeds. The handshake
+// outcome is the canary for which path mitmConnect took.
+func TestProxyPassthroughTunnelsRaw(t *testing.T) {
+	upstream := startUpstream(t)
+
+	root, err := ca.Ensure(t.TempDir())
+	require.NoError(t, err)
+
+	// Client trusts ONLY our CA. Upstream uses a self-signed cert that is
+	// NOT signed by our CA — so when MITM is on, the proxy presents a
+	// leaf signed by our CA and the client succeeds. When passthrough is
+	// on, the proxy passes the upstream's real cert through and the client
+	// rejects it.
+	pool := x509.NewCertPool()
+	pool.AddCert(root.Cert)
+
+	// Case 1: passthrough OFF → MITM happens → client succeeds.
+	out := make(chan types.RawFlow, 8)
+	pAddr := startProxy(t, Options{
+		Addr:            "127.0.0.1:0",
+		CA:              root,
+		Out:             out,
+		IDGen:           idgen.NewGenerator(),
+		CaptureMode:     "permissive",
+		UpstreamRootCAs: upstreamRoots(upstream),
+	})
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(mustURL(t, "http://"+pAddr)),
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+		Timeout: 5 * time.Second,
+	}
+	resp, err := client.Get(upstream.URL + "/x")
+	require.NoError(t, err, "MITM path should succeed when client trusts proxy CA")
+	resp.Body.Close()
+
+	// Case 2: passthrough ON → raw tunnel → client sees upstream's REAL
+	// cert (self-signed by httptest), which is NOT in our pool → handshake
+	// failure. Different error class than the MITM path.
+	out2 := make(chan types.RawFlow, 8)
+	pAddr2 := startProxy(t, Options{
+		Addr:            "127.0.0.1:0",
+		CA:              root,
+		Out:             out2,
+		IDGen:           idgen.NewGenerator(),
+		CaptureMode:     "permissive",
+		UpstreamRootCAs: upstreamRoots(upstream),
+		PassthroughHost: func(host string) bool { return true },
+	})
+	client2 := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(mustURL(t, "http://"+pAddr2)),
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+		Timeout: 5 * time.Second,
+	}
+	_, err = client2.Get(upstream.URL + "/x")
+	require.Error(t, err, "passthrough should let upstream's real cert through; client must reject it")
+	assert.Contains(t, err.Error(), "x509", "expected x509 verification error, got: %v", err)
+}
+
 // helpers
 func mustURL(t *testing.T, s string) *url.URL {
 	u, err := url.Parse(s)

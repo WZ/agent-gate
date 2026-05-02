@@ -93,7 +93,10 @@ func runProxy(configPath, captureMode, addrOverride string, upstreamInsecure boo
 		IDGen:                      idgen.NewGenerator(),
 		CaptureMode:                captureMode,
 		UpstreamInsecureSkipVerify: upstreamInsecure,
-		Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+		PassthroughHost: func(host string) bool {
+			return rt.Passthrough != nil && rt.Passthrough.Contains(host)
+		},
+		Logger: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 	})
 	close(flowCh)
 	<-pipelineDone
