@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -13,6 +14,9 @@ import (
 )
 
 func TestEnsureCreatesNewCAOnFirstRun(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not honor unix file mode bits; this assertion is unix-only")
+	}
 	dir := t.TempDir()
 	ca, err := Ensure(dir)
 	require.NoError(t, err)
@@ -24,6 +28,9 @@ func TestEnsureCreatesNewCAOnFirstRun(t *testing.T) {
 }
 
 func TestEnsureReusesExistingCA(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Ensure() rejects keys not at 0600; Windows can't write 0600, so this path is unix-only")
+	}
 	dir := t.TempDir()
 	first, err := Ensure(dir)
 	require.NoError(t, err)

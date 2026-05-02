@@ -30,6 +30,20 @@ type Options struct {
 	UpstreamInsecureSkipVerify bool                          // Optional: if true, skip TLS verification on upstream connection. Testing only.
 	BodyLimit                  int64                         // Optional: max body size to keep in memory. Default 8 MiB.
 	Logger                     func(format string, a ...any) // Optional.
+
+	// HostGuard, if set, is consulted on every request before forwarding.
+	// Returning true short-circuits with a synthetic 403 response and emits
+	// the flow with the synthetic response body recorded. The agent sees
+	// `403 Forbidden` from the proxy; nothing reaches the upstream. Use the
+	// allowlist + EnforceAllowlist supervisor flag to wire this up.
+	HostGuard func(host string) bool
+
+	// PassthroughHost, if set, is consulted on every CONNECT. Returning true
+	// makes the proxy tunnel TCP raw — no TLS interception, no body capture.
+	// Use for cert-pinned upstreams (mcp-proxy.anthropic.com etc.) where
+	// MITM would fail. The connection still goes through the proxy port (so
+	// airtight enforcement is preserved); only inspection is skipped.
+	PassthroughHost func(host string) bool
 }
 
 const defaultBodyLimit = 8 << 20
@@ -107,13 +121,52 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 			req.Body = io.NopCloser(bytes.NewReader(reqBytes))
 		}
 
-		tracker.set(id, &inflight{
+		inf := &inflight{
 			id:           id,
 			startedAt:    time.Now(),
 			req:          cloneRequestMeta(req),
 			reqBody:      reqBytes,
 			reqTruncated: reqTrunc,
-		})
+		}
+
+		// Allowlist enforcement: if HostGuard says block, synthesize a 403
+		// here and emit the flow with the synthetic response. Skips upstream.
+		if opts.HostGuard != nil {
+			host := req.URL.Hostname()
+			if opts.HostGuard(host) {
+				body := []byte(`{"error":"agent-gate: host not in allowlist; trust the host in the dashboard or disable enforcement"}` + "\n")
+				resp := &http.Response{
+					Status:        "403 Forbidden",
+					StatusCode:    http.StatusForbidden,
+					Proto:         "HTTP/1.1",
+					ProtoMajor:    1,
+					ProtoMinor:    1,
+					Header:        http.Header{"Content-Type": []string{"application/json"}, "X-Agent-Gate-Block": []string{"host_not_allowlisted"}},
+					Body:          io.NopCloser(bytes.NewReader(body)),
+					ContentLength: int64(len(body)),
+					Request:       req,
+				}
+				flow := types.RawFlow{
+					ID:          inf.id,
+					StartedAt:   inf.startedAt,
+					EndedAt:     time.Now(),
+					Method:      inf.req.Method,
+					URL:         inf.req.URL.String(),
+					ReqHeaders:  inf.req.Header,
+					ReqBody:     inf.reqBody,
+					RespStatus:  resp.StatusCode,
+					RespHeaders: resp.Header.Clone(),
+					RespBody:    body,
+					CaptureMode: opts.CaptureMode,
+				}
+				opts.Out <- flow
+				// Reset the response body so the client sees the bytes too.
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				return req, resp
+			}
+		}
+
+		tracker.set(id, inf)
 		return req, nil
 	})
 
@@ -168,6 +221,15 @@ func mitmConnect(opts Options) func(host string, ctx *goproxy.ProxyCtx) (*goprox
 		if serverName == "" {
 			serverName = host
 		}
+
+		// Passthrough hosts (e.g. cert-pinned upstreams) tunnel TCP raw.
+		// Body inspection is skipped; only the CONNECT host + byte counts
+		// land in the audit log via goproxy's tunneling path.
+		if opts.PassthroughHost != nil && opts.PassthroughHost(serverName) {
+			opts.Logger("proxy: passthrough (no MITM) for %s", serverName)
+			return goproxy.OkConnect, host
+		}
+
 		// Sign a leaf for this hostname using our local CA.
 		leaf, err := opts.CA.SignLeaf(serverName)
 		if err != nil {
