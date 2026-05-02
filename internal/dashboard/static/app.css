@@ -514,3 +514,21 @@ summary {
   font-weight: 500;
 }
 .trust-host { margin: 0; }
+
+.trust-host .block-button {
+  background: #b91c1c;
+}
+.trust-host .block-button:hover { background: #991b1b; }
+
+.block-banner {
+  display: inline-block;
+  background: #b91c1c;
+  color: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 0.25rem;
+}

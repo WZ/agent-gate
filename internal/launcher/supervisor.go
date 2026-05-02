@@ -90,11 +90,20 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	if opts.EnforceAllowlist != nil {
 		enforce = *opts.EnforceAllowlist
 	}
-	var hostGuard func(string) bool
-	if enforce {
-		hostGuard = func(host string) bool {
-			return host != "" && !common.Allowlist.Contains(host)
+	hostGuard := func(host string) bool {
+		if host == "" {
+			return false
 		}
+		// Denylist always blocks. Allowlist enforcement is the second tier.
+		if common.Denylist != nil && common.Denylist.Contains(host) {
+			return true
+		}
+		if enforce && !common.Allowlist.Contains(host) {
+			return true
+		}
+		return false
+	}
+	if enforce {
 		fmt.Fprintln(os.Stderr, "allowlist enforcement ON: requests to non-allowlisted hosts will receive 403 from the proxy")
 	}
 
@@ -152,6 +161,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		Addr:       dashAddr,
 		Store:      common.Store,
 		Allowlist:  common.Allowlist,
+		Denylist:   common.Denylist,
 		Dismissals: common.Dismiss,
 	})
 	dashLn, err := net.Listen("tcp", dashAddr)

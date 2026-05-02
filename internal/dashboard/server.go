@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agent-gate/internal/allowlist"
+	"agent-gate/internal/denylist"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/store"
 )
@@ -23,6 +24,7 @@ type Options struct {
 	Listener         net.Listener           // Optional pre-bound listener; tests use this.
 	Store            *store.Store           // Required.
 	Allowlist        *allowlist.Allowlist   // Required.
+	Denylist         *denylist.Denylist     // Optional; if nil, "Block this host" returns 503.
 	Dismissals       *dismissals.Dismissals // Required.
 	LivePollInterval time.Duration          // optional; defaults to 500ms
 }
@@ -42,6 +44,7 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("/events/", handleEventDetail(opts, r))
 	mux.HandleFunc("/api/dismiss", handleDismiss(opts))
 	mux.HandleFunc("/api/trust", handleTrust(opts))
+	mux.HandleFunc("/api/block", handleBlock(opts))
 	mux.HandleFunc("/api/live", handleLive(opts))
 	mux.HandleFunc("/api/clear", handleClear(opts))
 
