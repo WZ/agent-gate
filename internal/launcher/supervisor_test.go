@@ -67,6 +67,58 @@ func TestSupervisor_ChildExitCodePropagation(t *testing.T) {
 	}
 }
 
+func TestBuildChildEnvScrubsLowercaseProxyVars(t *testing.T) {
+	got := buildChildEnv([]string{
+		"PATH=/bin",
+		"https_proxy=http://wrong.example:8080",
+		"http_proxy=http://wrong.example:8080",
+		"all_proxy=socks5://wrong.example:1080",
+		"no_proxy=*",
+		"HTTPS_PROXY=http://wrong.example:8080",
+		"HTTP_PROXY=http://wrong.example:8080",
+		"ALL_PROXY=socks5://wrong.example:1080",
+		"NO_PROXY=*",
+	}, "127.0.0.1:18888")
+
+	body := strings.Join(got, "\n")
+	for _, forbidden := range []string{"wrong.example", "no_proxy=*", "https_proxy=", "http_proxy=", "all_proxy="} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("buildChildEnv leaked %q in:\n%s", forbidden, body)
+		}
+	}
+	for _, want := range []string{
+		"HTTPS_PROXY=http://127.0.0.1:18888",
+		"HTTP_PROXY=http://127.0.0.1:18888",
+		"ALL_PROXY=http://127.0.0.1:18888",
+		"NO_PROXY=",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("buildChildEnv missing %q in:\n%s", want, body)
+		}
+	}
+}
+
+func TestProxyOptionsForListenerCarriesPassthroughHost(t *testing.T) {
+	passthrough := func(host string) bool { return host == "mcp-proxy.anthropic.com" }
+	opts := proxyOptionsForListener(proxyRunConfig{
+		passthroughHost: passthrough,
+	})
+	if opts.PassthroughHost == nil {
+		t.Fatal("expected PassthroughHost to be wired")
+	}
+	if !opts.PassthroughHost("mcp-proxy.anthropic.com") {
+		t.Fatal("expected PassthroughHost predicate to be preserved")
+	}
+}
+
+func TestExecArgvIncludesCommandAsArgv0(t *testing.T) {
+	got := execArgv("/usr/local/bin/helper", []string{"-exit", "0"})
+	want := []string{"/usr/local/bin/helper", "-exit", "0"}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("execArgv() = %#v, want %#v", got, want)
+	}
+}
+
 func TestSupervisor_LockfileEnforced(t *testing.T) {
 	configPath, dataDir := writeMinimalConfig(t)
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {

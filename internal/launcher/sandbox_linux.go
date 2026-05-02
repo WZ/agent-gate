@@ -111,7 +111,7 @@ func spawnAirtight(ctx context.Context, opts Options, env []string) (*childHandl
 	}
 
 	helper := exec.CommandContext(ctx, self, "__netns-helper", fmt.Sprintf("%d", port))
-	helper.Stdin = nil
+	helper.Stdin = opts.Stdin
 	helper.Stdout = opts.Stdout
 	helper.Stderr = opts.Stderr
 	helper.ExtraFiles = []*os.File{helperEnd}
@@ -153,7 +153,7 @@ func spawnAirtight(ctx context.Context, opts Options, env []string) (*childHandl
 	opts.nsListener <- nsLn
 
 	// Send EXEC frame.
-	if err := sendExecFrame(supEnd, opts.Cmd, opts.Args, env); err != nil {
+	if err := sendExecFrame(supEnd, opts.Cmd, execArgv(opts.Cmd, opts.Args), env); err != nil {
 		_ = helper.Process.Kill()
 		_ = helper.Wait()
 		supEnd.Close()
