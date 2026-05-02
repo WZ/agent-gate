@@ -47,8 +47,18 @@
     <div class="policy-actions">
       <span class="policy-label">Host:</span>
       <code>{{ .Host }}</code>
-      {{ if .HostTrusted }}
+      {{ if .HostBlocked }}
+        <span class="block-banner">blocked</span>
+      {{ else if .HostTrusted }}
         <span class="ok">already trusted</span>
+        <form class="trust-host"
+              hx-post="/api/block"
+              hx-target="this"
+              hx-swap="outerHTML"
+              onsubmit="return confirm('Add {{ .Host }} to the denylist? Future requests to this host will receive 403 from the proxy.');">
+          <input type="hidden" name="host" value="{{ .Host }}">
+          <button type="submit" class="block-button">Block this host</button>
+        </form>
       {{ else }}
         <form class="trust-host"
               hx-post="/api/trust"
@@ -56,6 +66,14 @@
               hx-swap="outerHTML">
           <input type="hidden" name="host" value="{{ .Host }}">
           <button type="submit">Trust this host</button>
+        </form>
+        <form class="trust-host"
+              hx-post="/api/block"
+              hx-target="this"
+              hx-swap="outerHTML"
+              onsubmit="return confirm('Add {{ .Host }} to the denylist? Future requests to this host will receive 403 from the proxy.');">
+          <input type="hidden" name="host" value="{{ .Host }}">
+          <button type="submit" class="block-button">Block this host</button>
         </form>
       {{ end }}
     </div>

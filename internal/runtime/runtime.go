@@ -10,6 +10,7 @@ import (
 	"agent-gate/internal/allowlist"
 	"agent-gate/internal/ca"
 	"agent-gate/internal/config"
+	"agent-gate/internal/denylist"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/parser"
 	"agent-gate/internal/policy"
@@ -25,6 +26,7 @@ type Common struct {
 	CA        *ca.CA
 	Store     *store.Store
 	Allowlist *allowlist.Allowlist
+	Denylist  *denylist.Denylist
 	Dismiss   *dismissals.Dismissals
 	Engine    *policy.Engine
 }
@@ -60,6 +62,12 @@ func LoadCommon(configPath string) (*Common, error) {
 		}
 	}
 
+	dl, err := denylist.Load(filepath.Join(configDir, "denylist.txt"))
+	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("load denylist: %w", err)
+	}
+
 	di, err := dismissals.Load(filepath.Join(configDir, "dismissals.json"))
 	if err != nil {
 		st.Close()
@@ -83,6 +91,7 @@ func LoadCommon(configPath string) (*Common, error) {
 		CA:        root,
 		Store:     st,
 		Allowlist: al,
+		Denylist:  dl,
 		Dismiss:   di,
 		Engine:    engine,
 	}, nil
