@@ -86,6 +86,18 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		fmt.Fprintln(os.Stderr, "⚠ upstream TLS verification DISABLED. Captures still happen, but upstream identity is NOT validated. Use only for testing self-hosted endpoints.")
 	}
 
+	enforce := common.Cfg.Allowlist.Enforce
+	if opts.EnforceAllowlist != nil {
+		enforce = *opts.EnforceAllowlist
+	}
+	var hostGuard func(string) bool
+	if enforce {
+		hostGuard = func(host string) bool {
+			return host != "" && !common.Allowlist.Contains(host)
+		}
+		fmt.Fprintln(os.Stderr, "allowlist enforcement ON: requests to non-allowlisted hosts will receive 403 from the proxy")
+	}
+
 	proxyDone := make(chan error, 1)
 	go func() {
 		defer recoverPanic(opts.proxyHook, "proxy", cancel)
@@ -97,6 +109,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 			CaptureMode:                captureMode,
 			UpstreamRootCAs:            upstreamRoots,
 			UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+			HostGuard:                  hostGuard,
 			Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 		})
 	}()
@@ -119,6 +132,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 				CaptureMode:                captureMode,
 				UpstreamRootCAs:            upstreamRoots,
 				UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+				HostGuard:                  hostGuard,
 				Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 			}); err != nil && !errors.Is(err, net.ErrClosed) {
 				fmt.Fprintf(os.Stderr, "ns proxy: %v\n", err)

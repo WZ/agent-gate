@@ -18,6 +18,7 @@ func runCmd() *cobra.Command {
 		upstreamCAFile   string
 		upstreamInsecure bool
 	)
+	var enforceAllowlist *bool
 	cmd := &cobra.Command{
 		Use:                   "run [flags] -- <cmd> [args...]",
 		Short:                 "Launch a command with airtight network capture",
@@ -28,6 +29,11 @@ func runCmd() *cobra.Command {
 			mode := launcher.Airtight
 			if permissive {
 				mode = launcher.Permissive
+			}
+			// Honor --enforce-allowlist / --no-enforce-allowlist as a tri-state.
+			if cmd.Flags().Changed("enforce-allowlist") {
+				v, _ := cmd.Flags().GetBool("enforce-allowlist")
+				enforceAllowlist = &v
 			}
 			opts := launcher.Options{
 				Mode:                       mode,
@@ -40,6 +46,7 @@ func runCmd() *cobra.Command {
 				Stderr:                     os.Stderr,
 				UpstreamCAFile:             upstreamCAFile,
 				UpstreamInsecureSkipVerify: upstreamInsecure,
+				EnforceAllowlist:           enforceAllowlist,
 			}
 			exit, err := launcher.Run(context.Background(), opts)
 			if err != nil {
@@ -57,5 +64,6 @@ func runCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&airtightFail, "airtight-fail", false, "Require airtight; abort if unsupported on this platform")
 	cmd.Flags().StringVar(&upstreamCAFile, "upstream-ca", "", "PEM file with extra root CA(s) to trust for proxy→upstream TLS (use for self-signed ANTHROPIC_BASE_URL)")
 	cmd.Flags().BoolVar(&upstreamInsecure, "upstream-insecure-skip-verify", false, "Skip upstream cert verification entirely (testing only — captures still happen)")
+	cmd.Flags().Bool("enforce-allowlist", false, "Make the proxy return 403 for hosts not in the allowlist; overrides [allowlist].enforce in config.toml")
 	return cmd
 }

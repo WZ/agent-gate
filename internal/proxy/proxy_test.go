@@ -126,6 +126,70 @@ func TestProxyWithUpstreamInsecureSkipVerify(t *testing.T) {
 	}
 }
 
+// TestProxyHostGuardBlocksAndRecords verifies that when HostGuard returns
+// true for a request's host, the proxy synthesizes a 403 Forbidden response
+// (without contacting upstream) AND still emits the flow on the Out channel.
+func TestProxyHostGuardBlocksAndRecords(t *testing.T) {
+	upstream := startUpstream(t)
+
+	root, err := ca.Ensure(t.TempDir())
+	require.NoError(t, err)
+
+	// Hit-counter so we can assert the upstream is NOT contacted on a block.
+	upstreamHits := 0
+	upstreamGuard := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits++
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(upstreamGuard.Close)
+
+	out := make(chan types.RawFlow, 8)
+	pAddr := startProxy(t, Options{
+		Addr:            "127.0.0.1:0",
+		CA:              root,
+		Out:             out,
+		IDGen:           idgen.NewGenerator(),
+		CaptureMode:     "airtight",
+		UpstreamRootCAs: upstreamRoots(upstream),
+		HostGuard: func(host string) bool {
+			// Block everything except the allowed test host.
+			return host != "ok.example"
+		},
+	})
+
+	pool := x509.NewCertPool()
+	pool.AddCert(root.Cert)
+	client := &http.Client{
+		Transport: &http.Transport{
+			Proxy:           http.ProxyURL(mustURL(t, "http://"+pAddr)),
+			TLSClientConfig: &tls.Config{RootCAs: pool},
+		},
+		Timeout: 5 * time.Second,
+	}
+
+	// Request to upstreamGuard — its hostname is "127.0.0.1", not "ok.example",
+	// so HostGuard returns true. Proxy must respond 403 without forwarding.
+	resp, err := client.Get(upstreamGuard.URL + "/v1/messages")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	assert.Equal(t, 403, resp.StatusCode)
+	assert.Contains(t, string(body), "host not in allowlist")
+	assert.Equal(t, "host_not_allowlisted", resp.Header.Get("X-Agent-Gate-Block"))
+	assert.Equal(t, 0, upstreamHits, "upstream should NOT be contacted on block")
+
+	// Flow must still land on Out.
+	select {
+	case f := <-out:
+		assert.NotEmpty(t, f.ID)
+		assert.Equal(t, 403, f.RespStatus)
+		assert.Contains(t, string(f.RespBody), "host not in allowlist")
+		assert.Equal(t, "airtight", f.CaptureMode)
+	case <-time.After(2 * time.Second):
+		t.Fatal("expected blocked RawFlow on channel")
+	}
+}
+
 // helpers
 func mustURL(t *testing.T, s string) *url.URL {
 	u, err := url.Parse(s)
