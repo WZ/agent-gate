@@ -49,24 +49,18 @@
       <code>{{ .Host }}</code>
       {{ if .HostBlocked }}
         <span class="block-banner">blocked</span>
-      {{ else if .HostTrusted }}
-        <span class="ok">already trusted</span>
-        <form class="trust-host"
-              hx-post="/api/block"
-              hx-target="this"
-              hx-swap="outerHTML"
-              onsubmit="return confirm('Add {{ .Host }} to the denylist? Future requests to this host will receive 403 from the proxy.');">
-          <input type="hidden" name="host" value="{{ .Host }}">
-          <button type="submit" class="block-button">Block this host</button>
-        </form>
       {{ else }}
-        <form class="trust-host"
-              hx-post="/api/trust"
-              hx-target="this"
-              hx-swap="outerHTML">
-          <input type="hidden" name="host" value="{{ .Host }}">
-          <button type="submit">Trust this host</button>
-        </form>
+        {{ if .HostTrusted }}
+          <span class="ok">already trusted</span>
+        {{ else }}
+          <form class="trust-host"
+                hx-post="/api/trust"
+                hx-target="this"
+                hx-swap="outerHTML">
+            <input type="hidden" name="host" value="{{ .Host }}">
+            <button type="submit">Trust this host</button>
+          </form>
+        {{ end }}
         <form class="trust-host"
               hx-post="/api/block"
               hx-target="this"
@@ -75,6 +69,18 @@
           <input type="hidden" name="host" value="{{ .Host }}">
           <button type="submit" class="block-button">Block this host</button>
         </form>
+        {{ if .HostPassthrough }}
+          <span class="passthrough-banner">passthrough (restart to take effect)</span>
+        {{ else }}
+          <form class="trust-host"
+                hx-post="/api/passthrough"
+                hx-target="this"
+                hx-swap="outerHTML"
+                onsubmit="return confirm('Add {{ .Host }} to passthrough.txt? agent-gate will tunnel TCP raw to this host without TLS interception. Body capture will be skipped — only CONNECT host + byte counts will be recorded. Effective on next agent-gate run restart.');">
+            <input type="hidden" name="host" value="{{ .Host }}">
+            <button type="submit" class="passthrough-button">Passthrough (no MITM)</button>
+          </form>
+        {{ end }}
       {{ end }}
     </div>
   </section>

@@ -8,22 +8,26 @@ package passthrough
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
 
-// List is read-only at runtime: hosts are added by editing the file. The
-// file is loaded once at startup; if you change it, restart agent-gate.
+// List is the file-backed passthrough host list. Hosts here have TLS
+// interception skipped — the proxy tunnels TCP raw and the audit log only
+// records the CONNECT host + byte counts.
 type List struct {
 	mu    sync.RWMutex
+	path  string
 	hosts map[string]struct{}
 }
 
 // Load reads path (if present). Missing file → empty list. Comments (`#`)
 // and blank lines are ignored.
 func Load(path string) (*List, error) {
-	l := &List{hosts: map[string]struct{}{}}
+	l := &List{path: path, hosts: map[string]struct{}{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return l, nil
@@ -53,4 +57,66 @@ func (l *List) Contains(host string) bool {
 	defer l.mu.RUnlock()
 	_, ok := l.hosts[strings.ToLower(host)]
 	return ok
+}
+
+// Add inserts host into the list (in-memory + file). Idempotent.
+func (l *List) Add(host string) error {
+	if !isPlainHostname(host) {
+		return fmt.Errorf("passthrough: %q is not a plain hostname (no scheme, no port, no path)", host)
+	}
+	host = strings.ToLower(host)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, exists := l.hosts[host]; exists {
+		return nil
+	}
+	l.hosts[host] = struct{}{}
+
+	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(l.path), ".passthrough-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	if existing, err := os.ReadFile(l.path); err == nil {
+		if _, err := tmp.Write(existing); err != nil {
+			tmp.Close()
+			return err
+		}
+		if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+			if _, err := tmp.Write([]byte{'\n'}); err != nil {
+				tmp.Close()
+				return err
+			}
+		}
+	}
+	if _, err := tmp.Write([]byte(host + "\n")); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, l.path)
+}
+
+func isPlainHostname(s string) bool {
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "://") || strings.Contains(s, "/") || strings.ContainsRune(s, ':') {
+		return false
+	}
+	if strings.ContainsAny(s, " \t#") {
+		return false
+	}
+	return true
 }
