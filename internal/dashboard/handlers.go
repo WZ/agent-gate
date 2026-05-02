@@ -384,6 +384,8 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			reqBodyStr = redactor.Redact(string(stored.ReqBody))
 			respBodyStr = redactor.Redact(string(stored.RespBody))
 		}
+		reqBodyStr = formatBody(reqBodyStr, stored.ReqHeaders)
+		respBodyStr = formatBody(respBodyStr, stored.RespHeaders)
 
 		host := normalizeHost(ix.Host)
 		blocked := false
