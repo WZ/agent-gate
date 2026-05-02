@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -71,7 +72,11 @@ func TestSupervisor_LockfileEnforced(t *testing.T) {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dataDir, "agent-gate.lock"), []byte("99999"), 0o600); err != nil {
+	// Write the *test's own* PID to the lockfile — it's guaranteed alive,
+	// so the stale-lock-reclamation path won't kick in and the run must
+	// fail with a held-lock error.
+	pid := strconv.Itoa(os.Getpid())
+	if err := os.WriteFile(filepath.Join(dataDir, "agent-gate.lock"), []byte(pid), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Run(context.Background(), Options{
@@ -82,6 +87,33 @@ func TestSupervisor_LockfileEnforced(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "another agent-gate run is active") {
 		t.Fatalf("expected lockfile error, got %v", err)
+	}
+}
+
+// TestSupervisor_StaleLockfileReclaimed verifies that a lockfile pointing
+// at a non-running PID is silently reclaimed.
+func TestSupervisor_StaleLockfileReclaimed(t *testing.T) {
+	configPath, dataDir := writeMinimalConfig(t)
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// PID 999999 is vanishingly unlikely to be alive on any test host.
+	if err := os.WriteFile(filepath.Join(dataDir, "agent-gate.lock"), []byte("999999"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	exit, err := Run(context.Background(), Options{
+		Mode:       Permissive,
+		ConfigPath: configPath,
+		Cmd:        selfBinary(t),
+		Args:       []string{"-exit", "0"},
+		Stdout:     os.Stderr,
+		Stderr:     os.Stderr,
+	})
+	if err != nil {
+		t.Fatalf("expected stale lock to be reclaimed; got error: %v", err)
+	}
+	if exit != 0 {
+		t.Fatalf("expected exit 0 after reclaiming stale lock; got %d", exit)
 	}
 }
 
