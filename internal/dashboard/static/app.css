@@ -449,3 +449,68 @@ summary {
     flex-direction: column;
   }
 }
+
+/* Policy action UI — Trust host + Dismiss flag.
+   Plan 2 had these inline buttons; the dashboard redesign removed the
+   surface but kept the API. Plan 3 reintroduces the buttons. */
+
+.flag-with-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-right: 0.35rem;
+}
+.flag-with-action .flag-label { padding-right: 0.2rem; }
+.flag-dismiss {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+  margin: 0;
+}
+.flag-dismiss input[type="text"] {
+  font: inherit;
+  border: 1px solid rgba(0,0,0,0.15);
+  background: rgba(255,255,255,0.7);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  width: 9rem;
+  font-size: 0.8em;
+}
+.flag-dismiss button,
+.trust-host button {
+  font: inherit;
+  background: #1c1917;
+  color: #fafaf9;
+  border: 0;
+  border-radius: 0.25rem;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.8em;
+  cursor: pointer;
+}
+.flag-dismiss button:hover,
+.trust-host button:hover { background: #44403c; }
+
+.policy-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  font-size: 0.9em;
+  flex-wrap: wrap;
+}
+.policy-actions .policy-label {
+  font-weight: 600;
+  color: #57534e;
+}
+.policy-actions code {
+  background: rgba(0,0,0,0.05);
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.25rem;
+}
+.policy-actions .ok {
+  color: #166534;
+  font-weight: 500;
+}
+.trust-host { margin: 0; }

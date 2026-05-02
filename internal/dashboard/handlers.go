@@ -328,6 +328,7 @@ type eventDetail struct {
 	SessionID   string
 	Method      string
 	URL         string
+	Host        string
 	Status      int
 	StartedAt   time.Time
 	ReqHeaders  http.Header
@@ -337,6 +338,7 @@ type eventDetail struct {
 	Flags       []types.Flag
 	Raw         bool
 	CaptureMode string
+	HostTrusted bool
 }
 
 func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
@@ -381,14 +383,17 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			respBodyStr = redactor.Redact(string(stored.RespBody))
 		}
 
+		host := normalizeHost(ix.Host)
 		detail := eventDetail{
 			ID: id, SessionID: ix.SessionID, Method: ix.Method, URL: stored.URL,
+			Host:   host,
 			Status: ix.Status, StartedAt: ix.StartedAt,
 			ReqHeaders:  redactor.RedactHeaders(stored.ReqHeaders),
 			RespHeaders: redactor.RedactHeaders(stored.RespHeaders),
 			ReqBody:     reqBodyStr, RespBody: respBodyStr,
 			Flags: stored.Flags, Raw: raw,
 			CaptureMode: ix.CaptureMode,
+			HostTrusted: opts.Allowlist.Contains(host),
 		}
 		r.Render(w, req, "event_detail", detail)
 	}
