@@ -198,6 +198,19 @@ Each event detail page has three host-policy buttons + per-flag Dismiss:
 Per-flag **Dismiss** writes to `dismissals.json` with a free-text reason and a
 timestamp. Priority: denylist > passthrough > allowlist > default (forward + flag).
 
+## What's next
+
+See `TODOS.md` for the next two release cuts:
+
+- **Plan 4 (`v0.4.0-windows-airtight`)** — Windows airtight runtime: Job
+  Object + WFP per-exe filters + completion-port listener for descendants.
+  Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
+- **Plan 5 (`v0.5.0-multi-vendor`)** — first-class parser branches for
+  OpenAI Chat Completions, OpenAI Responses, Anthropic Bedrock, and
+  Vertex `generateContent`. Other agents (OpenClaw, Aider, anything
+  that talks HTTP) already work via the generic parser; Plan 5 makes
+  their dashboard view as rich as Anthropic's.
+
 ## Limitations (Plan 3)
 
 - HTTP/1.1 client-facing; upstream HTTP/2 transparent.
