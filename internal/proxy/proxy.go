@@ -37,6 +37,13 @@ type Options struct {
 	// `403 Forbidden` from the proxy; nothing reaches the upstream. Use the
 	// allowlist + EnforceAllowlist supervisor flag to wire this up.
 	HostGuard func(host string) bool
+
+	// PassthroughHost, if set, is consulted on every CONNECT. Returning true
+	// makes the proxy tunnel TCP raw — no TLS interception, no body capture.
+	// Use for cert-pinned upstreams (mcp-proxy.anthropic.com etc.) where
+	// MITM would fail. The connection still goes through the proxy port (so
+	// airtight enforcement is preserved); only inspection is skipped.
+	PassthroughHost func(host string) bool
 }
 
 const defaultBodyLimit = 8 << 20
@@ -214,6 +221,15 @@ func mitmConnect(opts Options) func(host string, ctx *goproxy.ProxyCtx) (*goprox
 		if serverName == "" {
 			serverName = host
 		}
+
+		// Passthrough hosts (e.g. cert-pinned upstreams) tunnel TCP raw.
+		// Body inspection is skipped; only the CONNECT host + byte counts
+		// land in the audit log via goproxy's tunneling path.
+		if opts.PassthroughHost != nil && opts.PassthroughHost(serverName) {
+			opts.Logger("proxy: passthrough (no MITM) for %s", serverName)
+			return goproxy.OkConnect, host
+		}
+
 		// Sign a leaf for this hostname using our local CA.
 		leaf, err := opts.CA.SignLeaf(serverName)
 		if err != nil {

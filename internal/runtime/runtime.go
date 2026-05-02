@@ -13,6 +13,7 @@ import (
 	"agent-gate/internal/denylist"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/parser"
+	"agent-gate/internal/passthrough"
 	"agent-gate/internal/policy"
 	"agent-gate/internal/store"
 	"agent-gate/internal/types"
@@ -21,14 +22,15 @@ import (
 // Common bundles the long-lived state shared by `agent-gate proxy` and
 // `agent-gate run`. Built once at startup; closed once at shutdown.
 type Common struct {
-	Cfg       *config.Config
-	ConfigDir string
-	CA        *ca.CA
-	Store     *store.Store
-	Allowlist *allowlist.Allowlist
-	Denylist  *denylist.Denylist
-	Dismiss   *dismissals.Dismissals
-	Engine    *policy.Engine
+	Cfg         *config.Config
+	ConfigDir   string
+	CA          *ca.CA
+	Store       *store.Store
+	Allowlist   *allowlist.Allowlist
+	Denylist    *denylist.Denylist
+	Passthrough *passthrough.List
+	Dismiss     *dismissals.Dismissals
+	Engine      *policy.Engine
 }
 
 // LoadCommon performs all the I/O-heavy startup the proxy and the launcher
@@ -68,6 +70,12 @@ func LoadCommon(configPath string) (*Common, error) {
 		return nil, fmt.Errorf("load denylist: %w", err)
 	}
 
+	pt, err := passthrough.Load(filepath.Join(configDir, "passthrough.txt"))
+	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("load passthrough: %w", err)
+	}
+
 	di, err := dismissals.Load(filepath.Join(configDir, "dismissals.json"))
 	if err != nil {
 		st.Close()
@@ -86,14 +94,15 @@ func LoadCommon(configPath string) (*Common, error) {
 	)
 
 	return &Common{
-		Cfg:       cfg,
-		ConfigDir: configDir,
-		CA:        root,
-		Store:     st,
-		Allowlist: al,
-		Denylist:  dl,
-		Dismiss:   di,
-		Engine:    engine,
+		Cfg:         cfg,
+		ConfigDir:   configDir,
+		CA:          root,
+		Store:       st,
+		Allowlist:   al,
+		Denylist:    dl,
+		Passthrough: pt,
+		Dismiss:     di,
+		Engine:      engine,
 	}, nil
 }
 
