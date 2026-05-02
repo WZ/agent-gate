@@ -129,9 +129,9 @@ agent-gate run -- fish -ic 'claude'
 For a self-hosted Anthropic-compatible endpoint with a non-standard cert:
 
 ```bash
-echo | openssl s_client -connect api.fazai.example:443 -servername api.fazai.example 2>/dev/null \
+echo | openssl s_client -connect your-anthropic-endpoint.example:443 -servername your-anthropic-endpoint.example 2>/dev/null \
   | openssl x509 -outform PEM > /tmp/upstream.pem
-ANTHROPIC_BASE_URL=https://api.fazai.example \
+ANTHROPIC_BASE_URL=https://your-anthropic-endpoint.example \
 ANTHROPIC_API_KEY=$YOUR_KEY \
   agent-gate run --upstream-ca /tmp/upstream.pem -- claude
 ```
