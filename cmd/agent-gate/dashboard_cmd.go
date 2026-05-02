@@ -14,6 +14,7 @@ import (
 	"agent-gate/internal/dashboard"
 	"agent-gate/internal/denylist"
 	"agent-gate/internal/dismissals"
+	"agent-gate/internal/passthrough"
 	"agent-gate/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -56,6 +57,10 @@ func runDashboard(configPath, addrOverride string) error {
 	if err != nil {
 		return err
 	}
+	pt, err := passthrough.Load(filepath.Join(configDir, "passthrough.txt"))
+	if err != nil {
+		return err
+	}
 	di, err := dismissals.Load(filepath.Join(configDir, "dismissals.json"))
 	if err != nil {
 		return err
@@ -83,6 +88,6 @@ func runDashboard(configPath, addrOverride string) error {
 	fmt.Fprintf(os.Stderr, "agent-gate dashboard listening on http://%s\n", addr)
 	return dashboard.Run(dashboard.Options{
 		Listener: ln, Addr: addr,
-		Store: st, Allowlist: al, Denylist: dl, Dismissals: di,
+		Store: st, Allowlist: al, Denylist: dl, Passthrough: pt, Dismissals: di,
 	})
 }

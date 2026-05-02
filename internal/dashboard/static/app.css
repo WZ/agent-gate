@@ -532,3 +532,21 @@ summary {
   padding: 0.15rem 0.55rem;
   border-radius: 0.25rem;
 }
+
+.trust-host .passthrough-button {
+  background: #b45309;
+}
+.trust-host .passthrough-button:hover { background: #92400e; }
+
+.passthrough-banner {
+  display: inline-block;
+  background: #b45309;
+  color: #fff;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 0.25rem;
+}

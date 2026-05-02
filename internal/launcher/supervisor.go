@@ -104,6 +104,12 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		return false
 	}
 	passthroughHost := func(host string) bool {
+		// Denylist wins over passthrough: a blocked host should always 403,
+		// even if the user also tagged it passthrough. Forcing MITM here
+		// lets HostGuard (request-time) emit the synthetic 403 with body.
+		if common.Denylist != nil && common.Denylist.Contains(host) {
+			return false
+		}
 		return common.Passthrough != nil && common.Passthrough.Contains(host)
 	}
 	if enforce {
@@ -162,11 +168,12 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		dashAddr = fmt.Sprintf("127.0.0.1:%d", common.Cfg.Ports.Dashboard)
 	}
 	dashHandler := dashboard.NewServer(dashboard.Options{
-		Addr:       dashAddr,
-		Store:      common.Store,
-		Allowlist:  common.Allowlist,
-		Denylist:   common.Denylist,
-		Dismissals: common.Dismiss,
+		Addr:        dashAddr,
+		Store:       common.Store,
+		Allowlist:   common.Allowlist,
+		Denylist:    common.Denylist,
+		Passthrough: common.Passthrough,
+		Dismissals:  common.Dismiss,
 	})
 	dashLn, err := net.Listen("tcp", dashAddr)
 	if err != nil {

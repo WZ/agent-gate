@@ -12,6 +12,7 @@ import (
 	"agent-gate/internal/allowlist"
 	"agent-gate/internal/denylist"
 	"agent-gate/internal/dismissals"
+	"agent-gate/internal/passthrough"
 	"agent-gate/internal/store"
 )
 
@@ -25,6 +26,7 @@ type Options struct {
 	Store            *store.Store           // Required.
 	Allowlist        *allowlist.Allowlist   // Required.
 	Denylist         *denylist.Denylist     // Optional; if nil, "Block this host" returns 503.
+	Passthrough      *passthrough.List      // Optional; if nil, "Passthrough" returns 503.
 	Dismissals       *dismissals.Dismissals // Required.
 	LivePollInterval time.Duration          // optional; defaults to 500ms
 }
@@ -45,6 +47,7 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("/api/dismiss", handleDismiss(opts))
 	mux.HandleFunc("/api/trust", handleTrust(opts))
 	mux.HandleFunc("/api/block", handleBlock(opts))
+	mux.HandleFunc("/api/passthrough", handlePassthrough(opts))
 	mux.HandleFunc("/api/live", handleLive(opts))
 	mux.HandleFunc("/api/clear", handleClear(opts))
 
