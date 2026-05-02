@@ -38,6 +38,12 @@ type Options struct {
 	UpstreamCAFile             string // PEM file added to the system trust pool for the proxy→upstream connection
 	UpstreamInsecureSkipVerify bool   // skip upstream cert verification entirely (testing only — captures still happen)
 
+	// EnforceAllowlist, if true, makes the proxy return 403 to the agent
+	// for any request whose host isn't in the allowlist. Tri-state:
+	//   nil  → use [allowlist].enforce from config.toml
+	//   *true / *false → CLI override
+	EnforceAllowlist *bool
+
 	// Test seams. Production code never sets these.
 	proxyHook     func(error) // called if proxy goroutine panics
 	dashboardHook func(error) // ditto for dashboard
