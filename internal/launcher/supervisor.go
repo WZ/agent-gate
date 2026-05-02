@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -119,18 +120,17 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	proxyDone := make(chan error, 1)
 	go func() {
 		defer recoverPanic(opts.proxyHook, "proxy", cancel)
-		proxyDone <- proxy.Run(proxy.Options{
-			Listener:                   proxyLn,
-			CA:                         common.CA,
-			Out:                        flowCh,
-			IDGen:                      idgen.NewGenerator(),
-			CaptureMode:                captureMode,
-			UpstreamRootCAs:            upstreamRoots,
-			UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
-			HostGuard:                  hostGuard,
-			PassthroughHost:            passthroughHost,
-			Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-		})
+		proxyDone <- proxy.Run(proxyOptionsForListener(proxyRunConfig{
+			listener:                   proxyLn,
+			common:                     common,
+			out:                        flowCh,
+			captureMode:                captureMode,
+			upstreamRoots:              upstreamRoots,
+			upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+			hostGuard:                  hostGuard,
+			passthroughHost:            passthroughHost,
+			logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+		}))
 	}()
 
 	// 5b. Allocate the netns-listener channel; on Linux, spawnAirtight will send
@@ -143,17 +143,17 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 			if nsLn == nil {
 				return
 			}
-			if err := proxy.Run(proxy.Options{
-				Listener:                   nsLn,
-				CA:                         common.CA,
-				Out:                        flowCh,
-				IDGen:                      idgen.NewGenerator(),
-				CaptureMode:                captureMode,
-				UpstreamRootCAs:            upstreamRoots,
-				UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
-				HostGuard:                  hostGuard,
-				Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-			}); err != nil && !errors.Is(err, net.ErrClosed) {
+			if err := proxy.Run(proxyOptionsForListener(proxyRunConfig{
+				listener:                   nsLn,
+				common:                     common,
+				out:                        flowCh,
+				captureMode:                captureMode,
+				upstreamRoots:              upstreamRoots,
+				upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+				hostGuard:                  hostGuard,
+				passthroughHost:            passthroughHost,
+				logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+			})); err != nil && !errors.Is(err, net.ErrClosed) {
 				fmt.Fprintf(os.Stderr, "ns proxy: %v\n", err)
 			}
 		case <-supCtx.Done():
@@ -304,7 +304,7 @@ func buildChildEnv(base []string, proxyAddr string) []string {
 	}
 	out := make([]string, 0, len(base)+4)
 	for _, kv := range base {
-		switch keyOf(kv) {
+		switch strings.ToUpper(keyOf(kv)) {
 		case "HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY":
 			continue
 		}
@@ -320,6 +320,43 @@ func buildChildEnv(base []string, proxyAddr string) []string {
 		"ALL_PROXY="+proxyURL,
 		"NO_PROXY=",
 	)
+	return out
+}
+
+type proxyRunConfig struct {
+	listener                   net.Listener
+	common                     *rt.Common
+	out                        chan<- types.RawFlow
+	captureMode                string
+	upstreamRoots              *x509.CertPool
+	upstreamInsecureSkipVerify bool
+	hostGuard                  func(string) bool
+	passthroughHost            func(string) bool
+	logger                     func(string, ...any)
+}
+
+func proxyOptionsForListener(c proxyRunConfig) proxy.Options {
+	opts := proxy.Options{
+		Listener:                   c.listener,
+		Out:                        c.out,
+		IDGen:                      idgen.NewGenerator(),
+		CaptureMode:                c.captureMode,
+		UpstreamRootCAs:            c.upstreamRoots,
+		UpstreamInsecureSkipVerify: c.upstreamInsecureSkipVerify,
+		HostGuard:                  c.hostGuard,
+		PassthroughHost:            c.passthroughHost,
+		Logger:                     c.logger,
+	}
+	if c.common != nil {
+		opts.CA = c.common.CA
+	}
+	return opts
+}
+
+func execArgv(exe string, args []string) []string {
+	out := make([]string, 0, len(args)+1)
+	out = append(out, exe)
+	out = append(out, args...)
 	return out
 }
 

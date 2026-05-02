@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -119,6 +120,39 @@ func TestSandboxLinux_DescendantInheritsNetns(t *testing.T) {
 	}
 	if exit == 0 {
 		t.Fatalf("expected descendant dial-direct to fail; got exit 0")
+	}
+}
+
+func TestSandboxLinux_RunPreservesArgvAndStdin(t *testing.T) {
+	skipIfAirtightUnavailable(t)
+
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.toml")
+	port := pickFreePort(t)
+	dashPort := pickFreePort(t)
+	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(
+		"[ports]\nproxy = %d\ndashboard = %d\n[storage]\ndata_dir = '%s'\n",
+		port, dashPort, filepath.ToSlash(tmp)+"/data")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+
+	exit, err := Run(ctx, Options{
+		Mode:       Airtight,
+		ConfigPath: configPath,
+		Cmd:        "/bin/sh",
+		Args:       []string{"-c", `read line && [ "$line" = "agent-gate-stdin-ok" ]`},
+		Stdin:      strings.NewReader("agent-gate-stdin-ok\n"),
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if exit != 0 {
+		t.Fatalf("expected shell to receive argv and stdin; got exit %d", exit)
 	}
 }
 
