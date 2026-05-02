@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
-	"syscall"
 )
 
 const sandboxExecPath = "/usr/bin/sandbox-exec"
@@ -54,7 +53,7 @@ func spawnAirtight(ctx context.Context, opts Options, env []string) (*childHandl
 	cmd := exec.CommandContext(ctx, sandboxExecPath, args...)
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = opts.Stdin, opts.Stdout, opts.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = ttyAwareSysProcAttr(opts.Stdin)
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("sandbox-exec start: %w", err)
 	}

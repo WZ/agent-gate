@@ -243,6 +243,7 @@ func spawnPermissive(ctx context.Context, opts Options, env []string) (*childHan
 	cmd := exec.CommandContext(ctx, opts.Cmd, opts.Args...)
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = opts.Stdin, opts.Stdout, opts.Stderr
+	cmd.SysProcAttr = ttyAwareSysProcAttr(opts.Stdin)
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
