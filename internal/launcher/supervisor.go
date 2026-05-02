@@ -2,6 +2,7 @@ package launcher
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -77,16 +78,26 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		rt.RunPipeline(supCtx, common, flowCh)
 	}()
 
+	upstreamRoots, err := loadUpstreamRoots(opts.UpstreamCAFile)
+	if err != nil {
+		return 1, err
+	}
+	if opts.UpstreamInsecureSkipVerify {
+		fmt.Fprintln(os.Stderr, "⚠ upstream TLS verification DISABLED. Captures still happen, but upstream identity is NOT validated. Use only for testing self-hosted endpoints.")
+	}
+
 	proxyDone := make(chan error, 1)
 	go func() {
 		defer recoverPanic(opts.proxyHook, "proxy", cancel)
 		proxyDone <- proxy.Run(proxy.Options{
-			Listener:    proxyLn,
-			CA:          common.CA,
-			Out:         flowCh,
-			IDGen:       idgen.NewGenerator(),
-			CaptureMode: captureMode,
-			Logger:      func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+			Listener:                   proxyLn,
+			CA:                         common.CA,
+			Out:                        flowCh,
+			IDGen:                      idgen.NewGenerator(),
+			CaptureMode:                captureMode,
+			UpstreamRootCAs:            upstreamRoots,
+			UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+			Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 		})
 	}()
 
@@ -101,12 +112,14 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 				return
 			}
 			if err := proxy.Run(proxy.Options{
-				Listener:    nsLn,
-				CA:          common.CA,
-				Out:         flowCh,
-				IDGen:       idgen.NewGenerator(),
-				CaptureMode: captureMode,
-				Logger:      func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+				Listener:                   nsLn,
+				CA:                         common.CA,
+				Out:                        flowCh,
+				IDGen:                      idgen.NewGenerator(),
+				CaptureMode:                captureMode,
+				UpstreamRootCAs:            upstreamRoots,
+				UpstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+				Logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 			}); err != nil && !errors.Is(err, net.ErrClosed) {
 				fmt.Fprintf(os.Stderr, "ns proxy: %v\n", err)
 			}
@@ -286,4 +299,27 @@ func keyOf(kv string) string {
 
 func startsWith(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+// loadUpstreamRoots returns a cert pool to use for the proxy→upstream
+// connection. If caFile is empty, returns nil — the proxy uses Go's
+// default (system) trust store. If caFile is set, we start from the
+// system pool (so api.anthropic.com still verifies normally) and
+// additionally trust the PEM cert(s) in the file.
+func loadUpstreamRoots(caFile string) (*x509.CertPool, error) {
+	if caFile == "" {
+		return nil, nil
+	}
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	pem, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, fmt.Errorf("read upstream CA file %q: %w", caFile, err)
+	}
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("upstream CA file %q contains no valid PEM certificates", caFile)
+	}
+	return pool, nil
 }
