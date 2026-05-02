@@ -33,6 +33,10 @@ type StorageConfig struct {
 
 type AllowlistConfig struct {
 	File string `toml:"file"`
+	// Enforce, if true, makes the proxy return 403 to the agent for any
+	// request whose host isn't in the allowlist. The flow is still recorded
+	// (the audit log stays complete). CLI flag --enforce-allowlist overrides.
+	Enforce bool `toml:"enforce"`
 }
 
 func Defaults() *Config {

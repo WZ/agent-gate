@@ -324,19 +324,23 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 }
 
 type eventDetail struct {
-	ID          string
-	SessionID   string
-	Method      string
-	URL         string
-	Status      int
-	StartedAt   time.Time
-	ReqHeaders  http.Header
-	RespHeaders http.Header
-	ReqBody     string
-	RespBody    string
-	Flags       []types.Flag
-	Raw         bool
-	CaptureMode string
+	ID              string
+	SessionID       string
+	Method          string
+	URL             string
+	Host            string
+	Status          int
+	StartedAt       time.Time
+	ReqHeaders      http.Header
+	RespHeaders     http.Header
+	ReqBody         string
+	RespBody        string
+	Flags           []types.Flag
+	Raw             bool
+	CaptureMode     string
+	HostTrusted     bool
+	HostBlocked     bool
+	HostPassthrough bool
 }
 
 func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
@@ -381,14 +385,27 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			respBodyStr = redactor.Redact(string(stored.RespBody))
 		}
 
+		host := normalizeHost(ix.Host)
+		blocked := false
+		if opts.Denylist != nil {
+			blocked = opts.Denylist.Contains(host)
+		}
+		passthroughed := false
+		if opts.Passthrough != nil {
+			passthroughed = opts.Passthrough.Contains(host)
+		}
 		detail := eventDetail{
 			ID: id, SessionID: ix.SessionID, Method: ix.Method, URL: stored.URL,
+			Host:   host,
 			Status: ix.Status, StartedAt: ix.StartedAt,
 			ReqHeaders:  redactor.RedactHeaders(stored.ReqHeaders),
 			RespHeaders: redactor.RedactHeaders(stored.RespHeaders),
 			ReqBody:     reqBodyStr, RespBody: respBodyStr,
 			Flags: stored.Flags, Raw: raw,
-			CaptureMode: ix.CaptureMode,
+			CaptureMode:     ix.CaptureMode,
+			HostTrusted:     opts.Allowlist.Contains(host),
+			HostBlocked:     blocked,
+			HostPassthrough: passthroughed,
 		}
 		r.Render(w, req, "event_detail", detail)
 	}
@@ -452,5 +469,53 @@ func handleTrust(opts Options) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(`<span class="ok">trusted ` + html.EscapeString(host) + `</span>`))
+	}
+}
+
+func handleBlock(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if opts.Denylist == nil {
+			http.Error(w, "denylist not available (supervisor wired without it)", 503)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		host := req.FormValue("host")
+		if err := opts.Denylist.Add(host); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<span class="block-banner">blocked ` + html.EscapeString(host) + `</span>`))
+	}
+}
+
+func handlePassthrough(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if opts.Passthrough == nil {
+			http.Error(w, "passthrough list not available (supervisor wired without it)", 503)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		host := req.FormValue("host")
+		if err := opts.Passthrough.Add(host); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<span class="passthrough-banner">passthrough ` + html.EscapeString(host) + ` (restart agent-gate run for it to take effect)</span>`))
 	}
 }
