@@ -153,7 +153,12 @@ Work lands in **plans**, each plan a self-contained branch + PR + tag:
 | Plan 1 | `v0.1.0-mvp-backbone` | proxy + parser + store + CLI scaffold |
 | Plan 2 | `v0.2.0-policy-dashboard` | policy rules + dismissals + dashboard |
 | Plan 3 | (PR #2) | airtight launcher (macOS + Linux + Windows scaffold) |
-| Plan 4 | future | Windows airtight runtime (Job Object + WFP per-exe filters) |
+| Plan 4 | `v0.4.0-windows-airtight` (TODO) | Windows airtight runtime — Job Object + WFP per-exe filters + IoCompletionPort listener for descendants + per-user sublayer DACL |
+| Plan 5 | `v0.5.0-multi-vendor` (TODO) | Multi-vendor parser support — first-class decoders for OpenAI Chat/Responses, Anthropic Bedrock, Vertex; vendor registry pattern |
+
+See `TODOS.md` at the repo root for the publicly-tracked Plan 4 + 5
+summaries. Detailed design specs live (gitignored) under
+`docs/superpowers/specs/`.
 
 Specs and plans for each live (gitignored) under `docs/superpowers/`. The
 spec is the design doc; the plan is the bite-sized implementation list.
