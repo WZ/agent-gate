@@ -27,10 +27,38 @@
     {{ if .Flags }}
       <div class="flag-row">
         {{ range .Flags }}
-          <span class="flag {{ .Severity }}">{{ .Code }}</span>
+          <span class="flag {{ .Severity }} flag-with-action" data-code="{{ .Code }}">
+            <span class="flag-label">{{ .Code }}</span>
+            <form class="flag-dismiss"
+                  hx-post="/api/dismiss"
+                  hx-target="closest .flag-with-action"
+                  hx-swap="outerHTML">
+              <input type="hidden" name="scope" value="event">
+              <input type="hidden" name="event_id" value="{{ $.ID }}">
+              <input type="hidden" name="code" value="{{ .Code }}">
+              <input type="hidden" name="host" value="{{ $.Host }}">
+              <input type="text" name="reason" placeholder="reason" required>
+              <button type="submit">Dismiss</button>
+            </form>
+          </span>
         {{ end }}
       </div>
     {{ end }}
+    <div class="policy-actions">
+      <span class="policy-label">Host:</span>
+      <code>{{ .Host }}</code>
+      {{ if .HostTrusted }}
+        <span class="ok">already trusted</span>
+      {{ else }}
+        <form class="trust-host"
+              hx-post="/api/trust"
+              hx-target="this"
+              hx-swap="outerHTML">
+          <input type="hidden" name="host" value="{{ .Host }}">
+          <button type="submit">Trust this host</button>
+        </form>
+      {{ end }}
+    </div>
   </section>
 
   {{ if .Raw }}
