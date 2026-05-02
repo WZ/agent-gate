@@ -88,7 +88,7 @@ func TestSessionsListShowsRowFromStore(t *testing.T) {
 	assert.Contains(t, bodyStr, "api.anthropic.com")
 }
 
-func TestSessionsListRendersSOCSummary(t *testing.T) {
+func TestSessionsListRendersOperationsSummary(t *testing.T) {
 	opts := freshOpts(t)
 	base := time.Date(2026, 5, 1, 15, 30, 0, 0, time.UTC)
 	require.NoError(t, opts.Store.Append(types.StoredEvent{
@@ -140,7 +140,7 @@ func TestSessionsListRendersSOCSummary(t *testing.T) {
 	resp.Body.Close()
 	bodyStr := string(body)
 
-	assert.Contains(t, bodyStr, "SOC Console")
+	assert.Contains(t, bodyStr, "Operations")
 	assert.Contains(t, bodyStr, "Captured events")
 	assert.Contains(t, bodyStr, ">3<")
 	assert.Contains(t, bodyStr, "Session groups")
