@@ -719,6 +719,35 @@ summary:hover { color: hsl(var(--foreground)); }
 .json-null   { color: hsl(var(--muted-foreground)); font-style: italic; }
 .json-punct  { color: hsl(var(--muted-foreground) / 0.65); }
 .sse-field   { color: hsl(var(--accent)); font-weight: 600; }
+.sse-event-anonymous { color: hsl(var(--muted-foreground)); font-style: italic; }
+
+/* Collapsible SSE event blocks — case-file folder pattern */
+.sse-block {
+  margin: 0;
+  padding: 0.15rem 0;
+  border-bottom: 1px dashed hsl(var(--border));
+}
+.sse-block:last-child { border-bottom: 0; }
+
+.sse-block > summary {
+  display: list-item;
+  cursor: pointer;
+  list-style: none;
+  padding: 0.25rem 0;
+  user-select: none;
+}
+.sse-block > summary::-webkit-details-marker { display: none; }
+.sse-block > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  margin-right: 0.15rem;
+  color: hsl(var(--muted-foreground) / 0.7);
+  font-size: 0.7em;
+  transition: transform 0.12s ease;
+}
+.sse-block[open] > summary::before { transform: rotate(90deg); }
+.sse-block > summary:hover::before { color: hsl(var(--foreground)); }
 
 .headers-pane {
   margin-top: 0.5rem;

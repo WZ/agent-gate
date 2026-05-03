@@ -38,26 +38,12 @@ func TestFormatBodyJSONPreservesRedactorMarkers(t *testing.T) {
 	assert.Contains(t, got, "\n  \"key\": \"«REDACTED:openai_key:sk-abc•••»\"")
 }
 
-func TestFormatBodyEventStreamPrettyPrintsDataLines(t *testing.T) {
+func TestFormatBodyLeavesEventStreamUntouched(t *testing.T) {
+	// SSE pretty-printing happens during highlight (per-event collapse owns
+	// its own JSON layout). formatBody passes SSE through unchanged.
 	headers := http.Header{"Content-Type": []string{"text/event-stream"}}
-	body := strings.Join([]string{
-		"event: message_start",
-		`data: {"type":"message_start","message":{"id":"msg_01"}}`,
-		"",
-		"event: content_block_delta",
-		`data: {"delta":{"text":"hello"}}`,
-	}, "\n")
-	got := formatBody(body, headers)
-	assert.Contains(t, got, "data: {\n  \"type\": \"message_start\"")
-	assert.Contains(t, got, "data: {\n  \"delta\": {\n    \"text\": \"hello\"")
-	assert.Contains(t, got, "event: message_start")
-}
-
-func TestFormatBodyEventStreamLeavesNonJSONDataAlone(t *testing.T) {
-	headers := http.Header{"Content-Type": []string{"text/event-stream"}}
-	body := "data: ping\n"
-	got := formatBody(body, headers)
-	assert.Equal(t, "data: ping", got)
+	body := "event: message_start\ndata: {\"type\":\"start\"}"
+	assert.Equal(t, body, formatBody(body, headers))
 }
 
 func TestFormatBodyPassThroughForOtherContentTypes(t *testing.T) {
@@ -124,6 +110,8 @@ func TestHighlightJSONPreservesIndentation(t *testing.T) {
 }
 
 func TestHighlightEventStreamColorsFieldsAndJSON(t *testing.T) {
+	// highlightEventStream owns SSE indent + highlight. Each data: payload
+	// is pretty-printed inside its block, so the rendered JSON is multi-line.
 	body := strings.Join([]string{
 		`event: message_start`,
 		`data: {"type":"message_start","ok":true}`,
@@ -133,6 +121,49 @@ func TestHighlightEventStreamColorsFieldsAndJSON(t *testing.T) {
 	assert.Contains(t, got, `<span class="sse-field">data:</span> <span class="json-punct">{</span>`)
 	assert.Contains(t, got, `<span class="json-key">&#34;type&#34;</span>`)
 	assert.Contains(t, got, `<span class="json-bool">true</span>`)
+	// indented (multi-line)
+	assert.Contains(t, got, "<span class=\"json-punct\">{</span>\n  ")
+}
+
+func TestHighlightEventStreamWrapsEachEventInDetails(t *testing.T) {
+	// Three events separated by blank-line boundaries → three <details>.
+	body := strings.Join([]string{
+		`event: message_start`,
+		`data: {"type":"message_start"}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"delta":{"text":"hi"}}`,
+		``,
+		`event: message_stop`,
+		`data: {"type":"message_stop"}`,
+	}, "\n")
+	got := string(highlightEventStream(body))
+	assert.Equal(t, 3, strings.Count(got, `<details class="sse-block" open>`),
+		"should emit one details element per event boundary")
+	assert.Equal(t, 3, strings.Count(got, `</details>`))
+	// Event names land inside the summary element, not the body.
+	assert.Contains(t, got, `<summary><span class="sse-field">event:</span> message_start</summary>`)
+	assert.Contains(t, got, `<summary><span class="sse-field">event:</span> content_block_delta</summary>`)
+	assert.Contains(t, got, `<summary><span class="sse-field">event:</span> message_stop</summary>`)
+}
+
+func TestHighlightEventStreamHandlesAnonymousEvent(t *testing.T) {
+	// SSE blocks without an explicit `event:` field default to "message".
+	body := `data: {"x":1}`
+	got := string(highlightEventStream(body))
+	assert.Contains(t, got, `<details class="sse-block" open>`)
+	assert.Contains(t, got, `<span class="sse-event-anonymous">message</span>`)
+	assert.Contains(t, got, `<span class="json-key">&#34;x&#34;</span>`)
+}
+
+func TestHighlightEventStreamPreservesIDField(t *testing.T) {
+	body := strings.Join([]string{
+		`event: ping`,
+		`id: 42`,
+		`data: {"ok":true}`,
+	}, "\n")
+	got := string(highlightEventStream(body))
+	assert.Contains(t, got, `<span class="sse-field">id:</span> 42`)
 }
 
 func TestHighlightBodyDispatchesByContentType(t *testing.T) {

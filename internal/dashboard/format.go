@@ -10,8 +10,9 @@ import (
 )
 
 // formatBody applies content-aware pretty-printing to a captured request or
-// response body. JSON gets indented. SSE event-stream payloads get each
-// `data:` line's JSON pretty-printed. Anything else passes through unchanged.
+// response body. JSON gets indented. Other content types — including SSE,
+// which is pretty-printed during highlight so the per-event collapse can
+// own its layout — pass through unchanged.
 //
 // Formatting is best-effort. If parsing fails (truncated capture, redactor
 // markers in unfortunate spots, or genuinely non-JSON content under a JSON
@@ -20,14 +21,10 @@ func formatBody(body string, headers http.Header) string {
 	if body == "" {
 		return body
 	}
-	switch detectContentKind(headers) {
-	case kindJSON:
+	if detectContentKind(headers) == kindJSON {
 		return prettyJSON(body)
-	case kindEventStream:
-		return prettyEventStream(body)
-	default:
-		return body
 	}
+	return body
 }
 
 type contentKind int
@@ -63,33 +60,6 @@ func prettyJSON(s string) string {
 		return s
 	}
 	return buf.String()
-}
-
-// prettyEventStream walks an SSE stream line-by-line and pretty-prints any
-// JSON payload that follows a `data:` field. Comment lines (`:`...) and
-// other SSE fields (`event:`, `id:`, `retry:`) pass through unchanged.
-//
-// Multi-line `data:` accumulation per the SSE spec is intentionally not
-// implemented — Anthropic's stream uses one JSON object per `data:` line,
-// which is the case we need to read clearly.
-func prettyEventStream(s string) string {
-	var out strings.Builder
-	out.Grow(len(s) + 64)
-	for line := range strings.SplitSeq(s, "\n") {
-		trimmed := strings.TrimRight(line, "\r")
-		if payload, ok := strings.CutPrefix(trimmed, "data: "); ok {
-			pretty := prettyJSON(payload)
-			if pretty != payload {
-				out.WriteString("data: ")
-				out.WriteString(pretty)
-				out.WriteByte('\n')
-				continue
-			}
-		}
-		out.WriteString(trimmed)
-		out.WriteByte('\n')
-	}
-	return strings.TrimRight(out.String(), "\n")
 }
 
 // highlightBody returns the body string with content-aware syntax tokens
@@ -197,34 +167,97 @@ func highlightJSON(s string) template.HTML {
 	return template.HTML(out.String())
 }
 
-// highlightEventStream highlights only the JSON payload of each `data:` line.
-// Other SSE fields (`event:`, `id:`, comment `:`) are HTML-escaped and emitted
-// as plain text so rendering never breaks.
+// highlightEventStream walks an SSE stream, batches lines into events
+// separated by blank-line boundaries (per the SSE spec), and emits one
+// <details> per event. Each event's body holds its `data:` payload (with
+// JSON highlighting) plus any `id:` / `retry:` fields. Lines before the
+// first event boundary, or any block without a recognizable `event:` /
+// `data:` field, render as raw escaped text outside any details element.
+//
+// Default state is open — same readability as before, with the affordance
+// to collapse long streams (Anthropic Messages content_block_delta floods
+// in particular).
 func highlightEventStream(s string) template.HTML {
 	var out strings.Builder
 	out.Grow(len(s) * 2)
-	first := true
-	for line := range strings.SplitSeq(s, "\n") {
-		if !first {
+
+	var block []string
+	flush := func() {
+		if len(block) == 0 {
+			return
+		}
+		eventName := ""
+		dataPayload := ""
+		var others []string
+		hasField := false
+		for _, raw := range block {
+			line := strings.TrimRight(raw, "\r")
+			if name, ok := strings.CutPrefix(line, "event: "); ok {
+				eventName = name
+				hasField = true
+				continue
+			}
+			if payload, ok := strings.CutPrefix(line, "data: "); ok {
+				dataPayload = payload
+				hasField = true
+				continue
+			}
+			if field, _, ok := strings.Cut(line, ": "); ok && isSSEField(field) {
+				others = append(others, line)
+				hasField = true
+				continue
+			}
+			others = append(others, line)
+		}
+		if !hasField {
+			// Nothing recognizable — emit verbatim, no details wrapper.
+			for _, raw := range block {
+				out.WriteString(html.EscapeString(strings.TrimRight(raw, "\r")))
+				out.WriteByte('\n')
+			}
+			block = nil
+			return
+		}
+		out.WriteString(`<details class="sse-block" open><summary><span class="sse-field">event:</span> `)
+		if eventName == "" {
+			out.WriteString(`<span class="sse-event-anonymous">message</span>`)
+		} else {
+			out.WriteString(html.EscapeString(eventName))
+		}
+		out.WriteString(`</summary>`)
+		for _, line := range others {
 			out.WriteByte('\n')
+			if field, rest, ok := strings.Cut(line, ": "); ok && isSSEField(field) {
+				out.WriteString(`<span class="sse-field">`)
+				out.WriteString(html.EscapeString(field))
+				out.WriteString(`:</span> `)
+				out.WriteString(html.EscapeString(rest))
+			} else {
+				out.WriteString(html.EscapeString(line))
+			}
 		}
-		first = false
-		trimmed := strings.TrimRight(line, "\r")
-		if payload, ok := strings.CutPrefix(trimmed, "data: "); ok {
+		if dataPayload != "" {
+			out.WriteString("\n")
 			out.WriteString(`<span class="sse-field">data:</span> `)
-			out.WriteString(string(highlightJSON(payload)))
-			continue
+			// Pretty-print + highlight the payload here. Doing it inside
+			// highlightEventStream keeps the SSE pipeline single-pass: each
+			// data: line in the input is one JSON object, period.
+			out.WriteString(string(highlightJSON(prettyJSON(dataPayload))))
 		}
-		if field, rest, ok := strings.Cut(trimmed, ": "); ok && isSSEField(field) {
-			out.WriteString(`<span class="sse-field">`)
-			out.WriteString(html.EscapeString(field))
-			out.WriteString(`:</span> `)
-			out.WriteString(html.EscapeString(rest))
-			continue
-		}
-		out.WriteString(html.EscapeString(trimmed))
+		out.WriteString(`</details>`)
+		block = nil
 	}
-	return template.HTML(out.String())
+
+	for line := range strings.SplitSeq(s, "\n") {
+		if strings.TrimRight(line, "\r") == "" {
+			flush()
+			continue
+		}
+		block = append(block, line)
+	}
+	flush()
+
+	return template.HTML(strings.TrimRight(out.String(), "\n"))
 }
 
 func isSSEField(name string) bool {
