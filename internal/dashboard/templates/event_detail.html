@@ -99,17 +99,31 @@
     </div>
   {{ end }}
 
-  <div class="inspection-grid">
+  <div class="body-search-bar">
+    <input type="search" id="body-search" placeholder="Find in payload (headers + body)" autocomplete="off" spellcheck="false">
+    <span class="body-search-count" aria-live="polite">—</span>
+    <button type="button" class="body-search-nav" data-search-nav="prev" aria-label="Previous match">↑</button>
+    <button type="button" class="body-search-nav" data-search-nav="next" aria-label="Next match">↓</button>
+    <kbd class="body-search-hint">⌘F · Esc</kbd>
+  </div>
+
+  <div class="inspection-grid" data-search-scope>
     <section class="panel inspector-pane">
       <div class="panel-header">
         <div>
           <p class="eyebrow">Request</p>
           <h3>Payload</h3>
         </div>
+        <button type="button" class="copy-btn" data-copy-target=".body-pane" aria-label="Copy request body">Copy</button>
       </div>
-      <details><summary>Headers</summary>
-        <pre class="body-pane headers-pane">{{ range $k, $v := .ReqHeaders }}{{ $k }}: {{ index $v 0 }}
-{{ end }}</pre>
+      <details class="headers-fold"><summary>Headers <span class="count">({{ len .ReqHeaders }})</span></summary>
+        <table class="headers-table">
+          <tbody>
+            {{ range $k, $v := .ReqHeaders }}
+              <tr><th>{{ $k }}</th><td>{{ index $v 0 }}</td></tr>
+            {{ end }}
+          </tbody>
+        </table>
       </details>
       <pre class="body-pane">{{ .ReqBody }}</pre>
     </section>
@@ -120,10 +134,16 @@
           <p class="eyebrow">Response</p>
           <h3>Payload</h3>
         </div>
+        <button type="button" class="copy-btn" data-copy-target=".body-pane" aria-label="Copy response body">Copy</button>
       </div>
-      <details><summary>Headers</summary>
-        <pre class="body-pane headers-pane">{{ range $k, $v := .RespHeaders }}{{ $k }}: {{ index $v 0 }}
-{{ end }}</pre>
+      <details class="headers-fold"><summary>Headers <span class="count">({{ len .RespHeaders }})</span></summary>
+        <table class="headers-table">
+          <tbody>
+            {{ range $k, $v := .RespHeaders }}
+              <tr><th>{{ $k }}</th><td>{{ index $v 0 }}</td></tr>
+            {{ end }}
+          </tbody>
+        </table>
       </details>
       <pre class="body-pane">{{ .RespBody }}</pre>
     </section>

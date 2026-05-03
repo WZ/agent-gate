@@ -3,6 +3,7 @@ package dashboard
 import (
 	"encoding/json"
 	"html"
+	"html/template"
 	"io"
 	"net/http"
 	"sort"
@@ -333,8 +334,8 @@ type eventDetail struct {
 	StartedAt       time.Time
 	ReqHeaders      http.Header
 	RespHeaders     http.Header
-	ReqBody         string
-	RespBody        string
+	ReqBody         template.HTML
+	RespBody        template.HTML
 	Flags           []types.Flag
 	Raw             bool
 	CaptureMode     string
@@ -384,6 +385,10 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			reqBodyStr = redactor.Redact(string(stored.ReqBody))
 			respBodyStr = redactor.Redact(string(stored.RespBody))
 		}
+		reqBodyStr = formatBody(reqBodyStr, stored.ReqHeaders)
+		respBodyStr = formatBody(respBodyStr, stored.RespHeaders)
+		reqBodyHTML := highlightBody(reqBodyStr, stored.ReqHeaders)
+		respBodyHTML := highlightBody(respBodyStr, stored.RespHeaders)
 
 		host := normalizeHost(ix.Host)
 		blocked := false
@@ -400,7 +405,7 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			Status: ix.Status, StartedAt: ix.StartedAt,
 			ReqHeaders:  redactor.RedactHeaders(stored.ReqHeaders),
 			RespHeaders: redactor.RedactHeaders(stored.RespHeaders),
-			ReqBody:     reqBodyStr, RespBody: respBodyStr,
+			ReqBody:     reqBodyHTML, RespBody: respBodyHTML,
 			Flags: stored.Flags, Raw: raw,
 			CaptureMode:     ix.CaptureMode,
 			HostTrusted:     opts.Allowlist.Contains(host),
