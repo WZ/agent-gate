@@ -96,4 +96,49 @@ func TestCheckHostListFile_BadMode(t *testing.T) {
 	}
 }
 
+func TestCheckConfigValid_Good(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	_ = os.WriteFile(path, []byte(`[capture]
+default_mode = "airtight"
+[ports]
+proxy = 8888
+dashboard = 7878
+[storage]
+data_dir = "/tmp/agent-gate"
+[allowlist]
+enforce = false
+[rules]
+disable = []
+`), 0o600)
+	r := CheckConfigValid(path)
+	if r.Status != StatusOK {
+		t.Fatalf("expected OK, got %v: %s", r.Status, r.Detail)
+	}
+}
+
+func TestCheckConfigValid_Bad(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	_ = os.WriteFile(path, []byte(`this is = not [valid toml`), 0o600)
+	r := CheckConfigValid(path)
+	if r.Status != StatusFail {
+		t.Fatalf("expected FAIL on bad TOML, got %v: %s", r.Status, r.Detail)
+	}
+}
+
+func TestCheckConfigValid_Missing(t *testing.T) {
+	r := CheckConfigValid("/nonexistent/path/config.toml")
+	if r.Status != StatusFail {
+		t.Fatalf("expected FAIL on missing config, got %v", r.Status)
+	}
+}
+
+func TestCheckAgentsDetected_Empty(t *testing.T) {
+	r := CheckAgentsDetected(nil)
+	if r.Status != StatusWarn {
+		t.Fatalf("expected WARN on empty agents, got %v: %s", r.Status, r.Detail)
+	}
+}
+
 func isWindows() bool { return os.PathSeparator == '\\' }

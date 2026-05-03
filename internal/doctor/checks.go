@@ -8,6 +8,9 @@ import (
 	"strconv"
 	"strings"
 
+	"agent-gate/internal/agentdetect"
+	"agent-gate/internal/ca"
+	"agent-gate/internal/config"
 	"agent-gate/internal/runtime"
 )
 
@@ -139,6 +142,62 @@ func CheckHostListFile(path, label string) Result {
 			FixHint: "chmod 0600 " + path}
 	}
 	return Result{ID: label + "-file", Status: StatusOK, Detail: filepath.Base(path)}
+}
+
+func CheckConfigValid(configPath string) Result {
+	if _, err := os.Stat(configPath); err != nil {
+		return Result{ID: "config-valid", Status: StatusFail,
+			Detail: configPath + " missing", FixHint: "agent-gate init"}
+	}
+	if _, err := config.LoadFromFile(configPath); err != nil {
+		return Result{ID: "config-valid", Status: StatusFail,
+			Detail:  "TOML decode failed: " + err.Error(),
+			FixHint: "$EDITOR " + configPath}
+	}
+	return Result{ID: "config-valid", Status: StatusOK, Detail: configPath}
+}
+
+func CheckAgentsDetected(agents []agentdetect.DetectedAgent) Result {
+	if len(agents) == 0 {
+		return Result{ID: "agents-detected", Status: StatusWarn,
+			Detail:  "no agents detected on PATH or in env",
+			FixHint: "install an agent (e.g., claude, codex) or pass --allow-host on init"}
+	}
+	names := make([]string, 0, len(agents))
+	for _, a := range agents {
+		names = append(names, fmt.Sprintf("%s (%s)", a.Name, a.Source))
+	}
+	return Result{ID: "agents-detected", Status: StatusOK,
+		Detail: strings.Join(names, ", ")}
+}
+
+func CheckCATrusted(installer ca.Installer, certPath string) []Result {
+	probes := installer.ProbeAll(certPath)
+	out := make([]Result, 0, len(probes))
+	for _, p := range probes {
+		var r Result
+		r.ID = "ca-trusted-" + p.Store
+		switch {
+		case p.Err != nil:
+			r.Status = StatusWarn
+			r.Detail = fmt.Sprintf("%s: probe error: %v", p.Store, p.Err)
+		case p.Present:
+			r.Status = StatusOK
+			r.Detail = p.Store
+			if p.Note != "" {
+				r.Detail += " — " + p.Note
+			}
+		default:
+			r.Status = StatusFail
+			r.Detail = p.Store + " missing"
+			if p.Note != "" {
+				r.Detail += " (" + p.Note + ")"
+			}
+			r.FixHint = "agent-gate cert install"
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 func isWindowsRuntime() bool {
