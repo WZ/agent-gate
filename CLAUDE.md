@@ -54,6 +54,13 @@ against the store.
 - **Don't push without permission.** Local merge + tag is fine; pushing to
   `origin` always needs explicit user authorization (per the user's global
   CLAUDE.md).
+- **Always execute in a git worktree.** Every code change, test run with
+  side effects, and binary build happens inside `.worktrees/<branch>/`,
+  never in the main checkout. The main checkout is reserved for reading,
+  git operations, and merging PRs. The worktree is created BEFORE work
+  starts — never skip it "just for a small change" and never infer it
+  later. When invoking subagents to execute a plan, instruct them to cd
+  into the worktree as their first step.
 
 ## Three host policy lists, with priority
 
