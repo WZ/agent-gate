@@ -275,6 +275,33 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 	}
 }
 
+func TestFindSSNViaJSONKey(t *testing.T) {
+	cases := []struct {
+		body string
+		want []Match
+	}{
+		{
+			body: `{"ssn":"123-45-6789"}`,
+			want: []Match{{Code: "ssn", Tier: TierSensitive, Source: SourceKey, Start: 8, End: 19}},
+		},
+		{
+			body: `{"ssn":"123456789"}`,
+			want: []Match{{Code: "ssn", Tier: TierSensitive, Source: SourceKey, Start: 8, End: 17}},
+		},
+		{
+			body: `{"social_security_number":"123-45-6789"}`,
+			want: []Match{{Code: "ssn", Tier: TierSensitive, Source: SourceKey, Start: 27, End: 38}},
+		},
+		{body: `{"ssn":"n/a"}`, want: nil},
+		{body: `{"ssn":"1234"}`, want: nil},
+		{body: `{"ssn":"1234567890"}`, want: nil},
+	}
+	for _, tc := range cases {
+		got := Find([]byte(tc.body), KindJSON)
+		assertMatchesEqual(t, got, tc.want, tc.body)
+	}
+}
+
 func TestFindPhoneViaJSONKeyAcceptsBareDigits(t *testing.T) {
 	cases := []struct {
 		body string
