@@ -34,11 +34,11 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 
 	// 2. Acquire lockfile (only one `agent-gate run` at a time).
 	lockPath := filepath.Join(common.Cfg.Storage.DataDir, "agent-gate.lock")
-	lock, err := acquireLockfile(lockPath)
+	lock, err := rt.AcquireLockfile(lockPath)
 	if err != nil {
 		return 1, err
 	}
-	defer lock.release()
+	defer lock.Release()
 
 	// 3. CA trust check (warn-and-continue).
 	if msg, ok := checkCATrusted(common.CA); !ok {
