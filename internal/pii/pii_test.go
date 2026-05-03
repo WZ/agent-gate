@@ -217,3 +217,60 @@ func TestSensitiveKeysLookupNonSensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestFindNameViaJSONKey(t *testing.T) {
+	cases := []struct {
+		body string
+		want []Match
+	}{
+		{
+			body: `{"name":"Alice"}`,
+			want: []Match{{Code: "name", Tier: TierIdentifying, Source: SourceKey, Start: 9, End: 14}},
+		},
+		{
+			body: `{"first_name":"Bob","last_name":"Roe"}`,
+			want: []Match{
+				{Code: "name", Tier: TierIdentifying, Source: SourceKey, Start: 15, End: 18},
+				{Code: "name", Tier: TierIdentifying, Source: SourceKey, Start: 33, End: 36},
+			},
+		},
+		{
+			body: `{"firstName":"Carol"}`,
+			want: []Match{{Code: "name", Tier: TierIdentifying, Source: SourceKey, Start: 14, End: 19}},
+		},
+		{
+			body: `{"user":{"name":"Dave"}}`,
+			want: []Match{{Code: "name", Tier: TierIdentifying, Source: SourceKey, Start: 17, End: 21}},
+		},
+		{
+			body: `{"name":""}`,
+			want: nil,
+		},
+	}
+	for _, tc := range cases {
+		got := Find([]byte(tc.body), KindJSON)
+		assertMatchesEqual(t, got, tc.want, tc.body)
+	}
+}
+
+func TestFindAddressViaJSONKey(t *testing.T) {
+	body := `{"street":"1 Main St","postal_code":"94105"}`
+	got := Find([]byte(body), KindJSON)
+	want := []Match{
+		{Code: "address", Tier: TierIdentifying, Source: SourceKey, Start: 11, End: 20},
+		{Code: "address", Tier: TierIdentifying, Source: SourceKey, Start: 37, End: 42},
+	}
+	assertMatchesEqual(t, got, want, body)
+}
+
+func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("matches len mismatch for %q:\n got: %+v\nwant: %+v", ctx, got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("match[%d] for %q:\n got: %+v\nwant: %+v", i, ctx, got[i], want[i])
+		}
+	}
+}

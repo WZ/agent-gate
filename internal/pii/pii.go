@@ -69,12 +69,17 @@ func DetectKind(h http.Header) ContentKind {
 // first; same-position ties broken by tier — sensitive wins). Overlapping
 // ranges are removed leftmost-longest.
 //
-// In this initial commit, Find is implemented as a thin wrapper around
-// FindAll. Subsequent tasks layer in JSON token walking, SSE dispatch,
-// Luhn validation, and tier-aware overlap removal.
+// For KindJSON, the JSON token walker contributes key-context matches in
+// addition to the body-wide regex pass. SSE dispatch and tier-aware
+// overlap tiebreaking are added in later tasks.
 func Find(body []byte, kind ContentKind) []Match {
-	_ = kind // dispatch added in later tasks
-	return FindAll(body)
+	regex := FindAll(body)
+	if kind != KindJSON {
+		return regex
+	}
+	keyMatches := findInJSON(body)
+	all := append(regex, keyMatches...)
+	return removeOverlaps(all)
 }
 
 // FindAll returns every regex match of any pattern in body. Preserved as

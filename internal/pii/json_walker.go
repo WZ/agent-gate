@@ -204,3 +204,66 @@ func (w *walker) skipWhitespace() {
 		return
 	}
 }
+
+// findInJSON walks the body as JSON and emits key-context matches for the
+// kinds that pass shapeMatches. Free-text regex hits inside string values
+// are added in a later commit (currently still emitted by FindAll).
+func findInJSON(body []byte) []Match {
+	w := &walker{body: body, i: 0, n: len(body)}
+	w.walkValue()
+	return walkerMatches(w.tokens, body)
+}
+
+// walkerMatches turns a sequence of walker tokens into key-context Match
+// entries. The walker emits tokens in stream order, so a key always
+// precedes its value when both exist. We pair them by stepping through
+// tokens and remembering the most recent unpaired key.
+func walkerMatches(tokens []walkerToken, body []byte) []Match {
+	var out []Match
+	var pending *sensitiveKey
+	for _, tok := range tokens {
+		switch tok.kind {
+		case tokKey:
+			if v, ok := sensitiveKeyLookup(string(body[tok.start:tok.end])); ok {
+				pending = &v
+			} else {
+				pending = nil
+			}
+		case tokString:
+			if pending == nil {
+				continue
+			}
+			value := body[tok.start:tok.end]
+			if shapeMatches(pending.Code, value) {
+				out = append(out, Match{
+					Code:   pending.Code,
+					Tier:   pending.Tier,
+					Source: SourceKey,
+					Start:  tok.start,
+					End:    tok.end,
+				})
+			}
+			pending = nil
+		case tokNumber:
+			// Numbers never trigger key-context detection in v1; documented
+			// limitation. Reset pending so a subsequent key isn't paired with
+			// the wrong value.
+			pending = nil
+		}
+	}
+	return out
+}
+
+// shapeMatches is the per-kind value-shape check for key-context matches.
+// In this initial commit we only accept name and address (any non-empty
+// value); other kinds are added in subsequent tasks.
+func shapeMatches(code string, value []byte) bool {
+	if len(value) == 0 {
+		return false
+	}
+	switch code {
+	case "name", "address":
+		return true
+	}
+	return false
+}
