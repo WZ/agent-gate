@@ -888,10 +888,12 @@ mark.search-hit-current {
 
 /* ── PII flagging — visible, never masked ────────────────────────────────── */
 
-/* Inline highlight inside JSON string values. Wavy amber underline reads as
-   "this needs review" without competing with the json-string color. */
+/* Inline highlight inside JSON string values. Two-tier — sensitive (SSN,
+   credit card, DOB) gets the destructive palette plus a thicker
+   underline as a redundant non-color signal for color-blind users. */
 .pii {
-  text-decoration: underline wavy hsl(var(--warning) / 0.75);
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
   border-radius: 2px;
@@ -899,9 +901,13 @@ mark.search-hit-current {
   cursor: help;
   transition: background 0.15s ease;
 }
-.pii:hover {
-  background: hsl(var(--warning) / 0.16);
+.pii-identifying { text-decoration-color: hsl(var(--warning) / 0.7); }
+.pii-identifying:hover { background: hsl(var(--warning) / 0.16); }
+.pii-sensitive {
+  text-decoration-color: hsl(var(--destructive) / 0.8);
+  text-decoration-thickness: 1.5px;
 }
+.pii-sensitive:hover { background: hsl(var(--destructive) / 0.14); }
 
 /* Summary chip strip above the body-pane. Renders only when the body
    contains at least one PII match (template `{{ if .ReqPII }}` guard). */
@@ -915,6 +921,11 @@ mark.search-hit-current {
   border-top: 1px solid hsl(var(--warning) / 0.22);
   border-bottom: 1px solid hsl(var(--warning) / 0.22);
 }
+.pii-summary.has-sensitive {
+  background: hsl(var(--destructive) / 0.06);
+  border-top-color: hsl(var(--destructive) / 0.25);
+  border-bottom-color: hsl(var(--destructive) / 0.25);
+}
 .pii-summary-label {
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -923,6 +934,8 @@ mark.search-hit-current {
   text-transform: uppercase;
   color: hsl(var(--warning));
 }
+.pii-summary.has-sensitive .pii-summary-label { color: hsl(var(--destructive)); }
+
 .pii-chip {
   display: inline-flex;
   align-items: center;
@@ -931,10 +944,17 @@ mark.search-hit-current {
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.04em;
+  border-radius: var(--radius-sm);
+}
+.pii-chip-identifying {
   color: hsl(var(--warning));
   background: hsl(var(--warning) / 0.14);
   border: 1px solid hsl(var(--warning) / 0.32);
-  border-radius: var(--radius-sm);
+}
+.pii-chip-sensitive {
+  color: hsl(var(--destructive));
+  background: hsl(var(--destructive) / 0.12);
+  border: 1px solid hsl(var(--destructive) / 0.35);
 }
 
 .event-summary { padding: 1rem 1.1rem; }
