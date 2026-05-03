@@ -38,6 +38,15 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_session ON events(session_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_started ON events(started_at);
 CREATE INDEX IF NOT EXISTS idx_host    ON events(host);
+
+CREATE TABLE IF NOT EXISTS event_pii (
+	event_id   TEXT NOT NULL,
+	side       TEXT NOT NULL CHECK(side IN ('req','resp')),
+	code       TEXT NOT NULL,
+	count      INTEGER NOT NULL,
+	PRIMARY KEY (event_id, side, code)
+);
+CREATE INDEX IF NOT EXISTS idx_event_pii_code ON event_pii(code, event_id);
 `
 
 // Index is a SQLite-backed event index.
