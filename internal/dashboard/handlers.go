@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agent-gate/internal/dismissals"
+	"agent-gate/internal/pii"
 	"agent-gate/internal/redactor"
 	"agent-gate/internal/store"
 	"agent-gate/internal/types"
@@ -389,10 +390,12 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 		}
 		reqBodyStr = formatBody(reqBodyStr, stored.ReqHeaders)
 		respBodyStr = formatBody(respBodyStr, stored.RespHeaders)
-		reqBodyHTML := highlightBody(reqBodyStr, stored.ReqHeaders)
-		respBodyHTML := highlightBody(respBodyStr, stored.RespHeaders)
-		reqPII := SummarizePII(reqBodyStr)
-		respPII := SummarizePII(respBodyStr)
+		reqMatches := pii.Find([]byte(reqBodyStr), pii.DetectKind(stored.ReqHeaders))
+		respMatches := pii.Find([]byte(respBodyStr), pii.DetectKind(stored.RespHeaders))
+		reqBodyHTML := highlightBody(reqBodyStr, stored.ReqHeaders, reqMatches)
+		respBodyHTML := highlightBody(respBodyStr, stored.RespHeaders, respMatches)
+		reqPII := SummarizePII(reqMatches)
+		respPII := SummarizePII(respMatches)
 
 		host := normalizeHost(ix.Host)
 		blocked := false
