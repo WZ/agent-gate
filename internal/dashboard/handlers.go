@@ -336,6 +336,8 @@ type eventDetail struct {
 	RespHeaders     http.Header
 	ReqBody         template.HTML
 	RespBody        template.HTML
+	ReqPII          []PIICount
+	RespPII         []PIICount
 	Flags           []types.Flag
 	Raw             bool
 	CaptureMode     string
@@ -389,6 +391,8 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 		respBodyStr = formatBody(respBodyStr, stored.RespHeaders)
 		reqBodyHTML := highlightBody(reqBodyStr, stored.ReqHeaders)
 		respBodyHTML := highlightBody(respBodyStr, stored.RespHeaders)
+		reqPII := SummarizePII(reqBodyStr)
+		respPII := SummarizePII(respBodyStr)
 
 		host := normalizeHost(ix.Host)
 		blocked := false
@@ -406,6 +410,7 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			ReqHeaders:  redactor.RedactHeaders(stored.ReqHeaders),
 			RespHeaders: redactor.RedactHeaders(stored.RespHeaders),
 			ReqBody:     reqBodyHTML, RespBody: respBodyHTML,
+			ReqPII: reqPII, RespPII: respPII,
 			Flags: stored.Flags, Raw: raw,
 			CaptureMode:     ix.CaptureMode,
 			HostTrusted:     opts.Allowlist.Contains(host),
