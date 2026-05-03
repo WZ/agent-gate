@@ -283,6 +283,8 @@ func shapeMatches(code string, value []byte) bool {
 		return countDigits(value) >= 7
 	case "ssn":
 		return ssnLikeRegex.Match(value)
+	case "credit_card":
+		return Luhn(stripNonDigits(string(value)))
 	}
 	return false
 }
