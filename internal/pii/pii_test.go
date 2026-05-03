@@ -169,3 +169,51 @@ func TestFindAllSSNRegexRequiresDashes(t *testing.T) {
 		}
 	}
 }
+
+func TestSensitiveKeysLookup(t *testing.T) {
+	cases := []struct {
+		key      string
+		wantCode string
+		wantTier Tier
+	}{
+		{"name", "name", TierIdentifying},
+		{"Name", "name", TierIdentifying},
+		{"NAME", "name", TierIdentifying},
+		{"first_name", "name", TierIdentifying},
+		{"firstName", "name", TierIdentifying},
+		{"family_name", "name", TierIdentifying},
+		{"surname", "name", TierIdentifying},
+		{"address", "address", TierIdentifying},
+		{"postal_code", "address", TierIdentifying},
+		{"zip", "address", TierIdentifying},
+		{"dob", "dob", TierSensitive},
+		{"date_of_birth", "dob", TierSensitive},
+		{"birthday", "dob", TierSensitive},
+		{"phone", "phone", TierIdentifying},
+		{"mobile", "phone", TierIdentifying},
+		{"tel", "phone", TierIdentifying},
+		{"ssn", "ssn", TierSensitive},
+		{"social_security_number", "ssn", TierSensitive},
+		{"credit_card", "credit_card", TierSensitive},
+		{"card_number", "credit_card", TierSensitive},
+		{"pan", "credit_card", TierSensitive},
+	}
+	for _, tc := range cases {
+		got, ok := sensitiveKeyLookup(tc.key)
+		if !ok {
+			t.Errorf("sensitiveKeyLookup(%q): not found, want %s/%s", tc.key, tc.wantCode, tc.wantTier)
+			continue
+		}
+		if got.Code != tc.wantCode || got.Tier != tc.wantTier {
+			t.Errorf("sensitiveKeyLookup(%q) = %+v, want code=%s tier=%s", tc.key, got, tc.wantCode, tc.wantTier)
+		}
+	}
+}
+
+func TestSensitiveKeysLookupNonSensitive(t *testing.T) {
+	for _, key := range []string{"model", "max_tokens", "messages", "id", "type"} {
+		if _, ok := sensitiveKeyLookup(key); ok {
+			t.Errorf("sensitiveKeyLookup(%q) should not match", key)
+		}
+	}
+}
