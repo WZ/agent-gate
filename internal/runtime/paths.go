@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,15 +13,19 @@ import (
 // macOS:   $HOME/.config/agent-gate
 // Windows: %APPDATA%/agent-gate
 func ConfigDir() (string, error) {
+	// XDG vars are honored on Linux only; macOS uses ~/.config by convention,
+	// even though many dotfile setups set XDG_CONFIG_HOME.
 	if runtime.GOOS == "linux" {
 		if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
 			return filepath.Join(x, "agent-gate"), nil
 		}
 	}
 	if runtime.GOOS == "windows" {
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, "agent-gate"), nil
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			return "", fmt.Errorf("APPDATA not set")
 		}
+		return filepath.Join(appData, "agent-gate"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -35,6 +40,8 @@ func ConfigDir() (string, error) {
 // macOS:   $HOME/Library/Application Support/agent-gate
 // Windows: %LOCALAPPDATA%/agent-gate
 func DataDir() (string, error) {
+	// XDG_DATA_HOME is honored on Linux only; macOS uses Library/Application Support
+	// per Apple's File System Programming Guide.
 	switch runtime.GOOS {
 	case "linux":
 		if x := os.Getenv("XDG_DATA_HOME"); x != "" {
@@ -52,9 +59,11 @@ func DataDir() (string, error) {
 		}
 		return filepath.Join(home, "Library", "Application Support", "agent-gate"), nil
 	case "windows":
-		if local := os.Getenv("LOCALAPPDATA"); local != "" {
-			return filepath.Join(local, "agent-gate"), nil
+		local := os.Getenv("LOCALAPPDATA")
+		if local == "" {
+			return "", fmt.Errorf("LOCALAPPDATA not set")
 		}
+		return filepath.Join(local, "agent-gate"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
