@@ -2,6 +2,7 @@ package pii
 
 import (
 	"net/http"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -271,6 +272,29 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 	for i := range got {
 		if got[i] != want[i] {
 			t.Errorf("match[%d] for %q:\n got: %+v\nwant: %+v", i, ctx, got[i], want[i])
+		}
+	}
+}
+
+func TestFindJSONRunsRegexInsideStringValues(t *testing.T) {
+	body := `{"contact":"alice@example.com from 192.168.1.42"}`
+	got := Find([]byte(body), KindJSON)
+	wantCodes := []string{"email", "ipv4"}
+	gotCodes := []string{}
+	for _, m := range got {
+		gotCodes = append(gotCodes, m.Code)
+	}
+	if !reflect.DeepEqual(gotCodes, wantCodes) {
+		t.Fatalf("got codes %v, want %v\nmatches: %+v", gotCodes, wantCodes, got)
+	}
+}
+
+func TestFindJSONDoesNotRunRegexInsideKeys(t *testing.T) {
+	body := `{"alice@example.com":"value"}`
+	got := Find([]byte(body), KindJSON)
+	for _, m := range got {
+		if m.Code == "email" {
+			t.Fatalf("unexpected email match in key: %+v", m)
 		}
 	}
 }

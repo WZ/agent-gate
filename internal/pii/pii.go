@@ -69,21 +69,14 @@ func DetectKind(h http.Header) ContentKind {
 // first; same-position ties broken by tier — sensitive wins). Overlapping
 // ranges are removed leftmost-longest.
 //
-// For KindJSON, the JSON token walker contributes key-context matches in
-// addition to the body-wide regex pass. SSE dispatch and tier-aware
-// overlap tiebreaking are added in later tasks.
+// For KindJSON, the walker owns both key-context detection AND the
+// free-text regex pass — the regex runs over each string value, never
+// over keys. SSE dispatch is added in a later task.
 func Find(body []byte, kind ContentKind) []Match {
-	regex := FindAll(body)
-	if kind != KindJSON {
-		return regex
+	if kind == KindJSON {
+		return removeOverlaps(findInJSON(body))
 	}
-	keyMatches := findInJSON(body)
-	// Walker matches are appended FIRST so that on identical byte ranges,
-	// removeOverlaps keeps the SourceKey match over the SourceRegex one
-	// (the key context is the more informed signal — the API has labeled
-	// the field).
-	all := append(keyMatches, regex...)
-	return removeOverlaps(all)
+	return FindAll(body)
 }
 
 // FindAll returns every regex match of any pattern in body. Preserved as

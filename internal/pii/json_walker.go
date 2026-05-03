@@ -227,10 +227,11 @@ func findInJSON(body []byte) []Match {
 	return walkerMatches(w.tokens, body)
 }
 
-// walkerMatches turns a sequence of walker tokens into key-context Match
-// entries. The walker emits tokens in stream order, so a key always
-// precedes its value when both exist. We pair them by stepping through
-// tokens and remembering the most recent unpaired key.
+// walkerMatches turns a sequence of walker tokens into Match entries.
+// Each string value is scanned twice: first for a key-context match
+// (the pending key paired with this value), then for any free-text
+// regex hits inside the value bytes. JSON keys are never scanned for
+// regex, so an email-shaped key is not flagged.
 func walkerMatches(tokens []walkerToken, body []byte) []Match {
 	var out []Match
 	var pending *sensitiveKey
@@ -243,11 +244,10 @@ func walkerMatches(tokens []walkerToken, body []byte) []Match {
 				pending = nil
 			}
 		case tokString:
-			if pending == nil {
-				continue
-			}
 			value := body[tok.start:tok.end]
-			if shapeMatches(pending.Code, value) {
+
+			// Key-context match (any kind that opted in via shapeMatches).
+			if pending != nil && shapeMatches(pending.Code, value) {
 				out = append(out, Match{
 					Code:   pending.Code,
 					Tier:   pending.Tier,
@@ -257,11 +257,41 @@ func walkerMatches(tokens []walkerToken, body []byte) []Match {
 				})
 			}
 			pending = nil
+
+			// Free-text regex hits inside this string value.
+			out = append(out, regexMatchesInRange(body, tok.start, tok.end)...)
+
 		case tokNumber:
 			// Numbers never trigger key-context detection in v1; documented
 			// limitation. Reset pending so a subsequent key isn't paired with
 			// the wrong value.
 			pending = nil
+		}
+	}
+	return out
+}
+
+// regexMatchesInRange runs the free-text Patterns set against body[start:end]
+// and returns matches with offsets translated back into the original body
+// coordinate space. credit_card hits go through Luhn just like FindAll.
+func regexMatchesInRange(body []byte, start, end int) []Match {
+	slice := body[start:end]
+	var out []Match
+	for _, p := range Patterns {
+		for _, idx := range p.Regexp.FindAllIndex(slice, -1) {
+			absStart := start + idx[0]
+			absEnd := start + idx[1]
+			if p.Code == "credit_card" {
+				digits := stripNonDigits(string(body[absStart:absEnd]))
+				if !Luhn(digits) {
+					continue
+				}
+				out = append(out, Match{Code: p.Code, Tier: p.Tier, Source: SourceLuhn,
+					Start: absStart, End: absEnd})
+				continue
+			}
+			out = append(out, Match{Code: p.Code, Tier: p.Tier, Source: SourceRegex,
+				Start: absStart, End: absEnd})
 		}
 	}
 	return out
