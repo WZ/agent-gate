@@ -274,3 +274,30 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 		}
 	}
 }
+
+func TestFindDOBRequiresDateShape(t *testing.T) {
+	cases := []struct {
+		body string
+		want []Match
+	}{
+		{
+			body: `{"dob":"1990-05-12"}`,
+			want: []Match{{Code: "dob", Tier: TierSensitive, Source: SourceKey, Start: 8, End: 18}},
+		},
+		{
+			body: `{"birthday":"05/12/1990"}`,
+			want: []Match{{Code: "dob", Tier: TierSensitive, Source: SourceKey, Start: 13, End: 23}},
+		},
+		{
+			body: `{"date_of_birth":"5/12/90"}`,
+			want: []Match{{Code: "dob", Tier: TierSensitive, Source: SourceKey, Start: 18, End: 25}},
+		},
+		{body: `{"dob":"n/a"}`, want: nil},
+		{body: `{"dob":""}`, want: nil},
+		{body: `{"dob":"unknown"}`, want: nil},
+	}
+	for _, tc := range cases {
+		got := Find([]byte(tc.body), KindJSON)
+		assertMatchesEqual(t, got, tc.want, tc.body)
+	}
+}

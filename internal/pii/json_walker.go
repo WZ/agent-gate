@@ -1,5 +1,14 @@
 package pii
 
+import "regexp"
+
+var (
+	// dateLikeRegex accepts ISO-8601 (YYYY-MM-DD) and slash-separated date
+	// shapes (M/D/YY through MM/DD/YYYY). Strict enough to reject "n/a"
+	// and free-text strings.
+	dateLikeRegex = regexp.MustCompile(`^\d{4}-\d{1,2}-\d{1,2}$|^\d{1,2}/\d{1,2}/\d{2,4}$`)
+)
+
 // walkerToken is one structural element the walker found. start/end are
 // byte offsets in the original body and exclude the surrounding quotes
 // for string and key tokens.
@@ -264,6 +273,8 @@ func shapeMatches(code string, value []byte) bool {
 	switch code {
 	case "name", "address":
 		return true
+	case "dob":
+		return dateLikeRegex.Match(value)
 	}
 	return false
 }
