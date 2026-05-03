@@ -275,6 +275,28 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 	}
 }
 
+func TestFindPhoneViaJSONKeyAcceptsBareDigits(t *testing.T) {
+	cases := []struct {
+		body string
+		want []Match
+	}{
+		{
+			body: `{"phone":"4155551234"}`,
+			want: []Match{{Code: "phone", Tier: TierIdentifying, Source: SourceKey, Start: 10, End: 20}},
+		},
+		{
+			body: `{"mobile":"+1 415 555 1234"}`,
+			want: []Match{{Code: "phone", Tier: TierIdentifying, Source: SourceKey, Start: 11, End: 26}},
+		},
+		{body: `{"phone":"see notes"}`, want: nil},
+		{body: `{"phone":"123456"}`, want: nil},
+	}
+	for _, tc := range cases {
+		got := Find([]byte(tc.body), KindJSON)
+		assertMatchesEqual(t, got, tc.want, tc.body)
+	}
+}
+
 func TestFindDOBRequiresDateShape(t *testing.T) {
 	cases := []struct {
 		body string

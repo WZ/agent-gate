@@ -275,6 +275,19 @@ func shapeMatches(code string, value []byte) bool {
 		return true
 	case "dob":
 		return dateLikeRegex.Match(value)
+	case "phone":
+		return countDigits(value) >= 7
 	}
 	return false
+}
+
+// countDigits returns the number of ASCII digit bytes in value.
+func countDigits(value []byte) int {
+	n := 0
+	for _, c := range value {
+		if c >= '0' && c <= '9' {
+			n++
+		}
+	}
+	return n
 }
