@@ -238,10 +238,17 @@ func findInJSON(body []byte) []Match {
 }
 
 // walkerMatches turns a sequence of walker tokens into Match entries.
-// Each string value is scanned twice: first for a key-context match
-// (the pending key paired with this value), then for any free-text
-// regex hits inside the value bytes. JSON keys are never scanned for
-// regex, so an email-shaped key is not flagged.
+// Each string value is scanned twice: first for any free-text regex
+// hits inside the value bytes, then for a key-context match (the
+// pending key paired with this value). JSON keys are never scanned
+// for regex, so an email-shaped key is not flagged.
+//
+// The order matters because broad key kinds (name, address) accept any
+// non-empty value and emit a SourceKey match covering the whole string.
+// If a sensitive regex hit (SSN, credit card) sits inside that string,
+// removeOverlaps would later drop it as contained. To avoid silently
+// hiding sensitive PII behind a broad name/address tag, we suppress
+// the broad key match when the value contains a sensitive nested hit.
 func walkerMatches(tokens []walkerToken, body []byte) []Match {
 	var out []Match
 	var pending *sensitiveKey
@@ -255,21 +262,22 @@ func walkerMatches(tokens []walkerToken, body []byte) []Match {
 			}
 		case tokString:
 			value := body[tok.start:tok.end]
+			inner := regexMatchesInRange(body, tok.start, tok.end)
 
-			// Key-context match (any kind that opted in via shapeMatches).
 			if pending != nil && shapeMatches(pending.Code, value) {
-				out = append(out, Match{
-					Code:   pending.Code,
-					Tier:   pending.Tier,
-					Source: SourceKey,
-					Start:  tok.start,
-					End:    tok.end,
-				})
+				if !(isBroadKeyKind(pending.Code) && containsSensitive(inner)) {
+					out = append(out, Match{
+						Code:   pending.Code,
+						Tier:   pending.Tier,
+						Source: SourceKey,
+						Start:  tok.start,
+						End:    tok.end,
+					})
+				}
 			}
 			pending = nil
 
-			// Free-text regex hits inside this string value.
-			out = append(out, regexMatchesInRange(body, tok.start, tok.end)...)
+			out = append(out, inner...)
 
 		case tokNumber:
 			// Numbers never trigger key-context detection in v1; documented
@@ -279,6 +287,29 @@ func walkerMatches(tokens []walkerToken, body []byte) []Match {
 		}
 	}
 	return out
+}
+
+// isBroadKeyKind reports whether the kind's shape rule accepts any
+// non-empty value. These kinds are at risk of subsuming nested
+// sensitive matches.
+func isBroadKeyKind(code string) bool {
+	switch code {
+	case "name", "address":
+		return true
+	}
+	return false
+}
+
+// containsSensitive reports whether matches contains any TierSensitive
+// entry — used to decide whether a broad key match should be suppressed
+// in favor of the more sensitive nested match.
+func containsSensitive(matches []Match) bool {
+	for _, m := range matches {
+		if m.Tier == TierSensitive {
+			return true
+		}
+	}
+	return false
 }
 
 // regexMatchesInRange runs the free-text Patterns set against body[start:end]
