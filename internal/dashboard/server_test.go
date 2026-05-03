@@ -410,6 +410,59 @@ func TestClearRequiresPOST(t *testing.T) {
 	assert.Equal(t, 405, resp.StatusCode)
 }
 
+func TestUntrustHandler_Removes(t *testing.T) {
+	opts := freshOpts(t)
+	if err := opts.Allowlist.Add("api.example.com"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	form := url.Values{}
+	form.Set("host", "api.example.com")
+	resp, err := http.PostForm(srv.URL+"/api/untrust", form)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200", resp.StatusCode)
+	}
+	if opts.Allowlist.Contains("api.example.com") {
+		t.Fatal("expected host to be removed from allowlist")
+	}
+}
+
+func TestUntrustHandler_RejectsGet(t *testing.T) {
+	opts := freshOpts(t)
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/api/untrust")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 405 {
+		t.Fatalf("status: got %d, want 405", resp.StatusCode)
+	}
+}
+
+func TestUntrustHandler_Idempotent(t *testing.T) {
+	opts := freshOpts(t)
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	form := url.Values{}
+	form.Set("host", "never.added.example")
+	resp, err := http.PostForm(srv.URL+"/api/untrust", form)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200 (idempotent)", resp.StatusCode)
+	}
+}
+
 func TestSessionsListFilteredByHost(t *testing.T) {
 	opts := freshOpts(t)
 	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
