@@ -277,6 +277,20 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 	}
 }
 
+func TestRemoveOverlapsBreaksTiesBySensitiveTier(t *testing.T) {
+	matches := []Match{
+		{Code: "email", Tier: TierIdentifying, Source: SourceRegex, Start: 5, End: 22},
+		{Code: "ssn", Tier: TierSensitive, Source: SourceRegex, Start: 5, End: 22},
+	}
+	got := removeOverlaps(matches)
+	if len(got) != 1 {
+		t.Fatalf("got %d matches, want 1: %+v", len(got), got)
+	}
+	if got[0].Code != "ssn" || got[0].Tier != TierSensitive {
+		t.Errorf("expected ssn (sensitive) to win, got %+v", got[0])
+	}
+}
+
 func TestFindSSEDispatchesEachDataPayloadAsJSON(t *testing.T) {
 	body := strings.Join([]string{
 		`event: message_start`,

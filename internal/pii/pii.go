@@ -177,9 +177,9 @@ func CountByCode(matches []Match) map[string]int {
 	return out
 }
 
-// removeOverlaps sorts matches by (Start asc, End desc) and skips entries
-// that overlap an earlier accepted match. Pure helper — kept here so both
-// FindAll and Find share the same invariant.
+// removeOverlaps sorts matches and skips entries that overlap an earlier
+// accepted match. Sort order: Start asc, then sensitive tier first
+// (so sensitive wins same-position ties), then End desc (longer wins).
 func removeOverlaps(matches []Match) []Match {
 	if len(matches) <= 1 {
 		return matches
@@ -187,7 +187,10 @@ func removeOverlaps(matches []Match) []Match {
 	for i := 1; i < len(matches); i++ {
 		for j := i; j > 0; j-- {
 			a, b := matches[j-1], matches[j]
-			if a.Start < b.Start || (a.Start == b.Start && a.End >= b.End) {
+			// Stop when a is not strictly greater than b (i.e., a's correct
+			// position is at or before b). matchSortLess(b, a) being false
+			// means b is not strictly less than a, so a is in order.
+			if !matchSortLess(b, a) {
 				break
 			}
 			matches[j-1], matches[j] = b, a
@@ -203,4 +206,17 @@ func removeOverlaps(matches []Match) []Match {
 		lastEnd = m.End
 	}
 	return out
+}
+
+// matchSortLess returns true if a should sort before b. Order is by
+// Start asc, then sensitive tier first, then End desc (longer match
+// at the same start wins).
+func matchSortLess(a, b Match) bool {
+	if a.Start != b.Start {
+		return a.Start < b.Start
+	}
+	if a.Tier != b.Tier {
+		return a.Tier == TierSensitive && b.Tier == TierIdentifying
+	}
+	return a.End > b.End
 }
