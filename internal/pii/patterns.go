@@ -28,4 +28,10 @@ var Patterns = []Pattern{
 	// IPv4 with octet validation so we don't match version strings.
 	{Code: "ipv4", Tier: TierIdentifying,
 		Regexp: regexp.MustCompile(`\b(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\b`)},
+
+	// Credit card candidate: 13-19 digit clusters with optional spaces or dashes
+	// between groups. Always Luhn-validated before emission (see FindAll
+	// in pii.go).
+	{Code: "credit_card", Tier: TierSensitive,
+		Regexp: regexp.MustCompile(`\b(?:\d[\s\-]?){12,18}\d\b`)},
 }

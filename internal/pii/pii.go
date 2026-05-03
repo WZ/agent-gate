@@ -80,10 +80,28 @@ func Find(body []byte, kind ContentKind) []Match {
 // FindAll returns every regex match of any pattern in body. Preserved as
 // a thin alias for non-dashboard callers (e.g., a future policy rule that
 // wants raw byte scanning without content-type awareness).
+//
+// Credit-card candidates are Luhn-validated before emission; failed
+// candidates are silently dropped. Their Source is SourceLuhn rather
+// than SourceRegex to mark that an extra check passed.
 func FindAll(body []byte) []Match {
 	var matches []Match
 	for _, p := range Patterns {
 		for _, idx := range p.Regexp.FindAllIndex(body, -1) {
+			if p.Code == "credit_card" {
+				digits := stripNonDigits(string(body[idx[0]:idx[1]]))
+				if !Luhn(digits) {
+					continue
+				}
+				matches = append(matches, Match{
+					Code:   p.Code,
+					Tier:   p.Tier,
+					Source: SourceLuhn,
+					Start:  idx[0],
+					End:    idx[1],
+				})
+				continue
+			}
 			matches = append(matches, Match{
 				Code:   p.Code,
 				Tier:   p.Tier,
