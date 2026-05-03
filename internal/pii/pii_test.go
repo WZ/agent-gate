@@ -3,6 +3,7 @@ package pii
 import (
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -273,6 +274,44 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 		if got[i] != want[i] {
 			t.Errorf("match[%d] for %q:\n got: %+v\nwant: %+v", i, ctx, got[i], want[i])
 		}
+	}
+}
+
+func TestFindSSEDispatchesEachDataPayloadAsJSON(t *testing.T) {
+	body := strings.Join([]string{
+		`event: message_start`,
+		`data: {"name":"Alice"}`,
+		``,
+		`event: content_block_delta`,
+		`data: {"delta":{"text":"contact alice@example.com"}}`,
+	}, "\n")
+
+	got := Find([]byte(body), KindSSE)
+
+	codes := map[string]int{}
+	for _, m := range got {
+		codes[m.Code]++
+	}
+
+	if codes["name"] != 1 {
+		t.Errorf("expected exactly 1 name match, got %d (matches: %+v)", codes["name"], got)
+	}
+	if codes["email"] != 1 {
+		t.Errorf("expected exactly 1 email match, got %d (matches: %+v)", codes["email"], got)
+	}
+}
+
+func TestFindSSEEmailInEventLineIsAlsoCaught(t *testing.T) {
+	body := "event: contact-alice@example.com\ndata: {\"k\":\"v\"}"
+	got := Find([]byte(body), KindSSE)
+	count := 0
+	for _, m := range got {
+		if m.Code == "email" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected 1 email match anywhere in SSE body, got %d (matches: %+v)", count, got)
 	}
 }
 
