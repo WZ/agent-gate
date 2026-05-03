@@ -45,22 +45,34 @@ func initCmd() *cobra.Command {
 }
 
 func defaultConfigToml() string {
-	return `[capture]
+	return `# agent-gate config — single-user audit gate for AI agents.
+# All settings are local; nothing is ever sent off this machine.
+
+[capture]
+# "airtight" forces all subprocess egress through the proxy via a per-OS
+# network jail. "permissive" only sets HTTPS_PROXY env vars (testing only).
 default_mode = "airtight"
 
 [ports]
-proxy = 8888
-dashboard = 7878
+# Loopback-only. Both refuse non-127.0.0.1 binds.
+proxy = 8888       # TLS-MITM proxy
+dashboard = 7878   # Local web UI for review
 
 [storage]
+# Where captured events are persisted (JSONL + SQLite index).
 data_dir = "~/.local/share/agent-gate"
+# How often to rotate JSONL: "daily" | "weekly" | "never"
 rotate = "daily"
+# Compress rotated files older than this duration.
 gzip_after = "1d"
 
 [allowlist]
-file = "~/.config/agent-gate/allowlist.txt"
+# When true, the proxy returns 403 for any request whose host isn't in
+# allowlist.txt. When false (default), unknown hosts pass but flag the event.
+enforce = false
 
 [rules]
+# Disable specific built-in rules by ID. Use ` + "`agent-gate doctor`" + ` to list IDs.
 disable = []
 `
 }
