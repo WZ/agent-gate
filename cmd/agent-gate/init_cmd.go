@@ -1,78 +1,158 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"runtime"
+	goruntime "runtime"
 
+	"agent-gate/internal/agentdetect"
 	"agent-gate/internal/ca"
+	"agent-gate/internal/initwizard"
 	"agent-gate/internal/launcher"
+	agruntime "agent-gate/internal/runtime"
+
 	"github.com/spf13/cobra"
+	"golang.org/x/net/idna"
+	"golang.org/x/term"
 )
 
 func initCmd() *cobra.Command {
-	var configPath string
+	var (
+		configPath     string
+		nonInteractive bool
+		installCertStr string
+		skipCertInst   bool
+		regenerateCA   bool
+		allowHosts     []string
+		force          bool
+		dryRun         bool
+		printConfig    bool
+	)
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Bootstrap config + CA + (Windows) WFP install",
+		Short: "Bootstrap config + CA + agent detection + cert install",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configDir := filepath.Dir(configPath)
-			if err := os.MkdirAll(configDir, 0o700); err != nil {
-				return err
-			}
 			caDir := filepath.Join(configDir, "ca")
-			if _, err := ca.Ensure(caDir); err != nil {
-				return fmt.Errorf("ca: %w", err)
-			}
-			if _, err := os.Stat(configPath); os.IsNotExist(err) {
-				if err := os.WriteFile(configPath, []byte(defaultConfigToml()), 0o600); err != nil {
-					return fmt.Errorf("write default config: %w", err)
+
+			if !dryRun && !printConfig {
+				if err := os.MkdirAll(caDir, 0o700); err != nil {
+					return fmt.Errorf("ca dir: %w", err)
+				}
+				if regenerateCA {
+					_ = os.Remove(filepath.Join(caDir, "cert.pem"))
+					_ = os.Remove(filepath.Join(caDir, "key.pem"))
+				}
+				if _, err := ca.Ensure(caDir); err != nil {
+					return fmt.Errorf("ca: %w", err)
 				}
 			}
-			if runtime.GOOS == "windows" {
+
+			interactive := !nonInteractive && isInteractive()
+			var prompter initwizard.Prompter
+			if interactive {
+				prompter = initwizard.HuhPrompter{}
+			}
+
+			installMode := initwizard.InstallCertAuto
+			switch installCertStr {
+			case "true":
+				installMode = initwizard.InstallCertTrue
+			case "false":
+				installMode = initwizard.InstallCertFalse
+			case "", "auto":
+				installMode = initwizard.InstallCertAuto
+			default:
+				return fmt.Errorf("--install-cert must be auto|true|false (got %q)", installCertStr)
+			}
+			if skipCertInst {
+				installMode = initwizard.InstallCertFalse
+			}
+			if !interactive && installMode == initwizard.InstallCertAuto {
+				installMode = initwizard.InstallCertFalse
+				fmt.Fprintln(os.Stderr, "init: non-interactive context — cert install skipped; run `agent-gate cert install` later.")
+			}
+			if !interactive && installMode == initwizard.InstallCertTrue {
+				return fmt.Errorf("--install-cert=true requires a TTY for the sudo prompt; got non-interactive context. Re-run with --install-cert=false and run `agent-gate cert install` interactively later")
+			}
+
+			dataDir, _ := agruntime.DataDir()
+
+			if !dryRun && !printConfig {
+				if err := os.MkdirAll(dataDir, 0o700); err != nil {
+					return fmt.Errorf("data dir: %w", err)
+				}
+				lockPath, _ := agruntime.LockfilePath()
+				lock, err := agruntime.AcquireLockfile(lockPath)
+				if err != nil {
+					return err
+				}
+				defer lock.Release()
+			}
+
+			opts := initwizard.Options{
+				ConfigPath:    configPath,
+				ConfigDir:     configDir,
+				DataDir:       dataDir,
+				Installer:     ca.SmallstepInstaller{},
+				Prompter:      prompter,
+				Force:         force,
+				AllowHosts:    allowHosts,
+				InstallCert:   installMode,
+				SkipSmokeTest: !interactive,
+				DryRun:        dryRun,
+				PrintConfig:   printConfig,
+				Detector: func() []agentdetect.DetectedAgent {
+					return agentdetect.Run(agentdetect.Config{
+						PathLookup: exec.LookPath,
+						EnvGetter:  os.Getenv,
+						IDNLookup:  idna.Lookup.ToASCII,
+					})
+				},
+			}
+
+			if err := initwizard.Run(opts); err != nil {
+				if errors.Is(err, initwizard.ErrConfigExists) {
+					return fmt.Errorf("agent-gate init: config already exists at %s. Re-run with --force to overwrite, or run `agent-gate doctor` to validate the existing install", configPath)
+				}
+				return err
+			}
+
+			if goruntime.GOOS == "windows" && !dryRun && !printConfig {
 				if err := launcher.InstallWFP(); err != nil {
 					return fmt.Errorf("WFP install (run as admin): %w", err)
 				}
 			}
-			fmt.Fprintln(os.Stderr, "agent-gate init: complete")
 			return nil
 		},
 	}
-	home, _ := os.UserHomeDir()
-	cmd.Flags().StringVar(&configPath, "config", filepath.Join(home, ".config", "agent-gate", "config.toml"), "Path to config.toml")
+	defaultConfig, _ := agruntime.ConfigPath()
+	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "Path to config.toml")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Skip prompts; use defaults / flags")
+	cmd.Flags().StringVar(&installCertStr, "install-cert", "auto", "auto|true|false (default auto)")
+	cmd.Flags().BoolVar(&skipCertInst, "skip-cert-install", false, "Equivalent to --install-cert=false")
+	cmd.Flags().BoolVar(&regenerateCA, "regenerate-ca", false, "Force-regenerate the local CA (rotates the cert)")
+	cmd.Flags().StringSliceVar(&allowHosts, "allow-host", nil, "Seed allowlist with HOST (repeatable; replaces detection)")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config.toml")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print planned writes; change nothing")
+	cmd.Flags().BoolVar(&printConfig, "print-config", false, "Emit the would-be config.toml on stdout; exit 0")
 	return cmd
 }
 
-func defaultConfigToml() string {
-	return `# agent-gate config — single-user audit gate for AI agents.
-# All settings are local; nothing is ever sent off this machine.
-
-[capture]
-# "airtight" forces all subprocess egress through the proxy via a per-OS
-# network jail. "permissive" only sets HTTPS_PROXY env vars (testing only).
-default_mode = "airtight"
-
-[ports]
-# Loopback-only. Both refuse non-127.0.0.1 binds.
-proxy = 8888       # TLS-MITM proxy
-dashboard = 7878   # Local web UI for review
-
-[storage]
-# Where captured events are persisted (JSONL + SQLite index).
-data_dir = "~/.local/share/agent-gate"
-# How often to rotate JSONL: "daily" | "weekly" | "never"
-rotate = "daily"
-# Compress rotated files older than this duration.
-gzip_after = "1d"
-
-[allowlist]
-# When true, the proxy returns 403 for any request whose host isn't in
-# allowlist.txt. When false (default), unknown hosts pass but flag the event.
-enforce = false
-
-[rules]
-# Disable specific built-in rules by ID. Use ` + "`agent-gate doctor`" + ` to list IDs.
-disable = []
-`
+// isInteractive returns true when stdin AND stdout are TTYs and no env var
+// forces non-interactive (CI=true, NONINTERACTIVE=1, DEBIAN_FRONTEND=noninteractive).
+func isInteractive() bool {
+	if v := os.Getenv("CI"); v == "true" {
+		return false
+	}
+	if v := os.Getenv("NONINTERACTIVE"); v == "1" {
+		return false
+	}
+	if v := os.Getenv("DEBIAN_FRONTEND"); v == "noninteractive" {
+		return false
+	}
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
