@@ -126,9 +126,9 @@
         </table>
       </details>
       {{ if .ReqPII }}
-        <div class="pii-summary" aria-label="PII detected in request">
+        <div class="pii-summary{{ if hasSensitivePII .ReqPII }} has-sensitive{{ end }}" aria-label="PII detected in request">
           <span class="pii-summary-label">PII</span>
-          {{ range .ReqPII }}<span class="pii-chip pii-chip-{{ .Code }}">{{ .Count }} {{ .Label }}</span>{{ end }}
+          {{ range .ReqPII }}<span class="pii-chip pii-chip-{{ .Tier }}">{{ .Count }} {{ .Label }}</span>{{ end }}
         </div>
       {{ end }}
       <pre class="body-pane">{{ .ReqBody }}</pre>
@@ -152,9 +152,9 @@
         </table>
       </details>
       {{ if .RespPII }}
-        <div class="pii-summary" aria-label="PII detected in response">
+        <div class="pii-summary{{ if hasSensitivePII .RespPII }} has-sensitive{{ end }}" aria-label="PII detected in response">
           <span class="pii-summary-label">PII</span>
-          {{ range .RespPII }}<span class="pii-chip pii-chip-{{ .Code }}">{{ .Count }} {{ .Label }}</span>{{ end }}
+          {{ range .RespPII }}<span class="pii-chip pii-chip-{{ .Tier }}">{{ .Count }} {{ .Label }}</span>{{ end }}
         </div>
       {{ end }}
       <pre class="body-pane">{{ .RespBody }}</pre>
