@@ -78,7 +78,11 @@ func Find(body []byte, kind ContentKind) []Match {
 		return regex
 	}
 	keyMatches := findInJSON(body)
-	all := append(regex, keyMatches...)
+	// Walker matches are appended FIRST so that on identical byte ranges,
+	// removeOverlaps keeps the SourceKey match over the SourceRegex one
+	// (the key context is the more informed signal — the API has labeled
+	// the field).
+	all := append(keyMatches, regex...)
 	return removeOverlaps(all)
 }
 
