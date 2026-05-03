@@ -886,6 +886,57 @@ mark.search-hit-current {
   mark.search-hit { background: hsl(50 95% 60% / 0.4); }
 }
 
+/* ── PII flagging — visible, never masked ────────────────────────────────── */
+
+/* Inline highlight inside JSON string values. Wavy amber underline reads as
+   "this needs review" without competing with the json-string color. */
+.pii {
+  text-decoration: underline wavy hsl(var(--warning) / 0.75);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+  padding: 0 1px;
+  cursor: help;
+  transition: background 0.15s ease;
+}
+.pii:hover {
+  background: hsl(var(--warning) / 0.16);
+}
+
+/* Summary chip strip above the body-pane. Renders only when the body
+   contains at least one PII match (template `{{ if .ReqPII }}` guard). */
+.pii-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding: 0.5rem 1.1rem;
+  background: hsl(var(--warning) / 0.08);
+  border-top: 1px solid hsl(var(--warning) / 0.22);
+  border-bottom: 1px solid hsl(var(--warning) / 0.22);
+}
+.pii-summary-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: hsl(var(--warning));
+}
+.pii-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: hsl(var(--warning));
+  background: hsl(var(--warning) / 0.14);
+  border: 1px solid hsl(var(--warning) / 0.32);
+  border-radius: var(--radius-sm);
+}
+
 .event-summary { padding: 1rem 1.1rem; }
 
 .summary-line {
