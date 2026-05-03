@@ -69,14 +69,66 @@ func DetectKind(h http.Header) ContentKind {
 // first; same-position ties broken by tier — sensitive wins). Overlapping
 // ranges are removed leftmost-longest.
 //
-// For KindJSON, the walker owns both key-context detection AND the
-// free-text regex pass — the regex runs over each string value, never
-// over keys. SSE dispatch is added in a later task.
+// Dispatch by content kind:
+//   - KindJSON: walker owns both key-context and free-text regex.
+//   - KindSSE:  body-wide regex catches matches in event:/id: lines;
+//     each data: payload is recursed as KindJSON so key-context fires
+//     inside streamed deltas.
+//   - KindOther: plain regex over the whole body via FindAll.
 func Find(body []byte, kind ContentKind) []Match {
-	if kind == KindJSON {
+	switch kind {
+	case KindJSON:
 		return removeOverlaps(findInJSON(body))
+	case KindSSE:
+		return findInSSE(body)
+	default:
+		return FindAll(body)
 	}
-	return FindAll(body)
+}
+
+// findInSSE walks an SSE stream and runs JSON detection on each data:
+// payload. Free-text regex also runs over the whole body so matches in
+// event:/id: lines (which aren't JSON) still surface.
+func findInSSE(body []byte) []Match {
+	all := FindAll(body)
+	for line, off := range sseDataLines(body) {
+		payload := []byte(line)
+		for _, m := range findInJSON(payload) {
+			all = append(all, Match{
+				Code: m.Code, Tier: m.Tier, Source: m.Source,
+				Start: off + m.Start, End: off + m.End,
+			})
+		}
+	}
+	return removeOverlaps(all)
+}
+
+// sseDataLines yields the JSON payload of each `data: {...}` line and
+// its byte offset in body.
+func sseDataLines(body []byte) func(yield func(line string, off int) bool) {
+	return func(yield func(line string, off int) bool) {
+		s := string(body)
+		offset := 0
+		for {
+			i := strings.Index(s, "data: ")
+			if i < 0 {
+				return
+			}
+			payloadStart := i + len("data: ")
+			rest := s[payloadStart:]
+			end := strings.IndexAny(rest, "\n\r")
+			if end < 0 {
+				end = len(rest)
+			}
+			payload := rest[:end]
+			if !yield(payload, offset+payloadStart) {
+				return
+			}
+			advance := payloadStart + end
+			s = s[advance:]
+			offset += advance
+		}
+	}
 }
 
 // FindAll returns every regex match of any pattern in body. Preserved as
