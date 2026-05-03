@@ -46,6 +46,7 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("/events/", handleEventDetail(opts, r))
 	mux.HandleFunc("/api/dismiss", handleDismiss(opts))
 	mux.HandleFunc("/api/trust", handleTrust(opts))
+	mux.HandleFunc("/api/untrust", handleUntrust(opts))
 	mux.HandleFunc("/api/block", handleBlock(opts))
 	mux.HandleFunc("/api/passthrough", handlePassthrough(opts))
 	mux.HandleFunc("/api/live", handleLive(opts))
