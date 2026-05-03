@@ -177,3 +177,7 @@ func TestRunner_AllowHostReplacesDetection(t *testing.T) {
 		t.Errorf("--allow-host should REPLACE detection; got: %q", string(al))
 	}
 }
+
+func TestHuhPrompter_SatisfiesInterface(t *testing.T) {
+	var _ Prompter = HuhPrompter{}
+}
