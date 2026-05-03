@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"agent-gate/internal/pii"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -67,7 +69,7 @@ func TestFormatBodyMissingContentTypePassesThrough(t *testing.T) {
 func TestHighlightJSONColorsKeysAndValues(t *testing.T) {
 	// html.EscapeString turns " into &#34; — that's correct (string content
 	// must not be able to break out of the surrounding span).
-	got := string(highlightJSON(`{"name":"claude","tokens":42,"ok":true,"extra":null}`))
+	got := string(highlightJSON(`{"name":"claude","tokens":42,"ok":true,"extra":null}`, nil))
 	assert.Contains(t, got, `<span class="json-key">&#34;name&#34;</span>`)
 	assert.Contains(t, got, `<span class="json-string">&#34;claude&#34;</span>`)
 	assert.Contains(t, got, `<span class="json-key">&#34;tokens&#34;</span>`)
@@ -80,7 +82,7 @@ func TestHighlightJSONColorsKeysAndValues(t *testing.T) {
 }
 
 func TestHighlightJSONHandlesNegativeAndExponentNumbers(t *testing.T) {
-	got := string(highlightJSON(`[-1.5, 2e10, -3.4E-7]`))
+	got := string(highlightJSON(`[-1.5, 2e10, -3.4E-7]`, nil))
 	assert.Contains(t, got, `<span class="json-number">-1.5</span>`)
 	assert.Contains(t, got, `<span class="json-number">2e10</span>`)
 	assert.Contains(t, got, `<span class="json-number">-3.4E-7</span>`)
@@ -89,21 +91,21 @@ func TestHighlightJSONHandlesNegativeAndExponentNumbers(t *testing.T) {
 func TestHighlightJSONEscapesHTMLInStrings(t *testing.T) {
 	// A string containing < > & must be HTML-escaped so it can never break
 	// out of the surrounding span or inject markup.
-	got := string(highlightJSON(`{"x":"<script>alert(1)</script>"}`))
+	got := string(highlightJSON(`{"x":"<script>alert(1)</script>"}`, nil))
 	assert.NotContains(t, got, `<script>`)
 	assert.Contains(t, got, `&lt;script&gt;`)
 }
 
 func TestHighlightJSONHandlesEscapedQuoteInsideString(t *testing.T) {
 	// `"a\"b"` is a 5-character string value containing a literal quote.
-	got := string(highlightJSON(`{"k":"a\"b"}`))
+	got := string(highlightJSON(`{"k":"a\"b"}`, nil))
 	assert.Contains(t, got, `<span class="json-string">&#34;a\&#34;b&#34;</span>`)
 	assert.Contains(t, got, `<span class="json-key">&#34;k&#34;</span>`)
 }
 
 func TestHighlightJSONPreservesIndentation(t *testing.T) {
 	pretty := prettyJSON(`{"a":1,"b":[2,3]}`)
-	got := string(highlightJSON(pretty))
+	got := string(highlightJSON(pretty, nil))
 	// the leading indentation between tokens is preserved verbatim
 	assert.Contains(t, got, "</span>\n  <span")
 	assert.Contains(t, got, "  <span class=\"json-key\">&#34;a&#34;</span>")
@@ -169,52 +171,80 @@ func TestHighlightEventStreamPreservesIDField(t *testing.T) {
 // ---- PII highlighting (inside json-string tokens) ----
 
 func TestHighlightJSONFlagsEmailInsideString(t *testing.T) {
-	got := string(highlightJSON(`{"contact":"alice@example.com"}`))
+	body := `{"contact":"alice@example.com"}`
+	matches := pii.Find([]byte(body), pii.KindJSON)
+	got := string(highlightJSON(body, matches))
 	// The email span lives INSIDE the json-string span — both classes present.
 	assert.Contains(t, got, `<span class="json-string">`)
-	assert.Contains(t, got, `<span class="pii pii-email" title="email">alice@example.com</span>`)
+	assert.Contains(t, got, `<span class="pii pii-identifying pii-email" title="email">alice@example.com</span>`)
 }
 
 func TestHighlightJSONFlagsMultiplePIIKindsInSameString(t *testing.T) {
-	got := string(highlightJSON(`{"x":"contact alice@example.com from 192.168.1.1"}`))
-	assert.Contains(t, got, `<span class="pii pii-email" title="email">alice@example.com</span>`)
-	assert.Contains(t, got, `<span class="pii pii-ipv4" title="ipv4">192.168.1.1</span>`)
+	body := `{"x":"contact alice@example.com from 192.168.1.1"}`
+	matches := pii.Find([]byte(body), pii.KindJSON)
+	got := string(highlightJSON(body, matches))
+	assert.Contains(t, got, `<span class="pii pii-identifying pii-email" title="email">alice@example.com</span>`)
+	assert.Contains(t, got, `<span class="pii pii-identifying pii-ipv4" title="ipv4">192.168.1.1</span>`)
 }
 
 func TestHighlightJSONNoPIIInKeys(t *testing.T) {
 	// Keys are emitted with json-key class, never with pii spans.
-	got := string(highlightJSON(`{"alice@example.com":"value"}`))
-	// The email-shaped key is NOT wrapped as pii (it's a key).
+	body := `{"alice@example.com":"value"}`
+	matches := pii.Find([]byte(body), pii.KindJSON)
+	got := string(highlightJSON(body, matches))
 	assert.Contains(t, got, `<span class="json-key">&#34;alice@example.com&#34;</span>`)
-	assert.NotContains(t, got, `class="pii pii-email"`)
+	assert.NotContains(t, got, `class="pii pii-identifying pii-email"`)
 }
 
-func TestSummarizePIICountsByKind(t *testing.T) {
-	body := `{"a":"x@y.com","b":"u@v.io","c":"550e8400-e29b-41d4-a716-446655440000"}`
-	counts := SummarizePII(body)
-	assert.Equal(t, []PIICount{
-		{Code: "email", Label: "Email", Count: 2},
-		{Code: "uuid", Label: "UUID", Count: 1},
-	}, counts)
+func TestHighlightJSONSensitiveTierUsesDestructiveClass(t *testing.T) {
+	body := `{"ssn":"123-45-6789"}`
+	matches := pii.Find([]byte(body), pii.KindJSON)
+	got := string(highlightJSON(body, matches))
+	assert.Contains(t, got, `<span class="pii pii-sensitive pii-ssn" title="ssn">123-45-6789</span>`)
 }
 
-func TestSummarizePIIReturnsNilForBenignBody(t *testing.T) {
-	assert.Nil(t, SummarizePII(`{"model":"claude","max_tokens":1024}`))
-	assert.Nil(t, SummarizePII(""))
+func TestSummarizePIIFromMatches(t *testing.T) {
+	matches := []pii.Match{
+		{Code: "email", Tier: pii.TierIdentifying, Source: pii.SourceRegex, Start: 0, End: 10},
+		{Code: "email", Tier: pii.TierIdentifying, Source: pii.SourceRegex, Start: 11, End: 21},
+		{Code: "ssn", Tier: pii.TierSensitive, Source: pii.SourceRegex, Start: 22, End: 33},
+	}
+	got := SummarizePII(matches)
+	want := []PIICount{
+		{Code: "ssn", Label: "SSN", Tier: "sensitive", Count: 1},
+		{Code: "email", Label: "Email", Tier: "identifying", Count: 2},
+	}
+	assert.Equal(t, want, got)
+}
+
+func TestSummarizePIIReturnsNilForEmptyMatches(t *testing.T) {
+	assert.Nil(t, SummarizePII(nil))
+	assert.Nil(t, SummarizePII([]pii.Match{}))
+}
+
+func TestHasSensitivePII(t *testing.T) {
+	assert.True(t, HasSensitivePII([]PIICount{
+		{Code: "ssn", Tier: "sensitive", Count: 1},
+		{Code: "email", Tier: "identifying", Count: 2},
+	}))
+	assert.False(t, HasSensitivePII([]PIICount{
+		{Code: "email", Tier: "identifying", Count: 2},
+	}))
+	assert.False(t, HasSensitivePII(nil))
 }
 
 func TestHighlightBodyDispatchesByContentType(t *testing.T) {
 	json := `{"a":1}`
 
 	jh := http.Header{"Content-Type": []string{"application/json"}}
-	assert.Contains(t, string(highlightBody(json, jh)), `class="json-key"`)
+	assert.Contains(t, string(highlightBody(json, jh, nil)), `class="json-key"`)
 
 	sh := http.Header{"Content-Type": []string{"text/event-stream"}}
-	assert.Contains(t, string(highlightBody("data: "+json, sh)), `class="sse-field"`)
+	assert.Contains(t, string(highlightBody("data: "+json, sh, nil)), `class="sse-field"`)
 
 	// Plain text is HTML-escaped only, no token spans.
 	plain := http.Header{"Content-Type": []string{"text/plain"}}
-	assert.Equal(t, "&lt;ok&gt;", string(highlightBody("<ok>", plain)))
+	assert.Equal(t, "&lt;ok&gt;", string(highlightBody("<ok>", plain, nil)))
 
-	assert.Equal(t, template.HTML(""), highlightBody("", jh))
+	assert.Equal(t, template.HTML(""), highlightBody("", jh, nil))
 }

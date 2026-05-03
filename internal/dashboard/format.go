@@ -6,6 +6,7 @@ import (
 	"html"
 	"html/template"
 	"net/http"
+	"sort"
 	"strings"
 
 	"agent-gate/internal/pii"
@@ -69,14 +70,18 @@ func prettyJSON(s string) string {
 // is HTML-safe — every byte from the input is run through html.EscapeString
 // before being emitted.
 //
+// matches must be sorted by Start ascending and have offsets into s; the
+// handler runs pii.Find once and passes the result here so detection isn't
+// repeated per token.
+//
 // Content-types not understood here pass through with HTML escaping only.
-func highlightBody(s string, headers http.Header) template.HTML {
+func highlightBody(s string, headers http.Header, matches []pii.Match) template.HTML {
 	if s == "" {
 		return ""
 	}
 	switch detectContentKind(headers) {
 	case kindJSON:
-		return highlightJSON(s)
+		return highlightJSON(s, matches)
 	case kindEventStream:
 		return highlightEventStream(s)
 	default:
@@ -91,7 +96,10 @@ func highlightBody(s string, headers http.Header) template.HTML {
 // (including the redactor's «REDACTED:...» markers when they appear OUTSIDE
 // a string — which they should not, but we stay defensive) is HTML-escaped
 // and emitted as plain text so rendering never breaks.
-func highlightJSON(s string) template.HTML {
+//
+// matches contain pre-computed PII byte ranges into s. Tokens that overlap
+// a match get tier-colored span wrappers.
+func highlightJSON(s string, matches []pii.Match) template.HTML {
 	var out strings.Builder
 	out.Grow(len(s) * 2)
 	n := len(s)
@@ -137,7 +145,7 @@ func highlightJSON(s string) template.HTML {
 			out.WriteString(class)
 			out.WriteString(`">`)
 			if class == "json-string" {
-				emitStringWithPII(&out, tok)
+				emitStringWithPII(&out, tok, start, matches)
 			} else {
 				out.WriteString(html.EscapeString(tok))
 			}
@@ -245,10 +253,13 @@ func highlightEventStream(s string) template.HTML {
 		if dataPayload != "" {
 			out.WriteString("\n")
 			out.WriteString(`<span class="sse-field">data:</span> `)
-			// Pretty-print + highlight the payload here. Doing it inside
-			// highlightEventStream keeps the SSE pipeline single-pass: each
-			// data: line in the input is one JSON object, period.
-			out.WriteString(string(highlightJSON(prettyJSON(dataPayload))))
+			// Pretty-print + highlight the payload here. Per-payload
+			// detection re-runs pii.Find on the pretty-printed bytes; the
+			// SSE-level matches don't have the right offsets for indented
+			// JSON. The chip-strip summary still uses SSE-level matches.
+			pretty := prettyJSON(dataPayload)
+			payloadMatches := pii.Find([]byte(pretty), pii.KindJSON)
+			out.WriteString(string(highlightJSON(pretty, payloadMatches)))
 		}
 		out.WriteString(`</details>`)
 		block = nil
@@ -278,68 +289,110 @@ func isSSEField(name string) bool {
 type PIICount struct {
 	Code  string // pii pattern identifier, e.g. "email"
 	Label string // human-friendly label, e.g. "Email"
+	Tier  string // "sensitive" or "identifying"; drives chip color
 	Count int
 }
 
 var piiLabels = map[string]string{
-	"email": "Email",
-	"jwt":   "JWT",
-	"uuid":  "UUID",
-	"ipv4":  "IPv4",
+	"email":       "Email",
+	"jwt":         "JWT",
+	"uuid":        "UUID",
+	"ipv4":        "IPv4",
+	"name":        "Name",
+	"address":     "Address",
+	"dob":         "DOB",
+	"phone":       "Phone",
+	"ssn":         "SSN",
+	"credit_card": "Credit card",
 }
 
-// SummarizePII walks the body bytes, returning per-kind counts in canonical
-// pii.Patterns order. Returns nil when no PII was detected — templates can
-// guard with `{{ if .ReqPII }}` to hide the chip strip entirely.
-func SummarizePII(body string) []PIICount {
-	if body == "" {
-		return nil
-	}
-	matches := pii.FindAll([]byte(body))
+// SummarizePII tallies pre-computed matches by Code. Output is sorted
+// sensitive-first (so the chip strip leads with the high-stakes signal),
+// then alphabetical for stable display. Returns nil when matches is
+// empty so templates can guard with `{{ if .ReqPII }}`.
+func SummarizePII(matches []pii.Match) []PIICount {
 	if len(matches) == 0 {
 		return nil
 	}
-	counts := pii.CountByCode(matches)
-	out := make([]PIICount, 0, len(counts))
-	for _, p := range pii.Patterns {
-		if c := counts[p.Code]; c > 0 {
-			label := piiLabels[p.Code]
-			if label == "" {
-				label = p.Code
-			}
-			out = append(out, PIICount{Code: p.Code, Label: label, Count: c})
-		}
+	type bucket struct {
+		count int
+		tier  pii.Tier
 	}
+	buckets := make(map[string]*bucket, len(matches))
+	for _, m := range matches {
+		b, ok := buckets[m.Code]
+		if !ok {
+			b = &bucket{tier: m.Tier}
+			buckets[m.Code] = b
+		}
+		b.count++
+	}
+	out := make([]PIICount, 0, len(buckets))
+	for code, b := range buckets {
+		label := piiLabels[code]
+		if label == "" {
+			label = code
+		}
+		out = append(out, PIICount{Code: code, Label: label, Tier: string(b.tier), Count: b.count})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Tier != out[j].Tier {
+			return out[i].Tier == string(pii.TierSensitive)
+		}
+		return out[i].Code < out[j].Code
+	})
 	return out
 }
 
-// emitStringWithPII writes a JSON string token (including surrounding quotes)
-// to out, wrapping any PII matches inside the literal in nested <span>
-// elements. Tokens with no PII are emitted as a single HTML-escaped string.
-//
-// PII patterns never match quote characters, so the surrounding quotes pass
-// through as plain content; we still html-escape the whole token before
-// emission so embedded `<` / `>` / `&` cannot break out of the json-string
-// wrapper.
-func emitStringWithPII(out *strings.Builder, tok string) {
-	matches := pii.FindAll([]byte(tok))
-	if len(matches) == 0 {
-		out.WriteString(html.EscapeString(tok))
-		return
+// HasSensitivePII reports whether any chip in a payload's summary is the
+// sensitive tier. Used by the template to upgrade the summary strip's
+// color when SSN / credit card / DOB are present.
+func HasSensitivePII(rows []PIICount) bool {
+	for _, r := range rows {
+		if r.Tier == string(pii.TierSensitive) {
+			return true
+		}
 	}
+	return false
+}
+
+// emitStringWithPII writes a JSON string token (including surrounding
+// quotes) to out, wrapping any pre-computed PII matches whose byte range
+// falls within tokAbsStart..tokAbsStart+len(tok) in nested spans.
+//
+// matches must be sorted by Start ascending. We linear-scan and skip
+// matches that don't overlap the current token. The surrounding quotes
+// pass through as plain content; html.EscapeString runs over every byte
+// before emission so embedded `<` / `>` / `&` can never break out of
+// the json-string wrapper.
+func emitStringWithPII(out *strings.Builder, tok string, tokAbsStart int, matches []pii.Match) {
+	tokAbsEnd := tokAbsStart + len(tok)
 	pos := 0
 	for _, m := range matches {
-		if m.Start > pos {
-			out.WriteString(html.EscapeString(tok[pos:m.Start]))
+		if m.Start >= tokAbsEnd {
+			break
+		}
+		if m.End <= tokAbsStart {
+			continue
+		}
+		localStart := m.Start - tokAbsStart
+		localEnd := m.End - tokAbsStart
+		if localStart < pos {
+			continue
+		}
+		if localStart > pos {
+			out.WriteString(html.EscapeString(tok[pos:localStart]))
 		}
 		out.WriteString(`<span class="pii pii-`)
+		out.WriteString(string(m.Tier))
+		out.WriteString(` pii-`)
 		out.WriteString(m.Code)
 		out.WriteString(`" title="`)
 		out.WriteString(m.Code)
 		out.WriteString(`">`)
-		out.WriteString(html.EscapeString(tok[m.Start:m.End]))
+		out.WriteString(html.EscapeString(tok[localStart:localEnd]))
 		out.WriteString(`</span>`)
-		pos = m.End
+		pos = localEnd
 	}
 	if pos < len(tok) {
 		out.WriteString(html.EscapeString(tok[pos:]))
