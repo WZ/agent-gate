@@ -218,13 +218,23 @@ func (w *walker) skipWhitespace() {
 	}
 }
 
-// findInJSON walks the body as JSON and emits key-context matches for the
-// kinds that pass shapeMatches. Free-text regex hits inside string values
-// are added in a later commit (currently still emitted by FindAll).
+// findInJSON walks the body as JSON. It emits key-context matches plus
+// free-text regex hits inside string values (via walkerMatches +
+// regexMatchesInRange).
+//
+// If the walker bails before reaching EOF (truncated body, redactor
+// markers in awkward spots, plain non-JSON bytes that snuck through
+// content-type sniffing) the unparsed remainder is regex-swept so PII
+// in malformed bodies isn't silently dropped — audit-completeness wins
+// over the "keys not flagged" decision when JSON structure is broken.
 func findInJSON(body []byte) []Match {
 	w := &walker{body: body, i: 0, n: len(body)}
 	w.walkValue()
-	return walkerMatches(w.tokens, body)
+	matches := walkerMatches(w.tokens, body)
+	if w.i < w.n {
+		matches = append(matches, regexMatchesInRange(body, w.i, w.n)...)
+	}
+	return matches
 }
 
 // walkerMatches turns a sequence of walker tokens into Match entries.

@@ -277,6 +277,35 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 	}
 }
 
+func TestFindJSONFallsBackOnMalformedBody(t *testing.T) {
+	// A truncated / structurally invalid body must still surface PII in
+	// the unparsed remainder. The walker bails on the first byte it can't
+	// classify; we want a regex sweep over body[w.i:] so audit-completeness
+	// holds even when capture is malformed.
+	body := []byte(`{"x": [1,2, alice@example.com is here}`)
+	got := Find(body, KindJSON)
+	codes := []string{}
+	for _, m := range got {
+		codes = append(codes, m.Code)
+	}
+	if len(codes) == 0 || codes[0] != "email" {
+		t.Fatalf("expected email match in malformed JSON remainder, got %+v", got)
+	}
+}
+
+func TestFindJSONNoFallbackForCleanBody(t *testing.T) {
+	// Well-formed JSON should NOT trigger the fallback regex sweep —
+	// otherwise email-shaped keys would re-appear (spec §6 says they
+	// should not).
+	body := []byte(`{"alice@example.com":"value"}`)
+	got := Find(body, KindJSON)
+	for _, m := range got {
+		if m.Code == "email" {
+			t.Fatalf("unexpected email match for well-formed JSON: %+v", m)
+		}
+	}
+}
+
 func TestRemoveOverlapsBreaksTiesBySensitiveTier(t *testing.T) {
 	matches := []Match{
 		{Code: "email", Tier: TierIdentifying, Source: SourceRegex, Start: 5, End: 22},
