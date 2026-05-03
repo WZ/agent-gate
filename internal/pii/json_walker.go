@@ -7,6 +7,10 @@ var (
 	// shapes (M/D/YY through MM/DD/YYYY). Strict enough to reject "n/a"
 	// and free-text strings.
 	dateLikeRegex = regexp.MustCompile(`^\d{4}-\d{1,2}-\d{1,2}$|^\d{1,2}/\d{1,2}/\d{2,4}$`)
+
+	// ssnLikeRegex matches the two SSN shapes accepted with key context:
+	// dashed canonical (xxx-xx-xxxx) or bare 9 digits.
+	ssnLikeRegex = regexp.MustCompile(`^\d{3}-\d{2}-\d{4}$|^\d{9}$`)
 )
 
 // walkerToken is one structural element the walker found. start/end are
@@ -277,6 +281,8 @@ func shapeMatches(code string, value []byte) bool {
 		return dateLikeRegex.Match(value)
 	case "phone":
 		return countDigits(value) >= 7
+	case "ssn":
+		return ssnLikeRegex.Match(value)
 	}
 	return false
 }
