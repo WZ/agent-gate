@@ -34,4 +34,11 @@ var Patterns = []Pattern{
 	// in pii.go).
 	{Code: "credit_card", Tier: TierSensitive,
 		Regexp: regexp.MustCompile(`\b(?:\d[\s\-]?){12,18}\d\b`)},
+
+	// Phone (US/NANP-style). Requires at least one separator between the
+	// area code and the prefix and between the prefix and the line number,
+	// so bare 10-digit IDs do not flag. International prefix (+1, +44, ...)
+	// is optional. The separator class accepts space, dash, dot.
+	{Code: "phone", Tier: TierIdentifying,
+		Regexp: regexp.MustCompile(`(?:\+\d{1,3}[\s\-.])?\(?\d{3}\)?[\s\-.]\d{3}[\s\-.]\d{4}\b`)},
 }
