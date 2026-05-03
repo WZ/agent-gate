@@ -101,3 +101,29 @@ func TestDetectKindFromHeaders(t *testing.T) {
 		assert.Equal(t, tc.want, DetectKind(h), "ct=%q", tc.ct)
 	}
 }
+
+func TestFindAllCreditCardLuhnRequired(t *testing.T) {
+	// Visa test number passes Luhn → flagged.
+	matches := FindAll([]byte("paid with 4111111111111111 today"))
+	require.Len(t, matches, 1)
+	assert.Equal(t, "credit_card", matches[0].Code)
+	assert.Equal(t, TierSensitive, matches[0].Tier)
+	assert.Equal(t, SourceLuhn, matches[0].Source)
+}
+
+func TestFindAllCreditCardSkipsLuhnFailure(t *testing.T) {
+	// Single digit changed → fails Luhn → not flagged.
+	matches := FindAll([]byte("paid with 4111111111111112 today"))
+	for _, m := range matches {
+		if m.Code == "credit_card" {
+			t.Fatalf("unexpected credit_card match: %+v", m)
+		}
+	}
+}
+
+func TestFindAllCreditCardWithFormattingPunctuation(t *testing.T) {
+	// "4111 1111 1111 1111" should be detected (spaces stripped before Luhn).
+	matches := FindAll([]byte("card 4111 1111 1111 1111 expires 2030"))
+	require.Len(t, matches, 1)
+	assert.Equal(t, "credit_card", matches[0].Code)
+}
