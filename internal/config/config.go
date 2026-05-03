@@ -32,7 +32,9 @@ type StorageConfig struct {
 }
 
 type AllowlistConfig struct {
-	File string `toml:"file"`
+	// File field removed in v0.6.0; allowlist always lives at
+	// ConfigDir/allowlist.txt.
+
 	// Enforce, if true, makes the proxy return 403 to the agent for any
 	// request whose host isn't in the allowlist. The flow is still recorded
 	// (the audit log stays complete). CLI flag --enforce-allowlist overrides.
@@ -47,9 +49,6 @@ func Defaults() *Config {
 			DataDir:   "~/.local/share/agent-gate",
 			Rotate:    "daily",
 			GzipAfter: "1d",
-		},
-		Allowlist: AllowlistConfig{
-			File: "~/.config/agent-gate/allowlist.txt",
 		},
 	}
 }
@@ -83,6 +82,5 @@ func (c *Config) expandPaths() error {
 		return p
 	}
 	c.Storage.DataDir = expand(c.Storage.DataDir)
-	c.Allowlist.File = expand(c.Allowlist.File)
 	return nil
 }
