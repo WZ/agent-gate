@@ -13,7 +13,10 @@ type renderer struct {
 
 func newRenderer() *renderer {
 	tplFS, _ := fs.Sub(assets, "templates")
-	full := template.Must(template.New("base").ParseFS(tplFS, "*.html"))
+	funcs := template.FuncMap{
+		"hasSensitivePII": HasSensitivePII,
+	}
+	full := template.Must(template.New("base").Funcs(funcs).ParseFS(tplFS, "*.html"))
 	return &renderer{full: full}
 }
 
