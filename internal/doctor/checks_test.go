@@ -3,6 +3,7 @@ package doctor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -138,6 +139,21 @@ func TestCheckAgentsDetected_Empty(t *testing.T) {
 	r := CheckAgentsDetected(nil)
 	if r.Status != StatusWarn {
 		t.Fatalf("expected WARN on empty agents, got %v: %s", r.Status, r.Detail)
+	}
+}
+
+func TestReport_WriteHuman_IncludesGlyphsAndSummary(t *testing.T) {
+	var buf strings.Builder
+	rep := Report{Results: []Result{
+		{ID: "ca-files", Status: StatusOK, Detail: "ok"},
+		{ID: "data-dir", Status: StatusFail, Detail: "missing", FixHint: "mkdir -p /x"},
+	}}
+	rep.WriteHuman(&buf)
+	out := buf.String()
+	for _, want := range []string{"✓", "✗", "1 failed", "Fix:", "mkdir -p /x"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q\n--- got ---\n%s", want, out)
+		}
 	}
 }
 
