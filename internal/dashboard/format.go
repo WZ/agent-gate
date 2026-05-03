@@ -7,6 +7,8 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+
+	"agent-gate/internal/pii"
 )
 
 // formatBody applies content-aware pretty-printing to a captured request or
@@ -134,7 +136,11 @@ func highlightJSON(s string) template.HTML {
 			out.WriteString(`<span class="`)
 			out.WriteString(class)
 			out.WriteString(`">`)
-			out.WriteString(html.EscapeString(tok))
+			if class == "json-string" {
+				emitStringWithPII(&out, tok)
+			} else {
+				out.WriteString(html.EscapeString(tok))
+			}
 			out.WriteString(`</span>`)
 		case c == '-' || (c >= '0' && c <= '9'):
 			start := i
@@ -266,4 +272,76 @@ func isSSEField(name string) bool {
 		return true
 	}
 	return false
+}
+
+// PIICount is one row in the summary chip strip above a payload pane.
+type PIICount struct {
+	Code  string // pii pattern identifier, e.g. "email"
+	Label string // human-friendly label, e.g. "Email"
+	Count int
+}
+
+var piiLabels = map[string]string{
+	"email": "Email",
+	"jwt":   "JWT",
+	"uuid":  "UUID",
+	"ipv4":  "IPv4",
+}
+
+// SummarizePII walks the body bytes, returning per-kind counts in canonical
+// pii.Patterns order. Returns nil when no PII was detected — templates can
+// guard with `{{ if .ReqPII }}` to hide the chip strip entirely.
+func SummarizePII(body string) []PIICount {
+	if body == "" {
+		return nil
+	}
+	matches := pii.FindAll([]byte(body))
+	if len(matches) == 0 {
+		return nil
+	}
+	counts := pii.CountByCode(matches)
+	out := make([]PIICount, 0, len(counts))
+	for _, p := range pii.Patterns {
+		if c := counts[p.Code]; c > 0 {
+			label := piiLabels[p.Code]
+			if label == "" {
+				label = p.Code
+			}
+			out = append(out, PIICount{Code: p.Code, Label: label, Count: c})
+		}
+	}
+	return out
+}
+
+// emitStringWithPII writes a JSON string token (including surrounding quotes)
+// to out, wrapping any PII matches inside the literal in nested <span>
+// elements. Tokens with no PII are emitted as a single HTML-escaped string.
+//
+// PII patterns never match quote characters, so the surrounding quotes pass
+// through as plain content; we still html-escape the whole token before
+// emission so embedded `<` / `>` / `&` cannot break out of the json-string
+// wrapper.
+func emitStringWithPII(out *strings.Builder, tok string) {
+	matches := pii.FindAll([]byte(tok))
+	if len(matches) == 0 {
+		out.WriteString(html.EscapeString(tok))
+		return
+	}
+	pos := 0
+	for _, m := range matches {
+		if m.Start > pos {
+			out.WriteString(html.EscapeString(tok[pos:m.Start]))
+		}
+		out.WriteString(`<span class="pii pii-`)
+		out.WriteString(m.Code)
+		out.WriteString(`" title="`)
+		out.WriteString(m.Code)
+		out.WriteString(`">`)
+		out.WriteString(html.EscapeString(tok[m.Start:m.End]))
+		out.WriteString(`</span>`)
+		pos = m.End
+	}
+	if pos < len(tok) {
+		out.WriteString(html.EscapeString(tok[pos:]))
+	}
 }

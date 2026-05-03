@@ -166,6 +166,43 @@ func TestHighlightEventStreamPreservesIDField(t *testing.T) {
 	assert.Contains(t, got, `<span class="sse-field">id:</span> 42`)
 }
 
+// ---- PII highlighting (inside json-string tokens) ----
+
+func TestHighlightJSONFlagsEmailInsideString(t *testing.T) {
+	got := string(highlightJSON(`{"contact":"alice@example.com"}`))
+	// The email span lives INSIDE the json-string span — both classes present.
+	assert.Contains(t, got, `<span class="json-string">`)
+	assert.Contains(t, got, `<span class="pii pii-email" title="email">alice@example.com</span>`)
+}
+
+func TestHighlightJSONFlagsMultiplePIIKindsInSameString(t *testing.T) {
+	got := string(highlightJSON(`{"x":"contact alice@example.com from 192.168.1.1"}`))
+	assert.Contains(t, got, `<span class="pii pii-email" title="email">alice@example.com</span>`)
+	assert.Contains(t, got, `<span class="pii pii-ipv4" title="ipv4">192.168.1.1</span>`)
+}
+
+func TestHighlightJSONNoPIIInKeys(t *testing.T) {
+	// Keys are emitted with json-key class, never with pii spans.
+	got := string(highlightJSON(`{"alice@example.com":"value"}`))
+	// The email-shaped key is NOT wrapped as pii (it's a key).
+	assert.Contains(t, got, `<span class="json-key">&#34;alice@example.com&#34;</span>`)
+	assert.NotContains(t, got, `class="pii pii-email"`)
+}
+
+func TestSummarizePIICountsByKind(t *testing.T) {
+	body := `{"a":"x@y.com","b":"u@v.io","c":"550e8400-e29b-41d4-a716-446655440000"}`
+	counts := SummarizePII(body)
+	assert.Equal(t, []PIICount{
+		{Code: "email", Label: "Email", Count: 2},
+		{Code: "uuid", Label: "UUID", Count: 1},
+	}, counts)
+}
+
+func TestSummarizePIIReturnsNilForBenignBody(t *testing.T) {
+	assert.Nil(t, SummarizePII(`{"model":"claude","max_tokens":1024}`))
+	assert.Nil(t, SummarizePII(""))
+}
+
 func TestHighlightBodyDispatchesByContentType(t *testing.T) {
 	json := `{"a":1}`
 
