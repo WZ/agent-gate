@@ -58,11 +58,6 @@ func LoadCommon(configPath string) (*Common, error) {
 		st.Close()
 		return nil, fmt.Errorf("load allowlist: %w", err)
 	}
-	if !al.Contains("api.anthropic.com") {
-		if err := al.Add("api.anthropic.com"); err != nil {
-			fmt.Fprintf(os.Stderr, "seed allowlist: %v\n", err)
-		}
-	}
 
 	dl, err := denylist.Load(filepath.Join(configDir, "denylist.txt"))
 	if err != nil {

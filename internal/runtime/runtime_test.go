@@ -31,8 +31,10 @@ data_dir = '`+filepath.ToSlash(tmp)+`/data'
 	if rt.CA == nil || rt.Store == nil || rt.Engine == nil {
 		t.Fatalf("LoadCommon returned partial Common: %+v", rt)
 	}
-	if !rt.Allowlist.Contains("api.anthropic.com") {
-		t.Errorf("expected api.anthropic.com seeded into allowlist")
+	// As of v0.6.0, runtime no longer auto-seeds the allowlist. Hosts are
+	// trusted only via `agent-gate init` or the dashboard's Trust action.
+	if rt.Allowlist.Contains("api.anthropic.com") {
+		t.Errorf("runtime auto-seeded api.anthropic.com; should be empty on a fresh config")
 	}
 }
 
