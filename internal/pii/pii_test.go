@@ -127,3 +127,30 @@ func TestFindAllCreditCardWithFormattingPunctuation(t *testing.T) {
 	require.Len(t, matches, 1)
 	assert.Equal(t, "credit_card", matches[0].Code)
 }
+
+func TestFindAllPhoneRegexRequiresSeparators(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"call (415) 555-1234 today", true},
+		{"+1-415-555-1234", true},
+		{"415.555.1234", true},
+		{"415 555 1234", true},
+		{"4155551234", false}, // bare digits — no flag
+		{"order 4155551234567 dispatched", false},
+	}
+	for _, tc := range cases {
+		matches := FindAll([]byte(tc.in))
+		got := false
+		for _, m := range matches {
+			if m.Code == "phone" {
+				got = true
+				break
+			}
+		}
+		if got != tc.want {
+			t.Errorf("FindAll(%q) phone match = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
