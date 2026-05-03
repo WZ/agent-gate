@@ -293,6 +293,53 @@ func TestFindJSONFallsBackOnMalformedBody(t *testing.T) {
 	}
 }
 
+func TestFindBroadKeyMatchDoesNotHideNestedSensitive(t *testing.T) {
+	// A name-keyed value that contains an SSN must surface the SSN.
+	// The "any non-empty value" shape rule for name covers the whole
+	// string, but sensitive nested PII must not be silently subsumed.
+	cases := []struct {
+		body         string
+		wantContains string
+	}{
+		{`{"name":"my ssn is 123-45-6789"}`, "ssn"},
+		{`{"address":"see card 4111111111111111"}`, "credit_card"},
+		{`{"first_name":"alice 123-45-6789"}`, "ssn"},
+	}
+	for _, tc := range cases {
+		got := Find([]byte(tc.body), KindJSON)
+		found := false
+		for _, m := range got {
+			if m.Code == tc.wantContains {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("body %q: want %s match present, got %+v", tc.body, tc.wantContains, got)
+		}
+	}
+}
+
+func TestFindBroadKeyMatchKeepsNonSensitiveContainment(t *testing.T) {
+	// An identifying nested match (email, phone) inside name should NOT
+	// suppress the broad name match — only sensitive nested matches
+	// (SSN, credit card) flip the suppression. This preserves the
+	// "name is the signal, value-shape doesn't matter" intent for the
+	// non-sensitive case.
+	body := `{"name":"contact alice@example.com"}`
+	got := Find([]byte(body), KindJSON)
+	hasName := false
+	for _, m := range got {
+		if m.Code == "name" {
+			hasName = true
+			break
+		}
+	}
+	if !hasName {
+		t.Errorf("body %q: expected name match (no sensitive nested), got %+v", body, got)
+	}
+}
+
 func TestFindJSONNoFallbackForCleanBody(t *testing.T) {
 	// Well-formed JSON should NOT trigger the fallback regex sweep —
 	// otherwise email-shaped keys would re-appear (spec §6 says they
