@@ -749,12 +749,141 @@ summary:hover { color: hsl(var(--foreground)); }
 .sse-block[open] > summary::before { transform: rotate(90deg); }
 .sse-block > summary:hover::before { color: hsl(var(--foreground)); }
 
-.headers-pane {
-  margin-top: 0.5rem;
-  max-height: 16rem;
-  border-top: 0;
+/* Headers — compact two-column key/value table */
+.headers-fold > summary { padding: 0.6rem 1.1rem 0.55rem; }
+.headers-fold > summary .count {
+  margin-left: 0.35rem;
+  color: hsl(var(--muted-foreground) / 0.7);
+  font-weight: 400;
+}
+
+.headers-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  background: hsl(var(--muted) / 0.5);
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.headers-table th,
+.headers-table td {
+  padding: 0.4rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.6);
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.5;
+}
+.headers-table tr:last-child th,
+.headers-table tr:last-child td { border-bottom: 0; }
+.headers-table th {
+  width: 11rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+.headers-table td {
+  color: hsl(var(--foreground) / 0.92);
+  word-break: break-all;
+}
+
+/* Copy button — subtle ghost style, lives in panel-header */
+.copy-btn {
+  min-height: 1.65rem;
+  padding: 0.2rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+.copy-btn:hover {
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border-strong));
+  background: hsl(var(--muted) / 0.6);
+}
+.copy-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.18);
+}
+.copy-btn-feedback,
+.copy-btn-feedback:hover {
+  color: hsl(var(--success));
+  border-color: hsl(var(--success) / 0.5);
+  background: hsl(var(--success) / 0.08);
+}
+
+/* Find in payload — toolbar above inspection grid */
+.body-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.body-search-bar input[type="search"] {
+  flex: 1;
+  min-height: 1.9rem;
+  padding: 0.3rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  border: 1px solid transparent;
+  background: transparent;
+}
+.body-search-bar input[type="search"]:focus {
+  border-color: hsl(var(--primary) / 0.4);
+  background: hsl(var(--muted) / 0.5);
+}
+.body-search-count {
+  min-width: 4.5rem;
+  text-align: right;
+  color: hsl(var(--muted-foreground));
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+.body-search-nav {
+  min-height: 1.9rem;
+  min-width: 2rem;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1;
+}
+.body-search-hint {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: hsl(var(--muted-foreground) / 0.7);
+  padding: 0.15rem 0.45rem;
+  background: hsl(var(--muted));
+  border-radius: var(--radius-sm);
+}
+
+/* Match highlights — yellow stays out of the dops palette intentionally,
+   so search hits read distinct from semantic warning amber. */
+mark.search-hit {
+  background: hsl(50 92% 70% / 0.55);
+  color: inherit;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+mark.search-hit-current {
+  background: hsl(var(--accent) / 0.4);
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 1px;
+}
+@media (prefers-color-scheme: dark) {
+  mark.search-hit { background: hsl(50 95% 60% / 0.4); }
 }
 
 .event-summary { padding: 1rem 1.1rem; }
