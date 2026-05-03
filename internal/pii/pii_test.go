@@ -1,9 +1,11 @@
 package pii
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFindAllEmail(t *testing.T) {
@@ -69,4 +71,33 @@ func codes(ms []Match) []string {
 		out[i] = m.Code
 	}
 	return out
+}
+
+func TestMatchHasTierAndSource(t *testing.T) {
+	matches := FindAll([]byte(`alice@example.com`))
+	require.Len(t, matches, 1)
+	assert.Equal(t, "email", matches[0].Code)
+	assert.Equal(t, TierIdentifying, matches[0].Tier)
+	assert.Equal(t, SourceRegex, matches[0].Source)
+}
+
+func TestDetectKindFromHeaders(t *testing.T) {
+	cases := []struct {
+		ct   string
+		want ContentKind
+	}{
+		{"application/json", KindJSON},
+		{"application/json; charset=utf-8", KindJSON},
+		{"application/vnd.api+json", KindJSON},
+		{"text/event-stream", KindSSE},
+		{"text/plain", KindOther},
+		{"", KindOther},
+	}
+	for _, tc := range cases {
+		h := http.Header{}
+		if tc.ct != "" {
+			h.Set("Content-Type", tc.ct)
+		}
+		assert.Equal(t, tc.want, DetectKind(h), "ct=%q", tc.ct)
+	}
 }
