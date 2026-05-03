@@ -275,6 +275,42 @@ func assertMatchesEqual(t *testing.T, got, want []Match, ctx string) {
 	}
 }
 
+func TestFindCreditCardKeyContextStillRequiresLuhn(t *testing.T) {
+	cases := []struct {
+		body string
+		want []Match
+	}{
+		{
+			body: `{"card_number":"4111111111111111"}`,
+			want: []Match{{Code: "credit_card", Tier: TierSensitive, Source: SourceKey, Start: 16, End: 32}},
+		},
+		{body: `{"card_number":"tok_abc123"}`, want: nil},
+		{body: `{"card_number":"4111111111111112"}`, want: nil},
+		{
+			body: `{"pan":"4111 1111 1111 1111"}`,
+			want: []Match{{Code: "credit_card", Tier: TierSensitive, Source: SourceKey, Start: 8, End: 27}},
+		},
+	}
+	for _, tc := range cases {
+		got := Find([]byte(tc.body), KindJSON)
+		assertMatchesEqual(t, got, tc.want, tc.body)
+	}
+}
+
+func TestFindCreditCardOnlyOneMatchPerNumber(t *testing.T) {
+	body := `{"card_number":"4111111111111111"}`
+	matches := Find([]byte(body), KindJSON)
+	count := 0
+	for _, m := range matches {
+		if m.Code == "credit_card" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("got %d credit_card matches, want 1: %+v", count, matches)
+	}
+}
+
 func TestFindSSNViaJSONKey(t *testing.T) {
 	cases := []struct {
 		body string
