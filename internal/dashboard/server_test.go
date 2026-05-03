@@ -485,3 +485,45 @@ func TestSessionsListFilteredByHost(t *testing.T) {
 	assert.Contains(t, body, "S2")
 	assert.NotContains(t, body, "S1")
 }
+
+func TestEventDetail_RendersUntrustForm_WhenHostTrusted(t *testing.T) {
+	opts := freshOpts(t)
+	if err := opts.Allowlist.Add("api.example.com"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID: "evt-trusted", Method: "GET", URL: "https://api.example.com/v1/x",
+			RespStatus: 200, StartedAt: time.Now(),
+		},
+		SessionID: "sess-x",
+	}}))
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/events/evt-trusted")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bs := string(body)
+	assert.Contains(t, bs, `/api/untrust`, "expected event detail to include /api/untrust action when host trusted")
+	assert.Contains(t, bs, "Untrust host")
+	assert.Contains(t, bs, "already trusted")
+}
+
+func TestEventDetail_OmitsUntrustForm_WhenHostNotTrusted(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID: "evt-untrusted", Method: "GET", URL: "https://untrusted.example.com/v1/y",
+			RespStatus: 200, StartedAt: time.Now(),
+		},
+		SessionID: "sess-y",
+	}}))
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/events/evt-untrusted")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	assert.NotContains(t, string(body), `/api/untrust`, "expected /api/untrust action only when host is trusted")
+}
