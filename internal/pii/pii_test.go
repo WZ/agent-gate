@@ -154,3 +154,18 @@ func TestFindAllPhoneRegexRequiresSeparators(t *testing.T) {
 		}
 	}
 }
+
+func TestFindAllSSNRegexRequiresDashes(t *testing.T) {
+	matches := FindAll([]byte("ssn: 123-45-6789 on file"))
+	require.Len(t, matches, 1)
+	assert.Equal(t, "ssn", matches[0].Code)
+	assert.Equal(t, TierSensitive, matches[0].Tier)
+
+	// Bare 9-digit strings do not flag from free-text regex.
+	matches = FindAll([]byte("id 123456789 dispatched"))
+	for _, m := range matches {
+		if m.Code == "ssn" {
+			t.Fatalf("unexpected ssn match: %+v", m)
+		}
+	}
+}

@@ -41,4 +41,10 @@ var Patterns = []Pattern{
 	// is optional. The separator class accepts space, dash, dot.
 	{Code: "phone", Tier: TierIdentifying,
 		Regexp: regexp.MustCompile(`(?:\+\d{1,3}[\s\-.])?\(?\d{3}\)?[\s\-.]\d{3}[\s\-.]\d{4}\b`)},
+
+	// SSN (US, dashed canonical form). Bare 9-digit strings are NOT matched
+	// here — the key-context path handles those when the JSON field is
+	// explicitly named ssn / social_security_number.
+	{Code: "ssn", Tier: TierSensitive,
+		Regexp: regexp.MustCompile(`\b\d{3}-\d{2}-\d{4}\b`)},
 }
