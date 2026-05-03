@@ -711,6 +711,15 @@ summary:hover { color: hsl(var(--foreground)); }
   border-top: 1px solid hsl(var(--border));
 }
 
+/* JSON / SSE syntax tokens — restrained, derived from primary tokens */
+.json-key    { color: hsl(var(--primary)); font-weight: 600; }
+.json-string { color: hsl(var(--foreground) / 0.82); }
+.json-number { color: hsl(var(--accent)); font-variant-numeric: tabular-nums; }
+.json-bool   { color: hsl(var(--info)); font-weight: 600; }
+.json-null   { color: hsl(var(--muted-foreground)); font-style: italic; }
+.json-punct  { color: hsl(var(--muted-foreground) / 0.65); }
+.sse-field   { color: hsl(var(--accent)); font-weight: 600; }
+
 .headers-pane {
   margin-top: 0.5rem;
   max-height: 16rem;
