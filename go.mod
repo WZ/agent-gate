@@ -13,6 +13,7 @@ require (
 	github.com/tailscale/wf v0.0.0-20240214030419-6fbb0a674ee6
 	golang.org/x/net v0.53.0
 	golang.org/x/sys v0.43.0
+	golang.org/x/term v0.42.0
 	modernc.org/sqlite v1.50.0
 )
 
@@ -51,7 +52,6 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20220218215828-6cf2b201936e // indirect
 	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
 	golang.org/x/tools/go/expect v0.1.1-deprecated // indirect
