@@ -23,3 +23,6 @@ events.db-*
 # Local working notes — design specs, implementation plans, etc.
 docs/superpowers/
 .gstack/
+
+# goreleaser local snapshot output
+dist/
