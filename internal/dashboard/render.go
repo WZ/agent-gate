@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"io/fs"
 	"net/http"
+	"strings"
 )
 
 type renderer struct {
@@ -39,9 +40,23 @@ func (r *renderer) Render(w http.ResponseWriter, req *http.Request, name string,
 		return
 	}
 	combined := struct {
-		Content template.HTML
-	}{Content: template.HTML(buf.String())} //nolint:gosec // fragment rendered by our own templates
+		Content     template.HTML
+		ActiveRoute string // "operations" or "explore"
+	}{
+		Content:     template.HTML(buf.String()), //nolint:gosec // fragment rendered by our own templates
+		ActiveRoute: activeRoute(req.URL.Path),
+	}
 	if err := r.full.ExecuteTemplate(w, "base", combined); err != nil {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+// activeRoute maps the request URL path onto a top-nav identifier.
+// Default is "operations" (the sessions list at `/`); paths starting
+// with `/explore` are "explore".
+func activeRoute(path string) string {
+	if strings.HasPrefix(path, "/explore") {
+		return "explore"
+	}
+	return "operations"
 }
