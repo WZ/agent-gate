@@ -17,6 +17,10 @@ import (
 func TestRuntimeDoesNotAutoSeedAllowlist(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.toml")
+	// Use forward slashes in the data_dir literal so Windows tempdirs (C:\Users\...)
+	// don't trigger TOML's unicode-escape parser on `\U`. filepath functions accept
+	// either separator on Windows.
+	dataDir := filepath.ToSlash(filepath.Join(dir, "data"))
 	if err := os.WriteFile(cfgPath, []byte(`
 [capture]
 default_mode = "permissive"
@@ -24,7 +28,7 @@ default_mode = "permissive"
 proxy = 18888
 dashboard = 17878
 [storage]
-data_dir = "`+dir+`/data"
+data_dir = "`+dataDir+`"
 [allowlist]
 enforce = false
 `), 0o600); err != nil {
