@@ -103,6 +103,9 @@ func (i *Index) Truncate() error {
 	if _, err := i.db.Exec("DELETE FROM events"); err != nil {
 		return err
 	}
+	if _, err := i.db.Exec("DELETE FROM event_pii"); err != nil {
+		return err
+	}
 	if _, err := i.db.Exec("VACUUM"); err != nil {
 		return err
 	}
