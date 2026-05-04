@@ -128,12 +128,11 @@ func Run(opts Options) error {
 		}
 	}
 
-	if opts.Prompter != nil && !opts.SkipSmokeTest {
-		ok, _ := opts.Prompter.PromptSmokeTest()
-		if ok {
-			runSmokeTest()
-		}
-	}
+	// Smoke-test prompt is deferred until the in-process proxy + curl probe
+	// is implemented. Asking the user a question we can't answer would be a
+	// UX wart, so the prompt is gated off entirely. PromptSmokeTest stays on
+	// the Prompter interface for the eventual wiring.
+	_ = opts.SkipSmokeTest
 
 	fmt.Fprintln(os.Stderr, "agent-gate init: complete")
 	return nil
@@ -158,7 +157,13 @@ func dedupSort(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, s := range in {
 		s = strings.ToLower(strings.TrimSpace(s))
-		if s == "" {
+		if !isPlainHostname(s) {
+			// Silently drop non-plain values rather than corrupt allowlist.txt.
+			// agentdetect already normalizes via url.Parse + idna; CLI flag values
+			// are the only path that can carry a scheme/port/slash by accident.
+			if s != "" {
+				fmt.Fprintf(os.Stderr, "init: ignoring %q (not a plain hostname)\n", s)
+			}
 			continue
 		}
 		if _, ok := seen[s]; ok {
@@ -169,6 +174,20 @@ func dedupSort(in []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// isPlainHostname mirrors internal/allowlist's plain-host check.
+func isPlainHostname(s string) bool {
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "://") || strings.Contains(s, "/") || strings.ContainsRune(s, ':') {
+		return false
+	}
+	if strings.ContainsAny(s, " \t#") {
+		return false
+	}
+	return true
 }
 
 func appendAllowlist(path string, hosts []string) error {
@@ -267,8 +286,4 @@ disable = []
 		cfg.Storage.DataDir, cfg.Storage.Rotate, cfg.Storage.GzipAfter,
 		cfg.Allowlist.Enforce)
 	return []byte(out), nil
-}
-
-func runSmokeTest() {
-	fmt.Fprintln(os.Stderr, "smoke test: skipped (deferred to follow-up integration)")
 }
