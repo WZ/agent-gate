@@ -170,3 +170,63 @@ func jsonlLineForEvent(t *testing.T, ev types.StoredEvent) []byte {
 	require.NoError(t, err)
 	return append(b, '\n')
 }
+
+func TestMaybeReindexTriggersWhenTableIsBehind(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	// Append two events with PII.
+	for _, id := range []string{"01A", "01B"} {
+		require.NoError(t, s.Append(types.StoredEvent{
+			ParsedEvent: types.ParsedEvent{
+				RawFlow: types.RawFlow{
+					ID:         id,
+					URL:        "https://api.example.com/x",
+					Method:     "POST",
+					ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+					ReqBody:    []byte(`{"email":"a@b.co"}`),
+				},
+				Kind: "generic",
+			},
+		}))
+	}
+	// Wipe event_pii to simulate a freshly-upgraded DB.
+	_, err = s.Index().db.Exec(`DELETE FROM event_pii`)
+	require.NoError(t, err)
+
+	ran, err := s.MaybeReindexPII(context.Background())
+	require.NoError(t, err)
+	assert.True(t, ran, "MaybeReindexPII should fire when event_pii is behind")
+
+	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	var n int
+	require.NoError(t, row.Scan(&n))
+	assert.Equal(t, 2, n)
+}
+
+func TestMaybeReindexSkipsWhenCaughtUp(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	require.NoError(t, s.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01CAUGHT",
+				URL:        "https://api.example.com/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"email":"a@b.co"}`),
+			},
+			Kind: "generic",
+		},
+	}))
+
+	// event_pii already has the row from Append.
+	ran, err := s.MaybeReindexPII(context.Background())
+	require.NoError(t, err)
+	assert.False(t, ran, "no work to do; should skip")
+}

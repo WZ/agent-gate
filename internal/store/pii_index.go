@@ -82,6 +82,25 @@ func (s *Store) ReindexPII(ctx context.Context) error {
 	return nil
 }
 
+// MaybeReindexPII compares the count of distinct event_ids in event_pii
+// against the events table. If events has more (i.e., schema upgrade or
+// hand-deletion left the PII index behind), it runs ReindexPII and returns
+// (true, nil). Otherwise returns (false, nil) without scanning bodies.
+func (s *Store) MaybeReindexPII(ctx context.Context) (bool, error) {
+	var eventCount int
+	if err := s.idx.db.QueryRow(`SELECT count(*) FROM events`).Scan(&eventCount); err != nil {
+		return false, fmt.Errorf("count events: %w", err)
+	}
+	var indexedCount int
+	if err := s.idx.db.QueryRow(`SELECT count(DISTINCT event_id) FROM event_pii`).Scan(&indexedCount); err != nil {
+		return false, fmt.Errorf("count event_pii: %w", err)
+	}
+	if eventCount <= indexedCount {
+		return false, nil
+	}
+	return true, s.ReindexPII(ctx)
+}
+
 func (s *Store) loadStoredEvent(id string) (types.StoredEvent, error) {
 	r, err := s.Body(id)
 	if err != nil {
