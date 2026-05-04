@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"agent-gate/internal/pii"
+	"agent-gate/internal/store"
 )
 
 // formatBody applies content-aware pretty-printing to a captured request or
@@ -354,6 +355,74 @@ func HasSensitivePII(rows []PIICount) bool {
 		}
 	}
 	return false
+}
+
+// loadPIIChipsForEvents reads the event_pii table for a batch of event ids
+// and returns a per-event ordered chip list, summing across req+resp sides.
+// Tier is derived from the static piiTierByCode map.
+func loadPIIChipsForEvents(idx *store.Index, ids []string) (map[string][]PIICount, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := `SELECT event_id, code, sum(count) FROM event_pii ` +
+		`WHERE event_id IN (` + strings.Join(placeholders, ",") + `) ` +
+		`AND count > 0 GROUP BY event_id, code`
+	rows, err := idx.Db().Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	per := map[string]map[string]int{}
+	for rows.Next() {
+		var (
+			eventID, code string
+			n             int
+		)
+		if err := rows.Scan(&eventID, &code, &n); err != nil {
+			return nil, err
+		}
+		if per[eventID] == nil {
+			per[eventID] = map[string]int{}
+		}
+		per[eventID][code] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make(map[string][]PIICount, len(per))
+	for id, codeCounts := range per {
+		chips := make([]PIICount, 0, len(codeCounts))
+		for code, count := range codeCounts {
+			label := piiLabels[code]
+			if label == "" {
+				label = code
+			}
+			tier := piiTierByCode(code)
+			chips = append(chips, PIICount{Code: code, Label: label, Tier: tier, Count: count})
+		}
+		sort.Slice(chips, func(i, j int) bool {
+			if chips[i].Tier != chips[j].Tier {
+				return chips[i].Tier == "sensitive"
+			}
+			return chips[i].Code < chips[j].Code
+		})
+		out[id] = chips
+	}
+	return out, nil
+}
+
+func piiTierByCode(code string) string {
+	switch code {
+	case "ssn", "credit_card", "dob":
+		return "sensitive"
+	}
+	return "identifying"
 }
 
 // emitStringWithPII writes a JSON string token (including surrounding

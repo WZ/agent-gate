@@ -1,0 +1,111 @@
+{{ define "explore" }}
+<section class="explore-page">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Audit</p>
+      <h2>Explore</h2>
+    </div>
+    {{ if .LatestEvent }}
+      <p class="timestamp">latest event {{ .LatestEvent }}</p>
+    {{ else }}
+      <p class="timestamp">no events captured yet</p>
+    {{ end }}
+  </div>
+
+  <section class="filter-bar" aria-label="Filters">
+    <form class="filter-form" method="get" action="/explore">
+      <!-- Hidden inputs preserve sibling filter state when this form
+           is submitted (the search bar lives in the same form, Task 12). -->
+      <input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">
+      <input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">
+      <input type="hidden" name="preset" value="{{ .Preset }}">
+      <div class="explore-search">
+        <input type="search" name="q" placeholder="Search bodies, URLs, hosts" value="{{ .Q }}" autocomplete="off" spellcheck="false">
+        <button type="submit">Search</button>
+      </div>
+      <div class="filter-presets" aria-label="Time range">
+        {{ range presetOptions }}
+          <a class="filter-chip filter-preset{{ if eq $.Preset .Value }} active{{ end }}"
+             href="/explore?{{ filterURL $ "preset" .Value }}">{{ .Label }}</a>
+        {{ end }}
+      </div>
+      <div class="filter-chips" aria-label="PII kind">
+        {{ range piiKindOptions }}
+          <a class="filter-chip pii-chip-{{ .Tier }}{{ if hasKind $.ActiveKinds .Code }} active{{ end }}"
+             href="/explore?{{ filterURL $ "kinds" .Code }}">{{ .Label }}</a>
+        {{ end }}
+      </div>
+      {{ if .HostOptions }}
+        <div class="filter-hosts" aria-label="Host">
+          {{ range .HostOptions }}
+            <a class="filter-chip filter-host{{ if hasKind $.ActiveHosts .Name }} active{{ end }}"
+               href="/explore?{{ filterURL $ "host" .Name }}">
+              {{ .Name }} <span class="filter-chip-count">{{ .Count }}</span>
+            </a>
+          {{ end }}
+        </div>
+      {{ end }}
+    </form>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">Captured traffic</p>
+        <h3>{{ .TotalCount }} events</h3>
+      </div>
+    </div>
+
+    {{ if .Rows }}
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Method</th>
+            <th>Host</th>
+            <th>Path</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .Rows }}
+            <tr>
+              <td class="mono"><a href="/events/{{ .ID }}">{{ .StartedAt.Format "15:04:05" }}</a></td>
+              <td><span class="method">{{ .Method }}</span></td>
+              <td>{{ .Host }}</td>
+              <td class="mono path">{{ .Path }}</td>
+              <td>{{ .Status }}</td>
+            </tr>
+            {{ if .PIICounts }}
+              <tr class="pii-row"><td colspan="5">
+                {{ range .PIICounts }}<span class="pii-chip pii-chip-{{ .Tier }}">{{ .Count }} {{ .Label }}</span>{{ end }}
+              </td></tr>
+            {{ end }}
+            {{ if .Snippet }}
+              <tr class="snippet-row"><td colspan="5" class="snippet">{{ .Snippet }}</td></tr>
+            {{ end }}
+          {{ end }}
+        </tbody>
+      </table>
+      {{ if or (gt .Page 1) .HasNextPage }}
+        <nav class="pagination" aria-label="Pages">
+          {{ if gt .Page 1 }}
+            <a class="pagination-link" href="/explore?{{ filterURL . "page" (sub .Page 1) }}">← Prev</a>
+          {{ end }}
+          <span class="pagination-current">Page {{ .Page }}</span>
+          {{ if .HasNextPage }}
+            <a class="pagination-link" href="/explore?{{ filterURL . "page" (add .Page 1) }}">Next →</a>
+          {{ end }}
+        </nav>
+      {{ end }}
+    {{ else }}
+      <div class="empty-state">
+        <p>No events match these filters.</p>
+        {{ if or .Q .ActiveKinds .ActiveHosts (ne .Preset "24h") }}
+          <a class="empty-state-reset" href="/explore">Reset filters</a>
+        {{ end }}
+      </div>
+    {{ end }}
+  </section>
+</section>
+{{ end }}

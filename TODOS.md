@@ -71,6 +71,12 @@ feedback (no Windows machine in our usual loop, slow CI iteration).
 
 ## Completed
 
+- **Plan B (explore-page)** — global `/explore` page + capture-time PII indexing.
+  Filter chips (PII kind / time / host), free-text body+url+host search with
+  snippet highlighting, pagination, per-row PII chip strip. New
+  `agent-gate reindex` CLI command + first-launch auto-reindex on the
+  dashboard subcommand. Plan A (PII coverage expansion) shipped as
+  `v0.3.0-pii-coverage`.
 - **Plan 6** — `v0.6.0-init-umbrella` (PR #6, merged 2026-05-04). One-command
   onboarding: `agent-gate init` mints CA + detects agents (claude/codex/aider/
   opencode via PATH and env vars with strict IDN homograph rejection) +

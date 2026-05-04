@@ -14,10 +14,14 @@
 </head>
 <body>
   <header class="shell-header">
-    <div>
+    <div class="shell-brand">
       <p class="eyebrow">Local traffic audit</p>
       <h1>agent-gate</h1>
     </div>
+    <nav class="top-nav" aria-label="Primary">
+      <a href="/" class="top-nav-link{{ if eq .ActiveRoute "operations" }} active{{ end }}">Operations</a>
+      <a href="/explore" class="top-nav-link{{ if eq .ActiveRoute "explore" }} active{{ end }}">Explore</a>
+    </nav>
     <div class="live-pill"><span aria-hidden="true"></span> capture live</div>
   </header>
   <main class="shell-main">
