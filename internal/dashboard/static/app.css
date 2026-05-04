@@ -1219,3 +1219,6 @@ mark.search-hit-current {
   border-color: hsl(var(--destructive) / 0.45);
   color: hsl(var(--destructive));
 }
+
+.filter-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.filter-preset { letter-spacing: 0.04em; }

@@ -50,8 +50,14 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 		}
 		q := req.URL.Query()
 		kinds := splitCSV(q.Get("kinds"))
+		preset := q.Get("preset")
+		if preset == "" {
+			preset = "24h"
+		}
+		since, until := presetWindow(preset, time.Now())
 
-		rows, err := opts.Store.Index().Query(store.QueryFilter{Limit: 500})
+		filter := store.QueryFilter{Limit: 500, Since: since, Until: until}
+		rows, err := opts.Store.Index().Query(filter)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -74,6 +80,7 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 
 		view := exploreView{
 			ActiveKinds: kinds,
+			Preset:      preset,
 			Rows:        make([]exploreRow, 0, len(rows)),
 		}
 		for _, ix := range rows {
@@ -92,6 +99,39 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 			view.LatestEvent = view.Rows[0].StartedAt.Format("2006-01-02 15:04:05")
 		}
 		r.Render(w, req, "explore", view)
+	}
+}
+
+// presetWindow turns one of {1h, 24h, 7d, all} into a (since, until) window
+// relative to now. Unknown or empty preset falls back to "24h".
+func presetWindow(preset string, now time.Time) (since, until time.Time) {
+	until = now
+	switch preset {
+	case "1h":
+		since = now.Add(-1 * time.Hour)
+	case "24h", "":
+		since = now.Add(-24 * time.Hour)
+	case "7d":
+		since = now.Add(-7 * 24 * time.Hour)
+	case "all":
+		// since stays zero → no lower bound.
+	default:
+		since = now.Add(-24 * time.Hour)
+	}
+	return since, until
+}
+
+// presetOption is one entry in the time-preset chip strip.
+type presetOption struct {
+	Value, Label string
+}
+
+func presetOptions() []presetOption {
+	return []presetOption{
+		{"1h", "Last hour"},
+		{"24h", "Last 24h"},
+		{"7d", "Last 7 days"},
+		{"all", "All time"},
 	}
 }
 

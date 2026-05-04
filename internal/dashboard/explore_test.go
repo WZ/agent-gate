@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,4 +50,22 @@ func TestExploreFiltersByKind(t *testing.T) {
 	assert.NotContains(t, body, "01KIND_E", "email-only event should be filtered out")
 	assert.Contains(t, body, "01KIND_P")
 	assert.NotContains(t, body, "01KIND_PLAIN")
+}
+
+func TestExploreFiltersByTimeRange(t *testing.T) {
+	now := time.Now()
+	srv := httptest.NewServer(testServer(t,
+		seedEventAt("01OLD", "https://example.com/", `{"x":1}`,
+			now.Add(-48*time.Hour)),
+		seedEventAt("01RECENT", "https://example.com/", `{"x":1}`,
+			now.Add(-30*time.Minute)),
+	))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?preset=1h")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+	assert.Contains(t, body, "01RECENT")
+	assert.NotContains(t, body, "01OLD")
 }

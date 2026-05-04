@@ -19,6 +19,12 @@
       <input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">
       <input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">
       <input type="hidden" name="preset" value="{{ .Preset }}">
+      <div class="filter-presets" aria-label="Time range">
+        {{ range presetOptions }}
+          <a class="filter-chip filter-preset{{ if eq $.Preset .Value }} active{{ end }}"
+             href="/explore?{{ filterURL $ "preset" .Value }}">{{ .Label }}</a>
+        {{ end }}
+      </div>
       <div class="filter-chips" aria-label="PII kind">
         {{ range piiKindOptions }}
           <a class="filter-chip pii-chip-{{ .Tier }}{{ if hasKind $.ActiveKinds .Code }} active{{ end }}"

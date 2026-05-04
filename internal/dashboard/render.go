@@ -19,6 +19,7 @@ func newRenderer() *renderer {
 		"piiKindOptions":  piiKindOptions,
 		"hasKind":         hasKind,
 		"filterURL":       filterURL,
+		"presetOptions":   presetOptions,
 		"join":            strings.Join,
 	}
 	full := template.Must(template.New("base").Funcs(funcs).ParseFS(tplFS, "*.html"))
