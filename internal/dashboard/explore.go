@@ -3,6 +3,7 @@ package dashboard
 import (
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -50,6 +51,7 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 		}
 		q := req.URL.Query()
 		kinds := splitCSV(q.Get("kinds"))
+		hosts := splitCSV(q.Get("host"))
 		preset := q.Get("preset")
 		if preset == "" {
 			preset = "24h"
@@ -78,10 +80,35 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 			rows = filtered
 		}
 
+		// Compute host options from the candidate set BEFORE host filter applies,
+		// so the picker shows everything in the time window — not just the
+		// currently-selected host.
+		hostCounts := map[string]int{}
+		for _, ix := range rows {
+			hostCounts[normalizeHost(ix.Host)]++
+		}
+
+		// Now apply the host filter.
+		if len(hosts) > 0 {
+			allowed := map[string]bool{}
+			for _, h := range hosts {
+				allowed[h] = true
+			}
+			filtered := rows[:0]
+			for _, ix := range rows {
+				if allowed[normalizeHost(ix.Host)] {
+					filtered = append(filtered, ix)
+				}
+			}
+			rows = filtered
+		}
+
 		view := exploreView{
 			ActiveKinds: kinds,
+			ActiveHosts: hosts,
 			Preset:      preset,
 			Rows:        make([]exploreRow, 0, len(rows)),
+			HostOptions: sortedHostOptions(hostCounts, 20),
 		}
 		for _, ix := range rows {
 			view.Rows = append(view.Rows, exploreRow{
@@ -210,6 +237,23 @@ func hasKind(active []string, code string) bool {
 		}
 	}
 	return false
+}
+
+func sortedHostOptions(counts map[string]int, max int) []hostOption {
+	out := make([]hostOption, 0, len(counts))
+	for h, n := range counts {
+		out = append(out, hostOption{Name: h, Count: n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Name < out[j].Name
+	})
+	if len(out) > max {
+		out = out[:max]
+	}
+	return out
 }
 
 // toggleStringInList flips a value in or out of active and returns the

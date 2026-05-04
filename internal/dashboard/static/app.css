@@ -1222,3 +1222,12 @@ mark.search-hit-current {
 
 .filter-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .filter-preset { letter-spacing: 0.04em; }
+.filter-hosts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.filter-chip-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-left: 0.35rem;
+  color: hsl(var(--muted-foreground));
+}
+.filter-chip.active .filter-chip-count { color: inherit; opacity: 0.9; }

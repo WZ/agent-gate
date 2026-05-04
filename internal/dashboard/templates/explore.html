@@ -31,6 +31,16 @@
              href="/explore?{{ filterURL $ "kinds" .Code }}">{{ .Label }}</a>
         {{ end }}
       </div>
+      {{ if .HostOptions }}
+        <div class="filter-hosts" aria-label="Host">
+          {{ range .HostOptions }}
+            <a class="filter-chip filter-host{{ if hasKind $.ActiveHosts .Name }} active{{ end }}"
+               href="/explore?{{ filterURL $ "host" .Name }}">
+              {{ .Name }} <span class="filter-chip-count">{{ .Count }}</span>
+            </a>
+          {{ end }}
+        </div>
+      {{ end }}
     </form>
   </section>
 
