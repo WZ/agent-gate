@@ -46,8 +46,10 @@ against the store.
   and `isLoopback` in `internal/dashboard/server.go`. Never relax this.
 - **File modes.** CA private key + JSONL + dismissals.json must be 0600;
   config + data dirs must be 0700. The CA package refuses to start if
-  `key.pem` is wider than 0600. Windows tests skip this assertion (Windows
-  doesn't honor unix file modes), every other platform enforces it.
+  `key.pem` is wider than 0600 — gated on `runtime.GOOS != "windows"` since
+  Windows ignores unix mode bits. macOS + Linux enforce; Windows skips both
+  in the production check (`internal/ca/ca.go`) and the unit test
+  (`internal/ca/ca_test.go`).
 - **No secrets in commits.** `git add` files by name, never `git add -A` or
   `git add .`. The user's data dir contains real captured prompts and
   responses; an accidental `add -A` would commit them.
@@ -69,9 +71,13 @@ agent-gate has three file-backed host lists. They live in
 
 | File | Effect | Mutated via |
 |---|---|---|
-| `allowlist.txt` | host is OK; suppresses `host_not_allowlisted` flag, lets through under `--enforce-allowlist` | dashboard **Trust this host** button → `POST /api/trust` |
+| `allowlist.txt` | host is OK; suppresses `host_not_allowlisted` flag, lets through under `--enforce-allowlist` | dashboard **Trust** / **Untrust** buttons → `POST /api/trust`, `POST /api/untrust`; or `agent-gate init --allow-host HOST` |
 | `denylist.txt` | proxy returns synthetic 403 to agent; never contacts upstream | dashboard **Block this host** button → `POST /api/block` |
 | `passthrough.txt` | proxy tunnels TCP raw, no TLS interception (for cert-pinned upstreams like `mcp-proxy.anthropic.com`) | dashboard **Passthrough (no MITM)** button → `POST /api/passthrough` |
+
+The runtime never mutates these files. Only `init`, the dashboard, or a
+human editor with `$EDITOR` may write to them. (See Plan 6's auto-seed
+removal in `internal/runtime/runtime.go`.)
 
 **Resolution order in `mitmConnect` + `HostGuard`:**
 
@@ -88,18 +94,22 @@ Add new list semantics here, not as ad-hoc proxy logic.
 
 ```
 cmd/agent-gate/         CLI entry; one file per subcommand
-internal/runtime/       Shared startup (Common): config, CA, store, lists, engine
+internal/runtime/       Shared startup (Common); paths.go (XDG-aware); lockfile.go
 internal/launcher/      Cross-platform supervisor + per-OS jail (build tags)
 internal/proxy/         goproxy-based TLS-intercepting forward proxy
 internal/parser/        RawFlow → ParsedEvent (Anthropic-aware + generic)
 internal/policy/        Rule engine + 8 built-in rules
 internal/store/         JSONL writer + SQLite index + Body() reader
 internal/dashboard/     HTTP server, HTMX templates, embedded assets
-internal/{allowlist,denylist,passthrough}/    file-backed host lists
+internal/{allowlist,denylist,passthrough}/    file-backed host lists (Add + Remove)
 internal/dismissals/    flag dismissals (JSON file)
 internal/redactor/      secret-mask render layer
+internal/pii/           PII detection (used by dashboard for body coloring)
 internal/secrets/       single regex set (shared by policy + redactor)
-internal/ca/            local CA mint + leaf signing
+internal/ca/            local CA mint + leaf signing; truststore.go (cross-platform install)
+internal/agentdetect/   detect installed agents via $PATH + env vars (IDN-safe)
+internal/initwizard/    `agent-gate init` orchestrator + huh-backed Prompter
+internal/doctor/        `agent-gate doctor` checks + repair + output (human + JSON)
 internal/idgen/         ULID
 internal/types/         shared structs (RawFlow, ParsedEvent, StoredEvent, Flag)
 internal/e2e/           end-to-end tests that build the binary
@@ -112,15 +122,23 @@ Cross-cutting code is unsuffixed. The `_other.go` files cover
 ## CLI surface (current)
 
 ```
-agent-gate init                  bootstrap config + CA + dirs
-agent-gate cert install          add the CA to system trust store (macOS only)
-agent-gate run -- <cmd>          launch with airtight network capture
-agent-gate proxy                 standalone proxy (foreground)
-agent-gate dashboard             standalone dashboard (foreground)
-agent-gate stop                  SIGTERM a stuck `agent-gate run`
-agent-gate tail                  live-follow events
-agent-gate uninstall             (Windows) remove WFP provider/sublayer
-agent-gate version
+agent-gate init [flags]              one-command bootstrap (CA + agent detection + truststore install)
+                                       flags: --non-interactive, --install-cert=auto|true|false,
+                                       --skip-cert-install, --regenerate-ca, --allow-host HOST
+                                       (repeatable), --force, --dry-run, --print-config, --config PATH
+agent-gate doctor [flags]            validate the install; suggest or apply repairs
+                                       flags: --auto-repair=safe|aggressive, --json, --config PATH
+agent-gate run -- <cmd>              launch with airtight network capture
+agent-gate proxy                     standalone proxy (foreground)
+agent-gate dashboard                 standalone dashboard (foreground)
+agent-gate tail                      live-follow events
+agent-gate stop                      SIGTERM a stuck `agent-gate run`
+agent-gate cert install              install local CA into all trust stores (Keychain / ca-cert / wincrypt / Firefox NSS)
+agent-gate cert uninstall            remove local CA from all trust stores
+agent-gate cert path                 print the CA cert path
+agent-gate uninstall                 (Windows) remove WFP provider/sublayer
+agent-gate version                   print version, commit, build date
+agent-gate help allowlist|denylist|passthrough     explain the three-list policy model
 ```
 
 When adding a subcommand, register it in `cmd/agent-gate/main.go`. Keep all

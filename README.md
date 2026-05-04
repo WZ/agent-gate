@@ -10,12 +10,32 @@ launcher (`agent-gate run --airtight`) ships in Plan 3.
 
 ## What you get
 
-- `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888`. Every captured event
-  is run through the policy engine before being persisted.
+**Getting started:**
+- `agent-gate init` — one-command bootstrap: writes config, mints the local CA,
+  detects installed agents (claude / codex / aider / opencode) and seeds their
+  upstream hosts into your allowlist, installs the CA into your system trust
+  stores (Keychain on macOS, ca-certificates + Firefox NSS on Linux, wincrypt
+  on Windows).
+- `agent-gate doctor` — validates every part of the install (CA files, ports,
+  lockfile, host-list permissions, agents detected, CA trusted across all
+  stores). `--auto-repair=safe|aggressive` to apply fixes.
+
+**Daily use:**
+- `agent-gate run -- <cmd>` — launch a command with airtight network capture
+  (per-OS network jail forces all egress through the proxy).
 - `agent-gate dashboard` — local web app on `127.0.0.1:7878` for review.
-- `agent-gate cert install` — installs the local root CA on macOS.
+- `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888` (foreground; usually
+  spawned by `agent-gate run`).
 - `agent-gate tail` — polling tail of captured events.
-- `agent-gate cert path` / `version`.
+- `agent-gate stop` — SIGTERM a stuck `agent-gate run`.
+
+**Maintenance:**
+- `agent-gate cert install` / `cert uninstall` / `cert path` — manage the local
+  CA in your trust stores (macOS Keychain, Linux ca-certificates, Windows
+  wincrypt, Firefox NSS).
+- `agent-gate help allowlist|denylist|passthrough` — explain the three-list
+  policy model.
+- `agent-gate version`.
 
 ## Install
 
