@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -112,4 +114,59 @@ func TestIndexPIIIsIdempotent(t *testing.T) {
 	var n int
 	require.NoError(t, row.Scan(&n))
 	assert.Equal(t, 1, n, "second indexPII should REPLACE, not duplicate")
+}
+
+func TestReindexPIIRebuildsFromJSONL(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	for _, body := range []string{
+		`{"email":"a@b.co"}`,
+		`{"phone":"(415) 555-1234"}`,
+		`{"plain":"text"}`,
+	} {
+		ev := types.StoredEvent{
+			ParsedEvent: types.ParsedEvent{
+				RawFlow: types.RawFlow{
+					ID:         body, // unique per test row
+					URL:        "https://api.example.com/x",
+					Method:     "POST",
+					ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+					ReqBody:    []byte(body),
+				},
+				Kind: "generic",
+			},
+		}
+		require.NoError(t, s.Append(ev))
+	}
+
+	// Wipe the table to simulate a corrupted index.
+	_, err = s.Index().db.Exec(`DELETE FROM event_pii`)
+	require.NoError(t, err)
+
+	// Sanity check: the table is empty.
+	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	var before int
+	require.NoError(t, row.Scan(&before))
+	require.Equal(t, 0, before, "precondition: event_pii is empty")
+
+	// Reindex.
+	require.NoError(t, s.ReindexPII(context.Background()))
+
+	// We should now see exactly the same counts indexPII would have written.
+	row = s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	var after int
+	require.NoError(t, row.Scan(&after))
+	assert.Equal(t, 2, after, "two events have PII (email + phone); third has none")
+}
+
+// jsonlLineForEvent is a tiny helper to round-trip a StoredEvent through JSON
+// in case future tests need to assemble JSONL state by hand.
+func jsonlLineForEvent(t *testing.T, ev types.StoredEvent) []byte {
+	t.Helper()
+	b, err := json.Marshal(ev)
+	require.NoError(t, err)
+	return append(b, '\n')
 }
