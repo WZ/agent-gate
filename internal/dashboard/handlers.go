@@ -532,3 +532,23 @@ func handlePassthrough(opts Options) http.HandlerFunc {
 		w.Write([]byte(`<span class="passthrough-banner">passthrough ` + html.EscapeString(host) + ` (restart agent-gate run for it to take effect)</span>`))
 	}
 }
+
+func handleUntrust(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != "POST" {
+			http.Error(w, "method not allowed", 405)
+			return
+		}
+		if err := req.ParseForm(); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		host := req.FormValue("host")
+		if err := opts.Allowlist.Remove(host); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<span class="warn">untrusted ` + html.EscapeString(host) + `</span>`))
+	}
+}

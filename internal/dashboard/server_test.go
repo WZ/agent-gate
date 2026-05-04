@@ -410,6 +410,59 @@ func TestClearRequiresPOST(t *testing.T) {
 	assert.Equal(t, 405, resp.StatusCode)
 }
 
+func TestUntrustHandler_Removes(t *testing.T) {
+	opts := freshOpts(t)
+	if err := opts.Allowlist.Add("api.example.com"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	form := url.Values{}
+	form.Set("host", "api.example.com")
+	resp, err := http.PostForm(srv.URL+"/api/untrust", form)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200", resp.StatusCode)
+	}
+	if opts.Allowlist.Contains("api.example.com") {
+		t.Fatal("expected host to be removed from allowlist")
+	}
+}
+
+func TestUntrustHandler_RejectsGet(t *testing.T) {
+	opts := freshOpts(t)
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/api/untrust")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 405 {
+		t.Fatalf("status: got %d, want 405", resp.StatusCode)
+	}
+}
+
+func TestUntrustHandler_Idempotent(t *testing.T) {
+	opts := freshOpts(t)
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	form := url.Values{}
+	form.Set("host", "never.added.example")
+	resp, err := http.PostForm(srv.URL+"/api/untrust", form)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("status: got %d, want 200 (idempotent)", resp.StatusCode)
+	}
+}
+
 func TestSessionsListFilteredByHost(t *testing.T) {
 	opts := freshOpts(t)
 	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
@@ -431,4 +484,46 @@ func TestSessionsListFilteredByHost(t *testing.T) {
 	body := string(bs)
 	assert.Contains(t, body, "S2")
 	assert.NotContains(t, body, "S1")
+}
+
+func TestEventDetail_RendersUntrustForm_WhenHostTrusted(t *testing.T) {
+	opts := freshOpts(t)
+	if err := opts.Allowlist.Add("api.example.com"); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID: "evt-trusted", Method: "GET", URL: "https://api.example.com/v1/x",
+			RespStatus: 200, StartedAt: time.Now(),
+		},
+		SessionID: "sess-x",
+	}}))
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/events/evt-trusted")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bs := string(body)
+	assert.Contains(t, bs, `/api/untrust`, "expected event detail to include /api/untrust action when host trusted")
+	assert.Contains(t, bs, "Untrust host")
+	assert.Contains(t, bs, "already trusted")
+}
+
+func TestEventDetail_OmitsUntrustForm_WhenHostNotTrusted(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID: "evt-untrusted", Method: "GET", URL: "https://untrusted.example.com/v1/y",
+			RespStatus: 200, StartedAt: time.Now(),
+		},
+		SessionID: "sess-y",
+	}}))
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+	resp, err := http.Get(srv.URL + "/events/evt-untrusted")
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	assert.NotContains(t, string(body), `/api/untrust`, "expected /api/untrust action only when host is trusted")
 }

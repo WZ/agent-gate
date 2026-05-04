@@ -41,3 +41,33 @@ func TestExpandsTilde(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	assert.Equal(t, filepath.Join(home, "foo"), c.Storage.DataDir)
 }
+
+func TestLoadFromFile_IgnoresDeprecatedAllowlistFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	legacy := []byte(`
+[capture]
+default_mode = "airtight"
+
+[ports]
+proxy = 8888
+dashboard = 7878
+
+[storage]
+data_dir = "~/.local/share/agent-gate"
+
+[allowlist]
+file = "/tmp/custom-allowlist.txt"
+enforce = true
+`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	cfg, err := LoadFromFile(path)
+	if err != nil {
+		t.Fatalf("LoadFromFile should tolerate legacy field, got: %v", err)
+	}
+	if cfg.Allowlist.Enforce != true {
+		t.Fatalf("expected Enforce=true, got %v", cfg.Allowlist.Enforce)
+	}
+}
