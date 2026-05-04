@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -133,4 +134,36 @@ func TestExploreCombinesAllFilters(t *testing.T) {
 	// PII chip should render alongside the row.
 	assert.Contains(t, body, `pii-chip-identifying`)
 	assert.Contains(t, body, `>1 Email<`)
+}
+
+func TestExplorePagination(t *testing.T) {
+	// Seed 75 events; default limit is 50. Page 1 shows 50; page 2 shows 25.
+	now := time.Now()
+	seeds := make([]seed, 0, 75)
+	for i := 0; i < 75; i++ {
+		seeds = append(seeds, seedEventAt(
+			fmt.Sprintf("01PG%02d", i),
+			"https://api.example.com/x",
+			`{"x":1}`,
+			now.Add(-time.Duration(i)*time.Minute),
+		))
+	}
+	srv := httptest.NewServer(testServer(t, seeds...))
+	defer srv.Close()
+
+	resPg1, err := http.Get(srv.URL + "/explore?preset=all&page=1")
+	require.NoError(t, err)
+	defer resPg1.Body.Close()
+	pg1 := readAll(t, resPg1.Body)
+	assert.Contains(t, pg1, "01PG00")
+	assert.Contains(t, pg1, "01PG49")
+	assert.NotContains(t, pg1, "01PG50")
+
+	resPg2, err := http.Get(srv.URL + "/explore?preset=all&page=2")
+	require.NoError(t, err)
+	defer resPg2.Body.Close()
+	pg2 := readAll(t, resPg2.Body)
+	assert.NotContains(t, pg2, "01PG00")
+	assert.Contains(t, pg2, "01PG50")
+	assert.Contains(t, pg2, "01PG74")
 }

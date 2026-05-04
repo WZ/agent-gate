@@ -110,6 +110,7 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 		}
 
 		qStr := strings.TrimSpace(q.Get("q"))
+		page := parsePageParam(q.Get("page"))
 		var snippets map[string]template.HTML
 		if qStr != "" {
 			qLower := strings.ToLower(qStr)
@@ -126,6 +127,17 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 			rows = searched
 		}
 
+		totalCount := len(rows)
+		start := (page - 1) * exploreDefaultPageSize
+		end := start + exploreDefaultPageSize
+		if start > len(rows) {
+			start = len(rows)
+		}
+		if end > len(rows) {
+			end = len(rows)
+		}
+		rows = rows[start:end]
+
 		view := exploreView{
 			ActiveKinds: kinds,
 			ActiveHosts: hosts,
@@ -133,6 +145,9 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 			Q:           qStr,
 			Rows:        make([]exploreRow, 0, len(rows)),
 			HostOptions: sortedHostOptions(hostCounts, 20),
+			Page:        page,
+			TotalCount:  totalCount,
+			HasNextPage: end < totalCount,
 		}
 		for _, ix := range rows {
 			row := exploreRow{
@@ -159,12 +174,24 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 				view.Rows[i].PIICounts = chipsByID[view.Rows[i].ID]
 			}
 		}
-		view.TotalCount = len(view.Rows)
-		if view.TotalCount > 0 {
+		if len(view.Rows) > 0 {
 			view.LatestEvent = view.Rows[0].StartedAt.Format("2006-01-02 15:04:05")
 		}
 		r.Render(w, req, "explore", view)
 	}
+}
+
+const exploreDefaultPageSize = 50
+
+func parsePageParam(s string) int {
+	if s == "" {
+		return 1
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 {
+		return 1
+	}
+	return n
 }
 
 // presetWindow turns one of {1h, 24h, 7d, all} into a (since, until) window

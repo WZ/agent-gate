@@ -87,6 +87,17 @@
           {{ end }}
         </tbody>
       </table>
+      {{ if or (gt .Page 1) .HasNextPage }}
+        <nav class="pagination" aria-label="Pages">
+          {{ if gt .Page 1 }}
+            <a class="pagination-link" href="/explore?{{ filterURL . "page" (sub .Page 1) }}">← Prev</a>
+          {{ end }}
+          <span class="pagination-current">Page {{ .Page }}</span>
+          {{ if .HasNextPage }}
+            <a class="pagination-link" href="/explore?{{ filterURL . "page" (add .Page 1) }}">Next →</a>
+          {{ end }}
+        </nav>
+      {{ end }}
     {{ else }}
       <div class="empty-state">No events match these filters.</div>
     {{ end }}
