@@ -45,6 +45,15 @@
           {{ end }}
         </div>
       {{ end }}
+      {{ if .ActiveFlag }}
+        <div class="filter-active" aria-label="Active flag filter">
+          <span class="filter-active-label">Flag:</span>
+          <a class="filter-chip active" href="/explore?{{ filterURL . "flag" "" }}"
+             title="Clear flag filter">
+            {{ .ActiveFlag }} <span class="filter-chip-clear" aria-hidden="true">✕</span>
+          </a>
+        </div>
+      {{ end }}
     </form>
   </section>
 

@@ -76,9 +76,14 @@ type IndexRow struct {
 }
 
 // QueryFilter narrows a Query.
+//
+// FlagCode keeps only events whose flag_codes column contains the given
+// code. Match is exact-item (won't match "host_not_allowlisted" when
+// FlagCode is "host" — see Query for the SQL detail).
 type QueryFilter struct {
 	SessionID string
 	Host      string
+	FlagCode  string
 	Since     time.Time
 	Until     time.Time
 	Limit     int
@@ -173,6 +178,15 @@ func (i *Index) Query(f QueryFilter) ([]IndexRow, error) {
 	if f.Host != "" {
 		conds = append(conds, "host = ?")
 		args = append(args, f.Host)
+	}
+	if f.FlagCode != "" {
+		// flag_codes is a comma-separated list (e.g.
+		// "host_not_allowlisted,parse_error"). Wrap with leading and
+		// trailing commas before LIKE so the match is exact-item, not
+		// substring — otherwise FlagCode="host" would hit
+		// "host_not_allowlisted".
+		conds = append(conds, "(',' || flag_codes || ',') LIKE ?")
+		args = append(args, "%,"+f.FlagCode+",%")
 	}
 	if !f.Since.IsZero() {
 		conds = append(conds, "started_at >= ?")
