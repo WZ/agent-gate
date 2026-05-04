@@ -51,6 +51,7 @@ every request/response to a local JSONL log + SQLite index for later review.`,
 	root.AddCommand(withGroup(stopCmd(), "daily"))
 
 	root.AddCommand(withGroup(certCmd(), "maint"))
+	root.AddCommand(withGroup(reindexCmd(), "maint"))
 	root.AddCommand(withGroup(uninstallCmd(), "maint"))
 	root.AddCommand(withGroup(versionCmd(), "maint"))
 

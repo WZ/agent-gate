@@ -24,6 +24,13 @@ launcher (`agent-gate run --airtight`) ships in Plan 3.
 - `agent-gate run -- <cmd>` — launch a command with airtight network capture
   (per-OS network jail forces all egress through the proxy).
 - `agent-gate dashboard` — local web app on `127.0.0.1:7878` for review.
+
+  Two top-level views: **Operations** (`/`) is the sessions list — "what
+  work did the agent do?" **Explore** (`/explore`) is every captured event
+  in one searchable table — "what data slipped through?" Filter by PII
+  kind (SSN, credit card, email, …), time range, or host; search request
+  bodies, URLs, and hosts for any substring. Both views share the same
+  event detail page.
 - `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888` (foreground; usually
   spawned by `agent-gate run`).
 - `agent-gate tail` — polling tail of captured events.
@@ -147,6 +154,7 @@ Maintenance:
   agent-gate cert install          install the local CA into trust stores
   agent-gate cert uninstall        remove the local CA from trust stores
   agent-gate cert path             print the CA cert path
+  agent-gate reindex               rebuild the PII count index from JSONL
   agent-gate uninstall             (Windows) remove the WFP provider/sublayer
   agent-gate version               print version info
 

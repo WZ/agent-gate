@@ -2,6 +2,7 @@ package store
 
 import (
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,4 +105,96 @@ func TestStoreOpenInitializesPaths(t *testing.T) {
 	require.NoError(t, err)
 	_, err = filepath.Rel(dir, s.IndexPath())
 	require.NoError(t, err)
+}
+
+func TestStoreAppendPopulatesEventPII(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	ev := types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01APPND",
+				URL:        "https://api.example.com/v1/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"email":"alice@example.com"}`),
+			},
+			Kind: "generic",
+		},
+	}
+	require.NoError(t, s.Append(ev))
+
+	row := s.Index().db.QueryRow(
+		`SELECT count FROM event_pii WHERE event_id = ? AND side = 'req' AND code = 'email'`, "01APPND")
+	var n int
+	require.NoError(t, row.Scan(&n))
+	assert.Equal(t, 1, n)
+}
+
+func TestStoreAppendBestEffortOnPIIError(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	// Drop the event_pii table mid-flight to force an error on the next indexPII.
+	_, err = s.Index().db.Exec(`DROP TABLE event_pii`)
+	require.NoError(t, err)
+
+	ev := types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01ERR",
+				URL:        "https://api.example.com/v1/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"email":"alice@example.com"}`),
+			},
+			Kind: "generic",
+		},
+	}
+	// Append must STILL succeed — audit-log completeness wins over PII metadata.
+	require.NoError(t, s.Append(ev))
+
+	// And the event row in the events table must exist.
+	rows, err := s.Index().Query(QueryFilter{Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "01ERR", rows[0].ID)
+}
+
+func TestStoreClearWipesEventPII(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	// Append an event with PII so event_pii has a row.
+	require.NoError(t, s.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01CLR_PII",
+				URL:        "https://api.example.com/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"email":"a@b.co"}`),
+			},
+			Kind: "generic",
+		},
+	}))
+
+	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii WHERE count > 0`)
+	var before int
+	require.NoError(t, row.Scan(&before))
+	require.Equal(t, 1, before, "precondition: event_pii has a positive PII row")
+
+	require.NoError(t, s.Clear())
+
+	row = s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	var after int
+	require.NoError(t, row.Scan(&after))
+	assert.Equal(t, 0, after, "Clear must wipe event_pii so MaybeReindexPII's never-ahead invariant holds")
 }
