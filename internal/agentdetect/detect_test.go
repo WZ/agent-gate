@@ -79,6 +79,9 @@ func TestRun_RejectsIDNHomograph(t *testing.T) {
 		IDNLookup:  idna.Lookup.ToASCII,
 	})
 	for _, a := range got {
+		if a.EnvHost != "" {
+			t.Fatalf("expected EnvHost rejected for Cyrillic homograph, got %q", a.EnvHost)
+		}
 		if containsCyrillic(a.EnvHost) {
 			t.Fatalf("EnvHost contains Cyrillic chars after IDN normalization: %q", a.EnvHost)
 		}
