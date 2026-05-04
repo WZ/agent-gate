@@ -1,8 +1,11 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io"
 
 	"agent-gate/internal/pii"
 	"agent-gate/internal/types"
@@ -46,4 +49,52 @@ func writePIIBucket(tx *sql.Tx, eventID, side string, counts map[string]int) err
 		}
 	}
 	return nil
+}
+
+// ReindexPII walks every event in the index, opens its JSONL slice, decodes
+// the StoredEvent, runs pii.Find on its bodies, and writes counts back into
+// event_pii via INSERT OR REPLACE. Safe to invoke while Append is running
+// concurrently — INSERT OR REPLACE makes per-event updates atomic and the
+// reindex iterates a snapshot of event ids.
+//
+// Cancelling ctx aborts cleanly between events.
+func (s *Store) ReindexPII(ctx context.Context) error {
+	rows, err := s.idx.Query(QueryFilter{Limit: 0})
+	if err != nil {
+		return fmt.Errorf("list events: %w", err)
+	}
+	for _, r := range rows {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		ev, err := s.loadStoredEvent(r.ID)
+		if err != nil {
+			// One unreadable event must not abort the entire reindex.
+			continue
+		}
+		if err := s.indexPII(ev); err != nil {
+			// Same: skip and move on.
+			continue
+		}
+	}
+	return nil
+}
+
+func (s *Store) loadStoredEvent(id string) (types.StoredEvent, error) {
+	r, err := s.Body(id)
+	if err != nil {
+		return types.StoredEvent{}, err
+	}
+	defer r.Close()
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		return types.StoredEvent{}, err
+	}
+	var ev types.StoredEvent
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return types.StoredEvent{}, err
+	}
+	return ev, nil
 }
