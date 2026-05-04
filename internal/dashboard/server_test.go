@@ -186,6 +186,22 @@ func TestSessionDetailListsEvents(t *testing.T) {
 	}
 }
 
+func TestSessionDetailMissingSessionReturnsNotFound(t *testing.T) {
+	srv := httptest.NewServer(NewServer(freshOpts(t)))
+	defer srv.Close()
+
+	for _, path := range []string{"/sessions/missing-session", "/sessions/host:missing.example.com"} {
+		resp, err := http.Get(srv.URL + path)
+		require.NoError(t, err)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode, path)
+		assert.Contains(t, string(body), "Session not found")
+		assert.NotContains(t, string(body), "No events for this session")
+	}
+}
+
 func TestEventDetailDefaultsToRedacted(t *testing.T) {
 	opts := freshOpts(t)
 	body := `{"prompt":"my key sk-ant-` + strings.Repeat("a", 60) + `"}`

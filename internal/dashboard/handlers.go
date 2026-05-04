@@ -306,6 +306,10 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 				Host: normalizeHost(ix.Host), Path: ix.Path, Status: ix.Status, FlagCodes: codes,
 			})
 		}
+		if len(events) == 0 {
+			r.NotFound(w, req, "Session not found", "No session with ID "+sid+" in the store.")
+			return
+		}
 		summary := sessionDetailSummary{EventCount: len(events)}
 		for _, ev := range events {
 			if ev.StartedAt.After(summary.LatestEvent) {
