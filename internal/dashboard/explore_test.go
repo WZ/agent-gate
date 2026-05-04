@@ -105,3 +105,32 @@ func TestExploreSearchBodyMatchesAndSnippets(t *testing.T) {
 	// Surrounding context should be present.
 	assert.Contains(t, body, "contact <mark>alice</mark>@example.com")
 }
+
+func TestExploreCombinesAllFilters(t *testing.T) {
+	now := time.Now()
+	srv := httptest.NewServer(testServer(t,
+		seedEventAt("01ALL_HIT", "https://api.anthropic.com/v1/messages",
+			`{"email":"alice@example.com","prompt":"hello world"}`,
+			now.Add(-30*time.Minute)),
+		seedEventAt("01ALL_OLD", "https://api.anthropic.com/v1/messages",
+			`{"email":"alice@example.com"}`,
+			now.Add(-48*time.Hour)),
+		seedEventAt("01ALL_NOPII", "https://api.anthropic.com/v1/messages",
+			`{"x":"hello world"}`,
+			now.Add(-30*time.Minute)),
+	))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL +
+		"/explore?preset=1h&kinds=email&host=api.anthropic.com&q=hello")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+
+	assert.Contains(t, body, "01ALL_HIT", "matches all four filters")
+	assert.NotContains(t, body, "01ALL_OLD", "outside time window")
+	assert.NotContains(t, body, "01ALL_NOPII", "no email PII in body")
+	// PII chip should render alongside the row.
+	assert.Contains(t, body, `pii-chip-identifying`)
+	assert.Contains(t, body, `>1 Email<`)
+}

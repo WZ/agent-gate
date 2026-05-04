@@ -76,6 +76,11 @@
               <td class="mono path">{{ .Path }}</td>
               <td>{{ .Status }}</td>
             </tr>
+            {{ if .PIICounts }}
+              <tr class="pii-row"><td colspan="5">
+                {{ range .PIICounts }}<span class="pii-chip pii-chip-{{ .Tier }}">{{ .Count }} {{ .Label }}</span>{{ end }}
+              </td></tr>
+            {{ end }}
             {{ if .Snippet }}
               <tr class="snippet-row"><td colspan="5" class="snippet">{{ .Snippet }}</td></tr>
             {{ end }}

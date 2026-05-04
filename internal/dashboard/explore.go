@@ -149,6 +149,16 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 			}
 			view.Rows = append(view.Rows, row)
 		}
+		ids := make([]string, len(view.Rows))
+		for i, r := range view.Rows {
+			ids[i] = r.ID
+		}
+		chipsByID, err := loadPIIChipsForEvents(opts.Store.Index(), ids)
+		if err == nil {
+			for i := range view.Rows {
+				view.Rows[i].PIICounts = chipsByID[view.Rows[i].ID]
+			}
+		}
 		view.TotalCount = len(view.Rows)
 		if view.TotalCount > 0 {
 			view.LatestEvent = view.Rows[0].StartedAt.Format("2006-01-02 15:04:05")
