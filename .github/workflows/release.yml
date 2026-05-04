@@ -1,0 +1,48 @@
+name: release
+
+# Triggered by pushing a vX.Y.Z-<slug> tag. Builds binaries for darwin/linux/windows
+# via goreleaser and uploads them to a GitHub Release.
+#
+# Security notes:
+# - This workflow does NOT consume any user-controlled inputs (issue titles,
+#   PR bodies, commit messages, head_ref, etc.). The only template expansion
+#   is `secrets.GITHUB_TOKEN` which is GitHub-issued and bounded by the
+#   permissions block above.
+# - All actions are pinned by major version; goreleaser is pinned to v2.
+# - `fetch-depth: 0` is required for goreleaser to walk the git history for
+#   the changelog generation.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+
+      - name: Run tests before release
+        run: go test ./...
+
+      - name: Run goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
