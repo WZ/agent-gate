@@ -40,6 +40,9 @@ func TestEnsureReusesExistingCA(t *testing.T) {
 }
 
 func TestEnsureRejectsBadKeyPerms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Ensure() skips the 0600 assertion on Windows (file modes are ignored)")
+	}
 	dir := t.TempDir()
 	_, err := Ensure(dir)
 	require.NoError(t, err)
