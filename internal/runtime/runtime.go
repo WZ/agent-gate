@@ -110,17 +110,33 @@ func (c *Common) Close() error {
 }
 
 // RunPipeline reads RawFlows off `in`, parses, applies policy, and appends to
-// the store. Returns when ctx is cancelled and `in` is closed and drained.
+// the store. Returns when ctx is cancelled (with a best-effort drain of any
+// already-buffered flows) or when `in` is closed and drained.
+//
+// The pipeline must NOT block on channel-close-as-shutdown-signal: in-flight
+// proxy goroutines spawned by goproxy survive past listener close and may
+// still write to `in`. Closing `in` while those writes are pending caused
+// "panic: send on closed channel" on Ctrl-C. Now the caller never closes
+// `in`; it just cancels ctx, the pipeline drains what's buffered, and any
+// stuck producer goroutines are reaped when main returns.
 func RunPipeline(ctx context.Context, c *Common, in <-chan types.RawFlow) {
 	for {
 		select {
 		case <-ctx.Done():
-			// Drain remaining flows before returning so a fast Ctrl-C
-			// doesn't lose in-flight events.
-			for f := range in {
-				c.persist(f)
+			// Best-effort drain of buffered flows. Once ctx is cancelled
+			// the program is on its way out; producers that are still
+			// sending will be reaped by the runtime on main exit.
+			for {
+				select {
+				case f, ok := <-in:
+					if !ok {
+						return
+					}
+					c.persist(f)
+				default:
+					return
+				}
 			}
-			return
 		case f, ok := <-in:
 			if !ok {
 				return

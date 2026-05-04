@@ -98,7 +98,10 @@ func runProxy(configPath, captureMode, addrOverride string, upstreamInsecure boo
 		},
 		Logger: func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 	})
-	close(flowCh)
+	// flowCh is intentionally NOT closed: in-flight goproxy goroutines may
+	// outlive proxy.Run (which returns as soon as the listener closes) and
+	// still write to flowCh. Closing here caused "send on closed channel"
+	// panics on Ctrl-C. The pipeline exits via ctx cancellation instead.
 	<-pipelineDone
 
 	if runErr != nil && !errors.Is(runErr, net.ErrClosed) {
