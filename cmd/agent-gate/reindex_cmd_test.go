@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,9 @@ func TestReindexCommandRebuildsIndex(t *testing.T) {
 
 	tmp := t.TempDir()
 	binPath := filepath.Join(tmp, "agent-gate")
+	if runtime.GOOS == "windows" {
+		binPath += ".exe"
+	}
 	build := exec.Command("go", "build", "-o", binPath, "./cmd/agent-gate")
 	build.Dir = projectRoot(t)
 	out, err := build.CombinedOutput()
