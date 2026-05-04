@@ -1231,3 +1231,47 @@ mark.search-hit-current {
   color: hsl(var(--muted-foreground));
 }
 .filter-chip.active .filter-chip-count { color: inherit; opacity: 0.9; }
+
+.explore-search {
+  display: flex;
+  gap: 0.5rem;
+}
+.explore-search input[type="search"] {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-sm);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+.explore-search input[type="search"]:focus {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+.explore-search button {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 1rem;
+  border: 1px solid hsl(var(--primary) / 0.45);
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.snippet-row .snippet {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: hsl(var(--muted-foreground));
+  padding: 0.4rem 1rem 0.7rem;
+  border-bottom: 1px solid hsl(var(--border));
+}
+.snippet mark {
+  background: hsl(var(--warning) / 0.30);
+  color: hsl(var(--foreground));
+  padding: 0 1px;
+  border-radius: 2px;
+}

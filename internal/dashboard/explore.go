@@ -1,6 +1,11 @@
 package dashboard
 
 import (
+	"bytes"
+	"encoding/json"
+	"html"
+	"html/template"
+	"io"
 	"net/http"
 	"net/url"
 	"sort"
@@ -9,6 +14,7 @@ import (
 	"time"
 
 	"agent-gate/internal/store"
+	"agent-gate/internal/types"
 )
 
 // exploreRow is one row in the /explore results table.
@@ -21,7 +27,7 @@ type exploreRow struct {
 	Status    int
 	PIICounts []PIICount // pre-aggregated across both sides
 	FlagCodes []string
-	Snippet   string // populated when ?q= is set; HTML-safe (post-escape, with <mark> wrapping)
+	Snippet   template.HTML // populated when ?q= is set; HTML-safe (post-escape, with <mark> wrapping)
 }
 
 // exploreView is the full template payload for /explore.
@@ -103,15 +109,33 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 			rows = filtered
 		}
 
+		qStr := strings.TrimSpace(q.Get("q"))
+		var snippets map[string]template.HTML
+		if qStr != "" {
+			qLower := strings.ToLower(qStr)
+			searched := rows[:0]
+			snippets = make(map[string]template.HTML, len(rows))
+			for _, ix := range rows {
+				ok, snippet, err := searchEvent(opts.Store, ix.ID, qLower)
+				if err != nil || !ok {
+					continue
+				}
+				searched = append(searched, ix)
+				snippets[ix.ID] = snippet
+			}
+			rows = searched
+		}
+
 		view := exploreView{
 			ActiveKinds: kinds,
 			ActiveHosts: hosts,
 			Preset:      preset,
+			Q:           qStr,
 			Rows:        make([]exploreRow, 0, len(rows)),
 			HostOptions: sortedHostOptions(hostCounts, 20),
 		}
 		for _, ix := range rows {
-			view.Rows = append(view.Rows, exploreRow{
+			row := exploreRow{
 				ID:        ix.ID,
 				StartedAt: ix.StartedAt,
 				Method:    ix.Method,
@@ -119,7 +143,11 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 				Path:      ix.Path,
 				Status:    ix.Status,
 				FlagCodes: splitFlagCodes(ix.FlagCodes),
-			})
+			}
+			if s, ok := snippets[ix.ID]; ok {
+				row.Snippet = s
+			}
+			view.Rows = append(view.Rows, row)
 		}
 		view.TotalCount = len(view.Rows)
 		if view.TotalCount > 0 {
@@ -316,3 +344,89 @@ func filterURL(view exploreView, field string, override interface{}) string {
 // urlQueryEscape is a thin wrapper so template callers don't need
 // to import net/url.
 func urlQueryEscape(s string) string { return url.QueryEscape(s) }
+
+// snippetMaxContext bytes on each side of a hit.
+const snippetMaxContext = 60
+
+// snippetMaxHitsPerEvent is the maximum number of snippets we render per row.
+const snippetMaxHitsPerEvent = 3
+
+// searchEvent loads an event's stored bodies and url, runs a case-insensitive
+// substring scan, and returns true plus an HTML-safe snippet HTML when q
+// occurs. q is assumed lowercased by the caller.
+func searchEvent(s *store.Store, eventID, qLower string) (matched bool, snippet template.HTML, err error) {
+	rdr, err := s.Body(eventID)
+	if err != nil {
+		return false, "", err
+	}
+	defer rdr.Close()
+	raw, err := io.ReadAll(rdr)
+	if err != nil {
+		return false, "", err
+	}
+	var ev types.StoredEvent
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return false, "", err
+	}
+	// haystacks: url + req body + resp body. headers excluded by spec
+	// decision (noisy bearer tokens dominate signal).
+	for _, hay := range [][]byte{[]byte(ev.URL), ev.ReqBody, ev.RespBody} {
+		if bytes.Contains(bytes.ToLower(hay), []byte(qLower)) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return false, "", nil
+	}
+	// Build snippet HTML from the request body if it has the hit; else
+	// the response body; else the URL.
+	for _, hay := range [][]byte{ev.ReqBody, ev.RespBody, []byte(ev.URL)} {
+		if bytes.Contains(bytes.ToLower(hay), []byte(qLower)) {
+			snippet = renderSnippet(hay, qLower)
+			break
+		}
+	}
+	return true, snippet, nil
+}
+
+// renderSnippet wraps every hit of qLower (case-insensitive) in <mark>,
+// taking up to snippetMaxHitsPerEvent occurrences with snippetMaxContext
+// bytes of surrounding context. The result is HTML-escaped before <mark>
+// insertion so payload bytes can never break the wrapper.
+func renderSnippet(body []byte, qLower string) template.HTML {
+	if len(qLower) == 0 || len(body) == 0 {
+		return ""
+	}
+	low := bytes.ToLower(body)
+	hits := 0
+	var out bytes.Buffer
+	cursor := 0
+	for cursor < len(low) && hits < snippetMaxHitsPerEvent {
+		idx := bytes.Index(low[cursor:], []byte(qLower))
+		if idx < 0 {
+			break
+		}
+		hitStart := cursor + idx
+		hitEnd := hitStart + len(qLower)
+		from := hitStart - snippetMaxContext
+		if from < 0 {
+			from = 0
+		}
+		to := hitEnd + snippetMaxContext
+		if to > len(body) {
+			to = len(body)
+		}
+		if hits > 0 {
+			out.WriteString(" … ")
+		}
+		out.WriteString(html.EscapeString(string(body[from:hitStart])))
+		out.WriteString("<mark>")
+		out.WriteString(html.EscapeString(string(body[hitStart:hitEnd])))
+		out.WriteString("</mark>")
+		out.WriteString(html.EscapeString(string(body[hitEnd:to])))
+		cursor = hitEnd
+		hits++
+	}
+	return template.HTML(out.String()) //nolint:gosec // body bytes html-escaped above
+}
