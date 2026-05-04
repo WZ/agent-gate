@@ -19,11 +19,18 @@ var ErrConfigExists = errors.New("init: config already exists; pass --force to o
 
 // Prompter is the interactive surface. nil Prompter on Options = non-interactive.
 type Prompter interface {
-	PromptHosts(suggested []string) ([]string, error)
-	PromptCustomHosts() ([]string, error)
-	PromptThreeListNote() error
+	PromptWelcome(port int) error
+	PromptHosts(suggested []HostSuggestion, port int) ([]string, error)
+	PromptCustomHosts(port int) ([]string, error)
+	PromptThreeListNote(port int) error
+	PromptPolicySummary(quietCount int, port int) error
 	PromptInstallCert() (bool, error)
 	PromptSmokeTest() (bool, error)
+}
+
+type HostSuggestion struct {
+	Host   string
+	Agents []string
 }
 
 type InstallCertMode int
@@ -41,6 +48,7 @@ type Options struct {
 	Installer     ca.Installer
 	Prompter      Prompter // nil → non-interactive
 	Force         bool
+	Quiet         bool
 	AllowHosts    []string
 	InstallCert   InstallCertMode
 	SkipSmokeTest bool
@@ -70,27 +78,32 @@ func Run(opts Options) error {
 		agents = opts.Detector()
 	}
 
-	hosts := suggestHosts(opts.AllowHosts, agents)
+	cfg := resolveConfig(opts.ConfigPath)
+	port := cfg.Ports.Dashboard
+	suggestions := suggestHosts(opts.AllowHosts, agents)
 
-	finalHosts := hosts
+	finalHosts := suggestionHosts(suggestions)
 	if opts.Prompter != nil {
-		selected, err := opts.Prompter.PromptHosts(hosts)
+		if !opts.Quiet {
+			_ = opts.Prompter.PromptWelcome(port)
+		}
+		_ = opts.Prompter.PromptThreeListNote(port)
+		selected, err := opts.Prompter.PromptHosts(suggestions, port)
 		if err != nil {
 			return fmt.Errorf("prompt hosts: %w", err)
 		}
 		finalHosts = selected
-		extras, perr := opts.Prompter.PromptCustomHosts()
+		extras, perr := opts.Prompter.PromptCustomHosts(port)
 		if perr == nil {
 			finalHosts = append(finalHosts, extras...)
 		}
-		_ = opts.Prompter.PromptThreeListNote()
 	}
 	finalHosts = dedupSort(finalHosts)
-
-	tomlBytes, err := renderConfig(opts.ConfigPath)
-	if err != nil {
-		return err
+	if opts.Prompter != nil && !opts.Quiet {
+		_ = opts.Prompter.PromptPolicySummary(len(finalHosts), port)
 	}
+
+	tomlBytes := renderConfig(cfg)
 
 	if opts.PrintConfig {
 		os.Stdout.Write(tomlBytes)
@@ -136,32 +149,76 @@ func Run(opts Options) error {
 	return nil
 }
 
-func suggestHosts(allowFlag []string, agents []agentdetect.DetectedAgent) []string {
+func suggestHosts(allowFlag []string, agents []agentdetect.DetectedAgent) []HostSuggestion {
 	if len(allowFlag) > 0 {
-		return dedupSort(allowFlag) // --allow-host REPLACES detection
+		hosts := dedupSort(allowFlag) // --allow-host REPLACES detection
+		out := make([]HostSuggestion, 0, len(hosts))
+		for _, host := range hosts {
+			out = append(out, HostSuggestion{Host: host, Agents: []string{"custom"}})
+		}
+		return out
 	}
-	var hosts []string
+	agentsByHost := map[string]map[string]struct{}{}
 	for _, a := range agents {
-		hosts = append(hosts, a.SuggestedHosts...)
+		label := agentLabel(a.Name)
+		for _, raw := range a.SuggestedHosts {
+			host, ok := normalizePlainHostname(raw)
+			if !ok {
+				continue
+			}
+			if _, ok := agentsByHost[host]; !ok {
+				agentsByHost[host] = map[string]struct{}{}
+			}
+			agentsByHost[host][label] = struct{}{}
+		}
 	}
-	if len(hosts) == 0 {
-		hosts = []string{"api.anthropic.com"}
+	if len(agentsByHost) == 0 {
+		return []HostSuggestion{{Host: "api.anthropic.com", Agents: []string{"default"}}}
 	}
-	return dedupSort(hosts)
+	hosts := make([]string, 0, len(agentsByHost))
+	for host := range agentsByHost {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	out := make([]HostSuggestion, 0, len(hosts))
+	for _, host := range hosts {
+		agentSet := agentsByHost[host]
+		agentLabels := make([]string, 0, len(agentSet))
+		for agent := range agentSet {
+			agentLabels = append(agentLabels, agent)
+		}
+		sort.Strings(agentLabels)
+		out = append(out, HostSuggestion{Host: host, Agents: agentLabels})
+	}
+	return out
+}
+
+func suggestionHosts(suggestions []HostSuggestion) []string {
+	hosts := make([]string, 0, len(suggestions))
+	for _, suggestion := range suggestions {
+		hosts = append(hosts, suggestion.Host)
+	}
+	return hosts
+}
+
+func agentLabel(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "claude":
+		return "claude code"
+	default:
+		if strings.TrimSpace(name) == "" {
+			return "detected"
+		}
+		return strings.TrimSpace(name)
+	}
 }
 
 func dedupSort(in []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(in))
 	for _, s := range in {
-		s = strings.ToLower(strings.TrimSpace(s))
-		if !isPlainHostname(s) {
-			// Silently drop non-plain values rather than corrupt allowlist.txt.
-			// agentdetect already normalizes via url.Parse + idna; CLI flag values
-			// are the only path that can carry a scheme/port/slash by accident.
-			if s != "" {
-				fmt.Fprintf(os.Stderr, "init: ignoring %q (not a plain hostname)\n", s)
-			}
+		s, ok := normalizePlainHostname(s)
+		if !ok {
 			continue
 		}
 		if _, ok := seen[s]; ok {
@@ -172,6 +229,20 @@ func dedupSort(in []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func normalizePlainHostname(s string) (string, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if !isPlainHostname(s) {
+		// Silently drop non-plain values rather than corrupt allowlist.txt.
+		// agentdetect already normalizes via url.Parse + idna; CLI flag values
+		// are the only path that can carry a scheme/port/slash by accident.
+		if s != "" {
+			fmt.Fprintf(os.Stderr, "init: ignoring %q (not a plain hostname)\n", s)
+		}
+		return "", false
+	}
+	return s, true
 }
 
 // isPlainHostname mirrors internal/allowlist's plain-host check.
@@ -223,7 +294,36 @@ func appendAllowlist(path string, hosts []string) error {
 	return os.Rename(tmp, path)
 }
 
-func renderConfig(existingPath string) ([]byte, error) {
+func resolveConfig(existingPath string) config.Config {
+	cfg := *config.Defaults()
+	if data, err := os.ReadFile(existingPath); err == nil {
+		var existing config.Config
+		if _, derr := toml.Decode(string(data), &existing); derr == nil {
+			if existing.Capture.DefaultMode != "" {
+				cfg.Capture.DefaultMode = existing.Capture.DefaultMode
+			}
+			if existing.Ports.Proxy != 0 {
+				cfg.Ports.Proxy = existing.Ports.Proxy
+			}
+			if existing.Ports.Dashboard != 0 {
+				cfg.Ports.Dashboard = existing.Ports.Dashboard
+			}
+			if existing.Storage.DataDir != "" {
+				cfg.Storage.DataDir = existing.Storage.DataDir
+			}
+			if existing.Storage.Rotate != "" {
+				cfg.Storage.Rotate = existing.Storage.Rotate
+			}
+			if existing.Storage.GzipAfter != "" {
+				cfg.Storage.GzipAfter = existing.Storage.GzipAfter
+			}
+			cfg.Allowlist.Enforce = existing.Allowlist.Enforce
+		}
+	}
+	return cfg
+}
+
+func renderConfig(cfg config.Config) []byte {
 	const tmpl = `# agent-gate config — single-user audit gate for AI agents.
 # All settings are local; nothing is ever sent off this machine.
 
@@ -254,34 +354,9 @@ enforce = %v
 # Disable specific built-in rules by ID. Use ` + "`agent-gate doctor`" + ` to list IDs.
 disable = []
 `
-	cfg := config.Defaults()
-	if data, err := os.ReadFile(existingPath); err == nil {
-		var existing config.Config
-		if _, derr := toml.Decode(string(data), &existing); derr == nil {
-			if existing.Capture.DefaultMode != "" {
-				cfg.Capture.DefaultMode = existing.Capture.DefaultMode
-			}
-			if existing.Ports.Proxy != 0 {
-				cfg.Ports.Proxy = existing.Ports.Proxy
-			}
-			if existing.Ports.Dashboard != 0 {
-				cfg.Ports.Dashboard = existing.Ports.Dashboard
-			}
-			if existing.Storage.DataDir != "" {
-				cfg.Storage.DataDir = existing.Storage.DataDir
-			}
-			if existing.Storage.Rotate != "" {
-				cfg.Storage.Rotate = existing.Storage.Rotate
-			}
-			if existing.Storage.GzipAfter != "" {
-				cfg.Storage.GzipAfter = existing.Storage.GzipAfter
-			}
-			cfg.Allowlist.Enforce = existing.Allowlist.Enforce
-		}
-	}
 	out := fmt.Sprintf(tmpl,
 		cfg.Capture.DefaultMode, cfg.Ports.Proxy, cfg.Ports.Dashboard,
 		cfg.Storage.DataDir, cfg.Storage.Rotate, cfg.Storage.GzipAfter,
 		cfg.Allowlist.Enforce)
-	return []byte(out), nil
+	return []byte(out)
 }
