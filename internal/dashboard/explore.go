@@ -36,6 +36,7 @@ type exploreView struct {
 	Q           string
 	ActiveKinds []string
 	ActiveHosts []string
+	ActiveFlag  string
 	Preset      string
 	Page        int
 	HasNextPage bool
@@ -58,13 +59,14 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 		q := req.URL.Query()
 		kinds := splitCSV(q.Get("kinds"))
 		hosts := splitCSV(q.Get("host"))
+		flag := strings.TrimSpace(q.Get("flag"))
 		preset := q.Get("preset")
 		if preset == "" {
 			preset = "24h"
 		}
 		since, until := presetWindow(preset, time.Now())
 
-		filter := store.QueryFilter{Limit: 0, Since: since, Until: until}
+		filter := store.QueryFilter{Limit: 0, Since: since, Until: until, FlagCode: flag}
 		rows, err := opts.Store.Index().Query(filter)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -141,6 +143,7 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 		view := exploreView{
 			ActiveKinds: kinds,
 			ActiveHosts: hosts,
+			ActiveFlag:  flag,
 			Preset:      preset,
 			Q:           qStr,
 			Rows:        make([]exploreRow, 0, len(rows)),
@@ -342,13 +345,14 @@ func toggleStringInList(active []string, value string) []string {
 // filterURL renders the /explore querystring for the current view with one
 // filter overridden. Use it everywhere a link should preserve filter state
 // across navigation. `field` is one of: "kinds", "host", "preset", "q",
-// "page". `value` is a slice (kinds/host) or single string formatted as
-// the param value. Empty result means an empty querystring.
+// "page", "flag". `value` is a slice (kinds/host) or single string
+// formatted as the param value. Empty result means an empty querystring.
 func filterURL(view exploreView, field string, override interface{}) template.URL {
 	kinds := strings.Join(view.ActiveKinds, ",")
 	hosts := strings.Join(view.ActiveHosts, ",")
 	preset := view.Preset
 	q := view.Q
+	flag := view.ActiveFlag
 	page := 0 // 0 means "omit" → defaults to 1 on the server
 	switch field {
 	case "kinds":
@@ -361,6 +365,8 @@ func filterURL(view exploreView, field string, override interface{}) template.UR
 		q = override.(string)
 	case "page":
 		page = override.(int)
+	case "flag":
+		flag = override.(string)
 	}
 
 	values := url.Values{}
@@ -375,6 +381,9 @@ func filterURL(view exploreView, field string, override interface{}) template.UR
 	}
 	if preset != "" {
 		values.Set("preset", preset)
+	}
+	if flag != "" {
+		values.Set("flag", flag)
 	}
 	if page > 1 {
 		values.Set("page", strconv.Itoa(page))
