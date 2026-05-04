@@ -21,6 +21,7 @@
       {{ if .ActiveKinds }}<input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">{{ end }}
       {{ if .ActiveHosts }}<input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">{{ end }}
       {{ if .Preset }}<input type="hidden" name="preset" value="{{ .Preset }}">{{ end }}
+      {{ if .ActiveFlag }}<input type="hidden" name="flag"   value="{{ .ActiveFlag }}">{{ end }}
       <div class="explore-search">
         <input type="search" name="q" placeholder="Search bodies, URLs, hosts" value="{{ .Q }}" autocomplete="off" spellcheck="false">
         <button type="submit">Search</button>

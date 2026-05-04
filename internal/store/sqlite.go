@@ -185,8 +185,8 @@ func (i *Index) Query(f QueryFilter) ([]IndexRow, error) {
 		// trailing commas before LIKE so the match is exact-item, not
 		// substring — otherwise FlagCode="host" would hit
 		// "host_not_allowlisted".
-		conds = append(conds, "(',' || flag_codes || ',') LIKE ?")
-		args = append(args, "%,"+f.FlagCode+",%")
+		conds = append(conds, "(',' || flag_codes || ',') LIKE ? ESCAPE '\\'")
+		args = append(args, "%,"+escapeLike(f.FlagCode)+",%")
 	}
 	if !f.Since.IsZero() {
 		conds = append(conds, "started_at >= ?")
@@ -260,6 +260,11 @@ func (i *Index) QueryByID(id string) (IndexRow, error) {
 	}
 	r.StartedAt = time.UnixMilli(startedMs).UTC()
 	return r, nil
+}
+
+func escapeLike(s string) string {
+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+	return replacer.Replace(s)
 }
 
 func flagCodes(flags []types.Flag) string {
