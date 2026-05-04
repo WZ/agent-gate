@@ -112,6 +112,16 @@ func (i *Index) Truncate() error {
 	return nil
 }
 
+// Exec passes through to the underlying *sql.DB. Used by tests and by
+// reindex helpers that want to issue a DELETE without leaving the package.
+func (i *Index) Exec(query string, args ...any) (sql.Result, error) {
+	return i.db.Exec(query, args...)
+}
+
+// Db returns the underlying *sql.DB so external callers can run their own
+// SELECTs. The DB pointer's lifetime is tied to *Index.
+func (i *Index) Db() *sql.DB { return i.db }
+
 func (i *Index) Insert(ev types.StoredEvent, loc Location) error {
 	host, path, err := splitURL(ev.URL)
 	if err != nil {
