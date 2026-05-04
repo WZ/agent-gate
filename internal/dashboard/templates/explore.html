@@ -15,10 +15,12 @@
   <section class="filter-bar" aria-label="Filters">
     <form class="filter-form" method="get" action="/explore">
       <!-- Hidden inputs preserve sibling filter state when this form
-           is submitted (the search bar lives in the same form, Task 12). -->
-      <input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">
-      <input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">
-      <input type="hidden" name="preset" value="{{ .Preset }}">
+           is submitted. Only emit them when non-empty so the URL after
+           submit doesn't carry empty &kinds=&host= noise that bookmarks
+           and shared links would inherit. -->
+      {{ if .ActiveKinds }}<input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">{{ end }}
+      {{ if .ActiveHosts }}<input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">{{ end }}
+      {{ if .Preset }}<input type="hidden" name="preset" value="{{ .Preset }}">{{ end }}
       <div class="explore-search">
         <input type="search" name="q" placeholder="Search bodies, URLs, hosts" value="{{ .Q }}" autocomplete="off" spellcheck="false">
         <button type="submit">Search</button>
