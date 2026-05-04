@@ -1,0 +1,51 @@
+{{ define "explore" }}
+<section class="explore-page">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Audit</p>
+      <h2>Explore</h2>
+    </div>
+    {{ if .LatestEvent }}
+      <p class="timestamp">latest event {{ .LatestEvent }}</p>
+    {{ else }}
+      <p class="timestamp">no events captured yet</p>
+    {{ end }}
+  </div>
+
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <p class="eyebrow">Captured traffic</p>
+        <h3>{{ .TotalCount }} events</h3>
+      </div>
+    </div>
+
+    {{ if .Rows }}
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Method</th>
+            <th>Host</th>
+            <th>Path</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .Rows }}
+            <tr>
+              <td class="mono"><a href="/events/{{ .ID }}">{{ .StartedAt.Format "15:04:05" }}</a></td>
+              <td><span class="method">{{ .Method }}</span></td>
+              <td>{{ .Host }}</td>
+              <td class="mono path">{{ .Path }}</td>
+              <td>{{ .Status }}</td>
+            </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    {{ else }}
+      <div class="empty-state">No events captured yet.</div>
+    {{ end }}
+  </section>
+</section>
+{{ end }}
