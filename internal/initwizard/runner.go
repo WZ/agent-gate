@@ -79,11 +79,9 @@ func Run(opts Options) error {
 			return fmt.Errorf("prompt hosts: %w", err)
 		}
 		finalHosts = selected
-		if len(agents) == 0 && len(opts.AllowHosts) == 0 {
-			extras, perr := opts.Prompter.PromptCustomHosts()
-			if perr == nil {
-				finalHosts = append(finalHosts, extras...)
-			}
+		extras, perr := opts.Prompter.PromptCustomHosts()
+		if perr == nil {
+			finalHosts = append(finalHosts, extras...)
 		}
 		_ = opts.Prompter.PromptThreeListNote()
 	}
