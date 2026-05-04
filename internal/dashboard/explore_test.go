@@ -69,3 +69,18 @@ func TestExploreFiltersByTimeRange(t *testing.T) {
 	assert.Contains(t, body, "01RECENT")
 	assert.NotContains(t, body, "01OLD")
 }
+
+func TestExploreFiltersByHost(t *testing.T) {
+	srv := httptest.NewServer(testServer(t,
+		seedEvent("01HOSTA", "https://api.anthropic.com/v1/messages", `{"x":1}`),
+		seedEvent("01HOSTB", "https://api.openai.com/v1/chat", `{"x":1}`),
+	))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?host=api.anthropic.com&preset=all")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+	assert.Contains(t, body, "01HOSTA")
+	assert.NotContains(t, body, "01HOSTB")
+}
