@@ -67,3 +67,33 @@ func activeRoute(path string) string {
 	}
 	return "operations"
 }
+
+// NotFound renders a styled 404 page in the dashboard chrome instead of
+// the default plain-text "404 page not found". Title is the heading
+// (e.g. "Event not found"); message is the body line.
+//
+// Pre-renders into a buffer so we can set the 404 status before any
+// content is written; Render writes the headers itself once it starts
+// executing the template, which is too late for a status override.
+func (r *renderer) NotFound(w http.ResponseWriter, req *http.Request, title, message string) {
+	data := map[string]any{"Title": title, "Message": message}
+	var fragment bytes.Buffer
+	if err := r.full.ExecuteTemplate(&fragment, "not_found", data); err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusNotFound)
+	if req.Header.Get("HX-Request") == "true" {
+		_, _ = w.Write(fragment.Bytes())
+		return
+	}
+	combined := struct {
+		Content     template.HTML
+		ActiveRoute string
+	}{
+		Content:     template.HTML(fragment.String()), //nolint:gosec // our own template
+		ActiveRoute: activeRoute(req.URL.Path),
+	}
+	_ = r.full.ExecuteTemplate(w, "base", combined)
+}
