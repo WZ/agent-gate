@@ -3,6 +3,11 @@
 Tracked plans for the next two release cuts. Each lands as its own PR
 behind a `vX.Y.Z-<slug>` tag (same cadence as Plans 1–3).
 
+## Recently shipped
+
+- [x] Global Explore page: per-event PII counts indexed at capture time,
+  filtered by kind/time/host, full-body free-text search.
+
 ## Plan 4 — Windows airtight runtime
 
 **Target:** `v0.4.0-windows-airtight`
