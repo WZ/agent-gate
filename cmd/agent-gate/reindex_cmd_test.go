@@ -41,8 +41,10 @@ func TestReindexCommandRebuildsIndex(t *testing.T) {
 	require.NoError(t, os.MkdirAll(dataDir, 0o700))
 	require.NoError(t, os.MkdirAll(configDir, 0o700))
 	configPath := filepath.Join(configDir, "config.toml")
+	// Use TOML literal strings (single-quote) so Windows paths with
+	// backslashes don't get interpreted as escape sequences.
 	require.NoError(t, os.WriteFile(configPath, []byte(
-		"[storage]\ndata_dir = \""+dataDir+"\"\n[ports]\ndashboard = 0\nproxy = 0\n"), 0o600))
+		"[storage]\ndata_dir = '"+dataDir+"'\n[ports]\ndashboard = 0\nproxy = 0\n"), 0o600))
 
 	// Seed two events with PII via the store directly.
 	st, err := store.Open(dataDir, time.Now)
