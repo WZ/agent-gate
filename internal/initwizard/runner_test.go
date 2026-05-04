@@ -175,6 +175,20 @@ func TestRunner_DryRunWritesNothing(t *testing.T) {
 	}
 }
 
+func TestInitCompleteMessage_IncludesNextSteps(t *testing.T) {
+	got := initCompleteMessage(9000)
+	for _, want := range []string{
+		"agent-gate init: complete",
+		"agent-gate run -- claude",
+		"http://localhost:9000",
+		"agent-gate doctor",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("completion message missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRunner_AllowHostReplacesDetection(t *testing.T) {
 	dir := t.TempDir()
 	mock := &ca.MockInstaller{}

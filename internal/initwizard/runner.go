@@ -145,8 +145,23 @@ func Run(opts Options) error {
 	// the Prompter interface for the eventual wiring.
 	_ = opts.SkipSmokeTest
 
-	fmt.Fprintln(os.Stderr, "agent-gate init: complete")
+	fmt.Fprint(os.Stderr, initCompleteMessage(port))
 	return nil
+}
+
+func initCompleteMessage(dashboardPort int) string {
+	return fmt.Sprintf(`agent-gate init: complete
+
+Next:
+  Run an agent through the gate:
+    agent-gate run -- claude
+
+  Review captured traffic once a run is active:
+    http://localhost:%d
+
+  Check or repair the install:
+    agent-gate doctor
+`, dashboardPort)
 }
 
 func suggestHosts(allowFlag []string, agents []agentdetect.DetectedAgent) []HostSuggestion {
