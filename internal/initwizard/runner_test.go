@@ -181,3 +181,68 @@ func TestRunner_AllowHostReplacesDetection(t *testing.T) {
 func TestHuhPrompter_SatisfiesInterface(t *testing.T) {
 	var _ Prompter = HuhPrompter{}
 }
+
+// Custom hosts must always be offered after the multi-select, even when
+// detection or --allow-host already produced a non-empty suggestion list.
+// Previously the custom-host prompt was gated behind "no agents detected
+// AND no --allow-host", which silently dropped user-typed hosts whenever
+// the detector found anything.
+func TestRunner_InteractivePromptAppendsCustomHostsEvenWhenAgentsDetected(t *testing.T) {
+	dir := t.TempDir()
+	prompter := &mockPrompter{
+		selectedHosts: []string{"api.anthropic.com"},
+		addCustom:     []string{"api.deepseek.com"},
+	}
+	opts := Options{
+		ConfigPath:    filepath.Join(dir, "config.toml"),
+		ConfigDir:     dir,
+		DataDir:       filepath.Join(dir, "data"),
+		Installer:     &ca.MockInstaller{},
+		Prompter:      prompter,
+		InstallCert:   InstallCertFalse,
+		SkipSmokeTest: true,
+		Detector: func() []agentdetect.DetectedAgent {
+			return []agentdetect.DetectedAgent{
+				{Name: "claude", Source: agentdetect.SourcePath, SuggestedHosts: []string{"api.anthropic.com"}},
+			}
+		},
+	}
+	if err := Run(opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	al, _ := os.ReadFile(filepath.Join(dir, "allowlist.txt"))
+	got := string(al)
+	if !strings.Contains(got, "api.anthropic.com") {
+		t.Errorf("allowlist missing detected host: %q", got)
+	}
+	if !strings.Contains(got, "api.deepseek.com") {
+		t.Errorf("allowlist missing custom-typed host: %q", got)
+	}
+}
+
+func TestRunner_InteractivePromptAppendsCustomHostsEvenWhenAllowHostFlagPassed(t *testing.T) {
+	dir := t.TempDir()
+	prompter := &mockPrompter{
+		selectedHosts: []string{"override.example.com"},
+		addCustom:     []string{"another.example.com"},
+	}
+	opts := Options{
+		ConfigPath:    filepath.Join(dir, "config.toml"),
+		ConfigDir:     dir,
+		DataDir:       filepath.Join(dir, "data"),
+		Installer:     &ca.MockInstaller{},
+		Prompter:      prompter,
+		AllowHosts:    []string{"override.example.com"},
+		InstallCert:   InstallCertFalse,
+		SkipSmokeTest: true,
+		Detector:      func() []agentdetect.DetectedAgent { return nil },
+	}
+	if err := Run(opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	al, _ := os.ReadFile(filepath.Join(dir, "allowlist.txt"))
+	got := string(al)
+	if !strings.Contains(got, "override.example.com") || !strings.Contains(got, "another.example.com") {
+		t.Errorf("custom host not appended when --allow-host present; got: %q", got)
+	}
+}
