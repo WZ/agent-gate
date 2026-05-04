@@ -13,6 +13,18 @@ launcher (`agent-gate run --airtight`) ships in Plan 3.
 - `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888`. Every captured event
   is run through the policy engine before being persisted.
 - `agent-gate dashboard` — local web app on `127.0.0.1:7878` for review.
+
+  The dashboard now has two top-level views:
+
+  - **Operations** (`/`) — the existing sessions list. Answers "what work
+    did the agent do?"
+  - **Explore** (`/explore`) — every captured event in one searchable table.
+    Filter by PII kind (SSN, credit card, email, …), time range, or host;
+    search request bodies, URLs, and hosts for any substring. Answers "what
+    data slipped through?"
+
+  Both views share the same event detail page, so clicking any row drops you
+  into the same redacted+highlighted payload view.
 - `agent-gate cert install` — installs the local root CA on macOS.
 - `agent-gate tail` — polling tail of captured events.
 - `agent-gate cert path` / `version`.
@@ -42,6 +54,7 @@ agent-gate cert install          add the local CA to your system trust store
 agent-gate run -- <cmd>          launch a command with airtight network capture
 agent-gate proxy                 run the proxy alone (foreground)
 agent-gate dashboard             run the dashboard alone (foreground)
+agent-gate reindex               rebuild the PII count index from JSONL
 agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
 agent-gate tail                  live-follow events in the terminal
 agent-gate uninstall             (Windows) remove the WFP provider/sublayer
