@@ -24,5 +24,10 @@ events.db-*
 docs/superpowers/
 .gstack/
 
+# Local skill / tool state — gstack, Playwright, superpowers, scheduling
+.claude/
+.playwright-mcp/
+.superpowers/
+
 # goreleaser local snapshot output
 dist/
