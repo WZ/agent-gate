@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,12 +45,16 @@ func doctorCmd() *cobra.Command {
 			results = append(results, doctor.CheckCAFiles(caDir))
 
 			proxyPort, dashPort := 8888, 7878
+			dataDir, _ := agruntime.DataDir()
 			if cfg, err := config.LoadFromFile(configPath); err == nil {
 				if cfg.Ports.Proxy != 0 {
 					proxyPort = cfg.Ports.Proxy
 				}
 				if cfg.Ports.Dashboard != 0 {
 					dashPort = cfg.Ports.Dashboard
+				}
+				if cfg.Storage.DataDir != "" {
+					dataDir = cfg.Storage.DataDir
 				}
 			}
 
@@ -59,7 +64,6 @@ func doctorCmd() *cobra.Command {
 			lockPath, _ := agruntime.LockfilePath()
 			results = append(results, doctor.CheckLockfile(lockPath))
 
-			dataDir, _ := agruntime.DataDir()
 			results = append(results, doctor.CheckDataDir(dataDir))
 
 			results = append(results, doctor.CheckHostListFile(filepath.Join(configDir, "allowlist.txt"), "allowlist"))
@@ -74,9 +78,14 @@ func doctorCmd() *cobra.Command {
 			results = append(results, doctor.CheckAgentsDetected(agents))
 
 			if autoRepair != "" {
-				mode := doctor.ModeSafe
-				if autoRepair == "aggressive" {
+				var mode doctor.Mode
+				switch autoRepair {
+				case "safe":
+					mode = doctor.ModeSafe
+				case "aggressive":
 					mode = doctor.ModeAggressive
+				default:
+					return fmt.Errorf("--auto-repair must be safe|aggressive (got %q)", autoRepair)
 				}
 				doctor.Repair(doctor.RepairOpts{
 					Mode:      mode,

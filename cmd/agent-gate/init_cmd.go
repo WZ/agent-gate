@@ -38,19 +38,6 @@ func initCmd() *cobra.Command {
 			configDir := filepath.Dir(configPath)
 			caDir := filepath.Join(configDir, "ca")
 
-			if !dryRun && !printConfig {
-				if err := os.MkdirAll(caDir, 0o700); err != nil {
-					return fmt.Errorf("ca dir: %w", err)
-				}
-				if regenerateCA {
-					_ = os.Remove(filepath.Join(caDir, "cert.pem"))
-					_ = os.Remove(filepath.Join(caDir, "key.pem"))
-				}
-				if _, err := ca.Ensure(caDir); err != nil {
-					return fmt.Errorf("ca: %w", err)
-				}
-			}
-
 			interactive := !nonInteractive && isInteractive()
 			var prompter initwizard.Prompter
 			if interactive {
@@ -91,6 +78,19 @@ func initCmd() *cobra.Command {
 					return err
 				}
 				defer lock.Release()
+
+				// CA work happens AFTER lockfile acquisition so two concurrent
+				// `init --regenerate-ca` invocations can't race on cert.pem/key.pem.
+				if err := os.MkdirAll(caDir, 0o700); err != nil {
+					return fmt.Errorf("ca dir: %w", err)
+				}
+				if regenerateCA {
+					_ = os.Remove(filepath.Join(caDir, "cert.pem"))
+					_ = os.Remove(filepath.Join(caDir, "key.pem"))
+				}
+				if _, err := ca.Ensure(caDir); err != nil {
+					return fmt.Errorf("ca: %w", err)
+				}
 			}
 
 			opts := initwizard.Options{
