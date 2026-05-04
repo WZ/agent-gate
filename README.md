@@ -10,55 +10,158 @@ launcher (`agent-gate run --airtight`) ships in Plan 3.
 
 ## What you get
 
-- `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888`. Every captured event
-  is run through the policy engine before being persisted.
+**Getting started:**
+- `agent-gate init` — one-command bootstrap: writes config, mints the local CA,
+  detects installed agents (claude / codex / aider / opencode) and seeds their
+  upstream hosts into your allowlist, installs the CA into your system trust
+  stores (Keychain on macOS, ca-certificates + Firefox NSS on Linux, wincrypt
+  on Windows).
+- `agent-gate doctor` — validates every part of the install (CA files, ports,
+  lockfile, host-list permissions, agents detected, CA trusted across all
+  stores). `--auto-repair=safe|aggressive` to apply fixes.
+
+**Daily use:**
+- `agent-gate run -- <cmd>` — launch a command with airtight network capture
+  (per-OS network jail forces all egress through the proxy).
 - `agent-gate dashboard` — local web app on `127.0.0.1:7878` for review.
 
-  The dashboard now has two top-level views:
-
-  - **Operations** (`/`) — the existing sessions list. Answers "what work
-    did the agent do?"
-  - **Explore** (`/explore`) — every captured event in one searchable table.
-    Filter by PII kind (SSN, credit card, email, …), time range, or host;
-    search request bodies, URLs, and hosts for any substring. Answers "what
-    data slipped through?"
-
-  Both views share the same event detail page, so clicking any row drops you
-  into the same redacted+highlighted payload view.
-- `agent-gate cert install` — installs the local root CA on macOS.
+  Two top-level views: **Operations** (`/`) is the sessions list — "what
+  work did the agent do?" **Explore** (`/explore`) is every captured event
+  in one searchable table — "what data slipped through?" Filter by PII
+  kind (SSN, credit card, email, …), time range, or host; search request
+  bodies, URLs, and hosts for any substring. Both views share the same
+  event detail page.
+- `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888` (foreground; usually
+  spawned by `agent-gate run`).
 - `agent-gate tail` — polling tail of captured events.
-- `agent-gate cert path` / `version`.
+- `agent-gate stop` — SIGTERM a stuck `agent-gate run`.
+
+**Maintenance:**
+- `agent-gate cert install` / `cert uninstall` / `cert path` — manage the local
+  CA in your trust stores (macOS Keychain, Linux ca-certificates, Windows
+  wincrypt, Firefox NSS).
+- `agent-gate help allowlist|denylist|passthrough` — explain the three-list
+  policy model.
+- `agent-gate version`.
 
 ## Install
+
+### Download the binary (recommended)
+
+Grab the archive for your platform from the
+[latest release](https://github.com/WZ/agent-gate/releases/latest):
+
+| Platform | Archive |
+|---|---|
+| macOS Apple Silicon | `agent-gate_<ver>_darwin_arm64.tar.gz` |
+| macOS Intel | `agent-gate_<ver>_darwin_x86_64.tar.gz` |
+| Linux arm64 | `agent-gate_<ver>_linux_arm64.tar.gz` |
+| Linux x86_64 | `agent-gate_<ver>_linux_x86_64.tar.gz` |
+| Windows x86_64 | `agent-gate_<ver>_windows_x86_64.zip` |
+
+Extract, then move `agent-gate` to a directory on your `PATH`. On
+macOS, the first run may need `xattr -d com.apple.quarantine ./agent-gate`
+to clear Gatekeeper.
+
+### Or build from source
 
 ```bash
 go build -o agent-gate ./cmd/agent-gate
 sudo mv agent-gate /usr/local/bin/
 ```
 
+### Or `go install`
+
+```bash
+go install agent-gate/cmd/agent-gate@latest
+```
+
 ## First-time setup
 
 ```bash
-agent-gate init           # bootstrap config + CA + dirs (one-time)
-agent-gate cert install   # macOS only; Linux/Windows print manual steps.
+agent-gate init
 ```
+
+That's it. `agent-gate init` writes the config, mints the local CA,
+detects which AI agents you have installed (`claude`, `codex`, `aider`,
+`opencode`), pre-checks their upstream hosts in an interactive allowlist
+prompt, and installs the CA into your system trust stores (Keychain on
+macOS, `ca-certificates` + Firefox NSS on Linux, wincrypt on Windows) via
+[`smallstep/truststore`](https://github.com/smallstep/truststore).
+
+For headless / CI use:
+
+```bash
+agent-gate init --non-interactive --allow-host api.anthropic.com --install-cert=false
+agent-gate cert install   # run later from a TTY
+```
+
+To validate the install at any time:
+
+```bash
+agent-gate doctor
+```
+
+`doctor` checks every moving part — CA files, trust-store presence,
+port availability, lockfile freshness, host-list permissions, agents
+detected — and prints a one-line-per-check report with suggested fixes.
+Pass `--auto-repair=safe` for filesystem-perm fixes (never sudos);
+`--auto-repair=aggressive` will attempt `cert install` on a missing
+trust-store entry.
 
 On Windows, `agent-gate init` additionally registers the WFP provider and
 sublayer used by airtight mode. Run from an elevated PowerShell once.
 
+## Upgrading from older versions
+
+agent-gate v0.6.0 changes a few things you might notice:
+
+1. **The runtime no longer auto-adds `api.anthropic.com` to your
+   allowlist on every load.** If you removed it from the dashboard
+   previously and it "kept coming back," that bug is gone. Hosts you
+   remove stay removed. Run `agent-gate doctor` to see whether your
+   allowlist is what you expect.
+2. **`config.toml` no longer accepts `[allowlist] file = "..."`.** That
+   field was always ignored by the runtime; v0.6.0 removes it from the
+   schema. Existing config files with the field are silently tolerated.
+   The allowlist always lives at `~/.config/agent-gate/allowlist.txt`.
+3. **`cert install` no longer prints "manual install" instructions for
+   Linux/Windows.** The new truststore-backed installer handles
+   ca-certificates / Firefox NSS / wincrypt automatically. macOS still
+   prompts for sudo to write the System Keychain.
+4. **You don't need to run `cert install` separately after `init`**
+   unless you skipped it with `--skip-cert-install` or it failed.
+
+To regenerate your CA: `agent-gate init --force --regenerate-ca`. With
+`--force`, agent-gate overlays your existing user-set ports / storage /
+capture mode onto the new commented template — no values lost.
+
 ## CLI summary
 
 ```
-agent-gate init                  bootstrap config + CA + dirs (one-time)
-agent-gate cert install          add the local CA to your system trust store
-agent-gate run -- <cmd>          launch a command with airtight network capture
-agent-gate proxy                 run the proxy alone (foreground)
-agent-gate dashboard             run the dashboard alone (foreground)
-agent-gate reindex               rebuild the PII count index from JSONL
-agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
-agent-gate tail                  live-follow events in the terminal
-agent-gate uninstall             (Windows) remove the WFP provider/sublayer
-agent-gate version               print version info
+Getting started:
+  agent-gate init                  one-command bootstrap (config + CA + agent detection + cert install)
+  agent-gate doctor                validate the install; suggest or apply repairs
+
+Daily use:
+  agent-gate run -- <cmd>          launch a command with airtight network capture
+  agent-gate dashboard             run the local web dashboard (foreground)
+  agent-gate proxy                 run the proxy alone (foreground)
+  agent-gate tail                  live-follow events in the terminal
+  agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
+
+Maintenance:
+  agent-gate cert install          install the local CA into trust stores
+  agent-gate cert uninstall        remove the local CA from trust stores
+  agent-gate cert path             print the CA cert path
+  agent-gate reindex               rebuild the PII count index from JSONL
+  agent-gate uninstall             (Windows) remove the WFP provider/sublayer
+  agent-gate version               print version info
+
+Help topics:
+  agent-gate help allowlist        explain allowlist semantics
+  agent-gate help denylist         explain denylist semantics
+  agent-gate help passthrough      explain passthrough semantics
 ```
 
 Each takes `--config PATH` to point at a non-default `config.toml`.

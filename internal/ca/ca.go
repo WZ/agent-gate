@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -54,7 +55,10 @@ func Ensure(dir string) (*CA, error) {
 		if !st.Mode().IsRegular() {
 			return nil, fmt.Errorf("ca key %s must be a regular file (got mode %v)", keyPath, st.Mode())
 		}
-		if st.Mode().Perm() != 0o600 {
+		// Windows does not honor unix file mode bits — Go's runtime persists 0o666
+		// for any file written via os.WriteFile regardless of the requested perm.
+		// Skip the assertion there; the test harness already does the same.
+		if runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 {
 			return nil, fmt.Errorf("ca key %s must be mode 0600, got %v", keyPath, st.Mode().Perm())
 		}
 		return load(dir, certPath, keyPath)

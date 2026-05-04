@@ -52,6 +52,13 @@
       {{ else }}
         {{ if .HostTrusted }}
           <span class="ok">already trusted</span>
+          <form class="trust-host"
+                hx-post="/api/untrust"
+                hx-target="this"
+                hx-swap="outerHTML">
+            <input type="hidden" name="host" value="{{ .Host }}">
+            <button type="submit" class="block-button">Untrust host</button>
+          </form>
         {{ else }}
           <form class="trust-host"
                 hx-post="/api/trust"
