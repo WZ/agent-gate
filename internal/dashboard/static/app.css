@@ -1300,3 +1300,21 @@ mark.search-hit-current {
   font-family: var(--font-mono);
   color: hsl(var(--muted-foreground));
 }
+.empty-state {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+.empty-state p { margin: 0 0 0.75rem; font-size: 1rem; }
+.empty-state-reset {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.45rem 1rem;
+  border: 1px solid hsl(var(--primary) / 0.45);
+  background: hsl(var(--primary) / 0.10);
+  color: hsl(var(--primary));
+  border-radius: var(--radius-sm);
+}
+.empty-state-reset:hover { text-decoration: none; background: hsl(var(--primary) / 0.18); }

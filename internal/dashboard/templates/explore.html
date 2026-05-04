@@ -99,7 +99,12 @@
         </nav>
       {{ end }}
     {{ else }}
-      <div class="empty-state">No events match these filters.</div>
+      <div class="empty-state">
+        <p>No events match these filters.</p>
+        {{ if or .Q .ActiveKinds .ActiveHosts (ne .Preset "24h") }}
+          <a class="empty-state-reset" href="/explore">Reset filters</a>
+        {{ end }}
+      </div>
     {{ end }}
   </section>
 </section>
