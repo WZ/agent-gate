@@ -10,18 +10,63 @@ launcher (`agent-gate run --airtight`) ships in Plan 3.
 
 ## What you get
 
-- `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888`. Every captured event
-  is run through the policy engine before being persisted.
+**Getting started:**
+- `agent-gate init` — one-command bootstrap: writes config, mints the local CA,
+  detects installed agents (claude / codex / aider / opencode) and seeds their
+  upstream hosts into your allowlist, installs the CA into your system trust
+  stores (Keychain on macOS, ca-certificates + Firefox NSS on Linux, wincrypt
+  on Windows).
+- `agent-gate doctor` — validates every part of the install (CA files, ports,
+  lockfile, host-list permissions, agents detected, CA trusted across all
+  stores). `--auto-repair=safe|aggressive` to apply fixes.
+
+**Daily use:**
+- `agent-gate run -- <cmd>` — launch a command with airtight network capture
+  (per-OS network jail forces all egress through the proxy).
 - `agent-gate dashboard` — local web app on `127.0.0.1:7878` for review.
-- `agent-gate cert install` — installs the local root CA on macOS.
+- `agent-gate proxy` — TLS-MITM proxy on `127.0.0.1:8888` (foreground; usually
+  spawned by `agent-gate run`).
 - `agent-gate tail` — polling tail of captured events.
-- `agent-gate cert path` / `version`.
+- `agent-gate stop` — SIGTERM a stuck `agent-gate run`.
+
+**Maintenance:**
+- `agent-gate cert install` / `cert uninstall` / `cert path` — manage the local
+  CA in your trust stores (macOS Keychain, Linux ca-certificates, Windows
+  wincrypt, Firefox NSS).
+- `agent-gate help allowlist|denylist|passthrough` — explain the three-list
+  policy model.
+- `agent-gate version`.
 
 ## Install
+
+### Download the binary (recommended)
+
+Grab the archive for your platform from the
+[latest release](https://github.com/WZ/agent-gate/releases/latest):
+
+| Platform | Archive |
+|---|---|
+| macOS Apple Silicon | `agent-gate_<ver>_darwin_arm64.tar.gz` |
+| macOS Intel | `agent-gate_<ver>_darwin_x86_64.tar.gz` |
+| Linux arm64 | `agent-gate_<ver>_linux_arm64.tar.gz` |
+| Linux x86_64 | `agent-gate_<ver>_linux_x86_64.tar.gz` |
+| Windows x86_64 | `agent-gate_<ver>_windows_x86_64.zip` |
+
+Extract, then move `agent-gate` to a directory on your `PATH`. On
+macOS, the first run may need `xattr -d com.apple.quarantine ./agent-gate`
+to clear Gatekeeper.
+
+### Or build from source
 
 ```bash
 go build -o agent-gate ./cmd/agent-gate
 sudo mv agent-gate /usr/local/bin/
+```
+
+### Or `go install`
+
+```bash
+go install agent-gate/cmd/agent-gate@latest
 ```
 
 ## First-time setup
