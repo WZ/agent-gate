@@ -140,6 +140,69 @@ data_dir = '`+filepath.ToSlash(tmp)+`/data'
 	}
 }
 
+// TestRunPipeline_ExitsOnCtxCancelWithoutChannelClose locks in the
+// shutdown contract: RunPipeline must exit when ctx is cancelled even if
+// nobody ever closes the input channel. Goproxy's per-connection
+// goroutines outlive listener close and may still be writing to the
+// channel; closing it would panic them ("send on closed channel"), so the
+// supervisor stopped closing it. RunPipeline must therefore not depend on
+// channel-close-as-shutdown-signal.
+func TestRunPipeline_ExitsOnCtxCancelWithoutChannelClose(t *testing.T) {
+	tmp := t.TempDir()
+	configPath := filepath.Join(tmp, "config.toml")
+	must(t, os.WriteFile(configPath, []byte(`
+[ports]
+proxy = 8888
+dashboard = 7878
+[storage]
+data_dir = '`+filepath.ToSlash(tmp)+`/data'
+`), 0o600))
+
+	rt, err := runtime.LoadCommon(configPath)
+	if err != nil {
+		t.Fatalf("LoadCommon: %v", err)
+	}
+	defer rt.Close()
+
+	in := make(chan types.RawFlow, 4)
+	for _, id := range []string{"01HZ0000NOCLOSE1", "01HZ0000NOCLOSE2"} {
+		in <- types.RawFlow{
+			ID:          id,
+			StartedAt:   time.Now(),
+			EndedAt:     time.Now(),
+			Method:      "GET",
+			URL:         "https://api.anthropic.com/v1/messages",
+			RespStatus:  200,
+			CaptureMode: "permissive",
+		}
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // cancel immediately to force the drain path
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runtime.RunPipeline(ctx, rt, in)
+	}()
+	// Deliberately do NOT close(in) — that's the regression case.
+
+	select {
+	case <-done:
+		// good: pipeline exited despite the channel being open.
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunPipeline did not exit on ctx cancel without channel close")
+	}
+
+	got, err := rt.Store.Index().Query(store.QueryFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 events drained on cancel, got %d", len(got))
+	}
+}
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
