@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -48,6 +49,10 @@ func (s *Store) Append(ev types.StoredEvent) error {
 	if err := s.idx.Insert(ev, loc); err != nil {
 		// JSONL is source of truth; index is rebuildable. Surface error but data is durable.
 		return fmt.Errorf("index insert (jsonl line written): %w", err)
+	}
+	if err := s.indexPII(ev); err != nil {
+		// PII index is rebuildable from JSONL. Audit-log completeness wins.
+		log.Printf("store: pii index failed for %s: %v", ev.ID, err)
 	}
 	return nil
 }
