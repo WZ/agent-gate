@@ -1,8 +1,10 @@
 package doctor
 
 import (
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -43,9 +45,53 @@ func TestCheckCAFiles_Missing(t *testing.T) {
 }
 
 func TestCheckPortBindable(t *testing.T) {
-	r := CheckPortBindable(0, "test")
+	r := CheckPortBindable(0, "test", "")
 	if r.Status != StatusOK {
 		t.Fatalf("expected OK on port 0, got %v: %s", r.Status, r.Detail)
+	}
+}
+
+// When a port is bound by another process, CheckPortBindable returns OK
+// if the lockfile names the user's own running agent-gate. Doctor must
+// not tell the user "address already in use" while their own session is
+// the legitimate holder.
+func TestCheckPortBindable_LockfileExempts(t *testing.T) {
+	// Bind a port to simulate "in use".
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	// Write our own PID to a lockfile — we are alive by definition.
+	lockPath := filepath.Join(t.TempDir(), "agent-gate.lock")
+	if err := os.WriteFile(lockPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		t.Fatalf("write lockfile: %v", err)
+	}
+
+	r := CheckPortBindable(port, "proxy", lockPath)
+	if r.Status != StatusOK {
+		t.Fatalf("expected OK with live lockfile, got %v: %s", r.Status, r.Detail)
+	}
+	if !strings.Contains(r.Detail, "agent-gate run") {
+		t.Errorf("expected detail to mention agent-gate run, got %q", r.Detail)
+	}
+}
+
+// Without a lockfile the in-use check still fails — that's the correct
+// "something else is squatting on the port" signal.
+func TestCheckPortBindable_NoLockfileFails(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	r := CheckPortBindable(port, "proxy", "")
+	if r.Status != StatusFail {
+		t.Fatalf("expected FAIL with no lockfile, got %v: %s", r.Status, r.Detail)
 	}
 }
 

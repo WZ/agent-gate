@@ -132,7 +132,7 @@ func initCmd() *cobra.Command {
 	defaultConfig, _ := agruntime.ConfigPath()
 	cmd.Flags().StringVar(&configPath, "config", defaultConfig, "Path to config.toml")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Skip prompts; use defaults / flags")
-	cmd.Flags().StringVar(&installCertStr, "install-cert", "auto", "auto|true|false (default auto)")
+	cmd.Flags().StringVar(&installCertStr, "install-cert", "auto", "auto|true|false")
 	cmd.Flags().BoolVar(&skipCertInst, "skip-cert-install", false, "Equivalent to --install-cert=false")
 	cmd.Flags().BoolVar(&regenerateCA, "regenerate-ca", false, "Force-regenerate the local CA (rotates the cert)")
 	cmd.Flags().StringSliceVar(&allowHosts, "allow-host", nil, "Seed allowlist with HOST (repeatable; replaces detection)")
