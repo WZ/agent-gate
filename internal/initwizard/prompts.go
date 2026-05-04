@@ -37,9 +37,9 @@ const (
 
 	promptCustomHostsTitle        = "Add a custom host? (leave blank to finish)"
 	promptCustomHostsPlaceholder  = "api.example.com"
-	promptCustomHostsDescTemplate = "Anything you add joins the quiet set above. Skip if you're\n" +
-		"not sure - you can add hosts from http://localhost:%d\n" +
-		"whenever they show up."
+	promptCustomHostsDescTemplate = "Anything you add joins the set you just picked. Skip if\n" +
+		"you're not sure - you can add hosts from http://localhost:%d\n" +
+		"whenever you spot one in the dashboard."
 
 	promptPolicySummaryTitle        = "Your starting policy:"
 	promptPolicySummaryDescTemplate = "  Quiet (allowed, audited, not flagged):  %s\n" +
@@ -64,7 +64,9 @@ type HuhPrompter struct{}
 func (HuhPrompter) PromptWelcome(port int) error {
 	note := huh.NewNote().
 		Title(promptWelcomeTitle).
-		Description(fmt.Sprintf(promptWelcomeDescTemplate, port))
+		Description(fmt.Sprintf(promptWelcomeDescTemplate, port)).
+		Next(true).
+		NextLabel("Continue")
 	return note.Run()
 }
 
@@ -117,14 +119,18 @@ func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
 func (HuhPrompter) PromptThreeListNote(port int) error {
 	note := huh.NewNote().
 		Title(promptThreeListTitle).
-		Description(fmt.Sprintf(promptThreeListDescTemplate, port))
+		Description(fmt.Sprintf(promptThreeListDescTemplate, port)).
+		Next(true).
+		NextLabel("Continue")
 	return note.Run()
 }
 
 func (HuhPrompter) PromptPolicySummary(quietCount int, port int) error {
 	note := huh.NewNote().
 		Title(promptPolicySummaryTitle).
-		Description(fmt.Sprintf(promptPolicySummaryDescTemplate, hostCountLabel(quietCount), port))
+		Description(fmt.Sprintf(promptPolicySummaryDescTemplate, hostCountLabel(quietCount), port)).
+		Next(true).
+		NextLabel("Continue")
 	return note.Run()
 }
 
