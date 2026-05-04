@@ -80,7 +80,7 @@ func TestReindexCommandRebuildsIndex(t *testing.T) {
 	st2, err := store.Open(dataDir, time.Now)
 	require.NoError(t, err)
 	defer st2.Close()
-	row := st2.Index().Db().QueryRow(`SELECT count(*) FROM event_pii`)
+	row := st2.Index().Db().QueryRow(`SELECT count(*) FROM event_pii WHERE count > 0`)
 	var n int
 	require.NoError(t, row.Scan(&n))
 	assert.Equal(t, 2, n)

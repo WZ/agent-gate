@@ -372,7 +372,7 @@ func loadPIIChipsForEvents(idx *store.Index, ids []string) (map[string][]PIICoun
 	}
 	q := `SELECT event_id, code, sum(count) FROM event_pii ` +
 		`WHERE event_id IN (` + strings.Join(placeholders, ",") + `) ` +
-		`GROUP BY event_id, code`
+		`AND count > 0 GROUP BY event_id, code`
 	rows, err := idx.Db().Query(q, args...)
 	if err != nil {
 		return nil, err

@@ -167,3 +167,65 @@ func TestExplorePagination(t *testing.T) {
 	assert.Contains(t, pg2, "01PG50")
 	assert.Contains(t, pg2, "01PG74")
 }
+
+func TestExplorePaginationIncludesEventsPastFirstFiveHundred(t *testing.T) {
+	now := time.Now()
+	seeds := make([]seed, 0, 525)
+	for i := 0; i < 525; i++ {
+		seeds = append(seeds, seedEventAt(
+			fmt.Sprintf("01BIG%03d", i),
+			"https://api.example.com/x",
+			`{"x":1}`,
+			now.Add(-time.Duration(i)*time.Minute),
+		))
+	}
+	srv := httptest.NewServer(testServer(t, seeds...))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?preset=all&page=11")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+	assert.Contains(t, body, "01BIG500")
+	assert.Contains(t, body, "01BIG524")
+}
+
+func TestExploreSearchIncludesEventsPastFirstFiveHundred(t *testing.T) {
+	now := time.Now()
+	seeds := make([]seed, 0, 501)
+	for i := 0; i < 501; i++ {
+		body := `{"x":1}`
+		if i == 500 {
+			body = `{"prompt":"needle appears only in the oldest event"}`
+		}
+		seeds = append(seeds, seedEventAt(
+			fmt.Sprintf("01SEARCH%03d", i),
+			"https://api.example.com/x",
+			body,
+			now.Add(-time.Duration(i)*time.Minute),
+		))
+	}
+	srv := httptest.NewServer(testServer(t, seeds...))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?preset=all&q=needle")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+	assert.Contains(t, body, "01SEARCH500")
+	assert.Contains(t, body, "<mark>needle</mark>")
+}
+
+func TestExploreFilterLinksRenderUsableQueryStrings(t *testing.T) {
+	srv := httptest.NewServer(testServer(t,
+		seedEvent("01LINK", "https://api.example.com/x", `{"email":"alice@example.com"}`),
+	))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?preset=all")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+	assert.Contains(t, body, `href="/explore?preset=1h"`)
+	assert.Contains(t, body, `href="/explore?kinds=email&amp;preset=all"`)
+}

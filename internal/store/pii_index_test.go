@@ -64,7 +64,7 @@ func TestIndexPIIWritesCountsForEvent(t *testing.T) {
 	require.NoError(t, s.indexPII(ev))
 
 	rows, err := s.Index().db.Query(
-		`SELECT side, code, count FROM event_pii WHERE event_id = ? ORDER BY side, code`, "01EVT1")
+		`SELECT side, code, count FROM event_pii WHERE event_id = ? AND count > 0 ORDER BY side, code`, "01EVT1")
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -156,7 +156,7 @@ func TestReindexPIIRebuildsFromJSONL(t *testing.T) {
 	require.NoError(t, s.ReindexPII(context.Background()))
 
 	// We should now see exactly the same counts indexPII would have written.
-	row = s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	row = s.Index().db.QueryRow(`SELECT count(*) FROM event_pii WHERE count > 0`)
 	var after int
 	require.NoError(t, row.Scan(&after))
 	assert.Equal(t, 2, after, "two events have PII (email + phone); third has none")
@@ -200,7 +200,7 @@ func TestMaybeReindexTriggersWhenTableIsBehind(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, ran, "MaybeReindexPII should fire when event_pii is behind")
 
-	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii WHERE count > 0`)
 	var n int
 	require.NoError(t, row.Scan(&n))
 	assert.Equal(t, 2, n)
@@ -229,4 +229,58 @@ func TestMaybeReindexSkipsWhenCaughtUp(t *testing.T) {
 	ran, err := s.MaybeReindexPII(context.Background())
 	require.NoError(t, err)
 	assert.False(t, ran, "no work to do; should skip")
+}
+
+func TestMaybeReindexSkipsWhenZeroPIIEventsAreCaughtUp(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	require.NoError(t, s.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01PLAIN",
+				URL:        "https://api.example.com/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"plain":"text"}`),
+			},
+			Kind: "generic",
+		},
+	}))
+
+	ran, err := s.MaybeReindexPII(context.Background())
+	require.NoError(t, err)
+	assert.False(t, ran, "zero-PII events should still be marked as indexed")
+}
+
+func TestIndexPIIRemovesStaleRowsForEvent(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	ev := types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01STALE",
+				URL:        "https://api.example.com/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"email":"a@b.co"}`),
+			},
+			Kind: "generic",
+		},
+	}
+	require.NoError(t, s.indexPII(ev))
+
+	ev.ReqBody = []byte(`{"plain":"text"}`)
+	require.NoError(t, s.indexPII(ev))
+
+	row := s.Index().db.QueryRow(
+		`SELECT count(*) FROM event_pii WHERE event_id = ? AND count > 0`, "01STALE")
+	var n int
+	require.NoError(t, row.Scan(&n))
+	assert.Equal(t, 0, n, "stale positive PII rows should be removed before reindexing an event")
 }
