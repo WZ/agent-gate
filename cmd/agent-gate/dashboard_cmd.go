@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -47,6 +48,17 @@ func runDashboard(configPath, addrOverride string) error {
 		return err
 	}
 	defer st.Close()
+
+	// First-launch (or post-upgrade) auto-reindex: if event_pii is behind
+	// the events table, kick off a synchronous reindex. This is bounded —
+	// roughly 50ms × event count — so even a 5000-event corpus takes a few
+	// seconds. Background reindexing with SSE-driven progress is the
+	// upgrade path documented in the spec.
+	if ran, err := st.MaybeReindexPII(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: pii reindex failed: %v\n", err)
+	} else if ran {
+		fmt.Fprintln(os.Stderr, "pii reindex complete")
+	}
 
 	configDir := filepath.Dir(configPath)
 	al, err := allowlist.Load(filepath.Join(configDir, "allowlist.txt"))
