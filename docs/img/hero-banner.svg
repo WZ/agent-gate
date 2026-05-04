@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" width="1200" height="380" role="img" aria-labelledby="title desc">
+  <title id="title">agent-gate</title>
+  <desc id="desc">Personal audit gate for AI agent outbound HTTPS — TLS-intercept, parse, flag, persist, review.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#0e7c5a"/>
+      <stop offset="55%"  stop-color="#0a5d44"/>
+      <stop offset="100%" stop-color="#062f24"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="50%" r="60%">
+      <stop offset="0%"   stop-color="#7df4c2" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#7df4c2" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="terminalBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.03"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="380" fill="url(#bg)"/>
+  <circle cx="180" cy="180" r="260" fill="url(#halo)"/>
+
+  <!-- Left glyph: stylized "gate" — three vertical bars with a horizontal scan-line and audit dot -->
+  <g transform="translate(110,110)">
+    <!-- bracket frame -->
+    <path d="M 0 20 L 0 0 L 20 0" stroke="#7df4c2" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M 160 0 L 180 0 L 180 20" stroke="#7df4c2" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M 0 140 L 0 160 L 20 160" stroke="#7df4c2" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path d="M 160 160 L 180 160 L 180 140" stroke="#7df4c2" stroke-width="3" fill="none" stroke-linecap="round"/>
+
+    <!-- gate bars -->
+    <line x1="55"  y1="32" x2="55"  y2="128" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.9"/>
+    <line x1="90"  y1="32" x2="90"  y2="128" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+    <line x1="125" y1="32" x2="125" y2="128" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
+
+    <!-- scan line through middle -->
+    <line x1="20" y1="80" x2="160" y2="80" stroke="#7df4c2" stroke-width="2" opacity="0.85"/>
+    <!-- audit dot -->
+    <circle cx="90" cy="80" r="9" fill="#7df4c2"/>
+    <circle cx="90" cy="80" r="14" fill="none" stroke="#7df4c2" stroke-width="2" opacity="0.4"/>
+  </g>
+
+  <!-- Center: wordmark + tagline -->
+  <g font-family="ui-sans-serif, -apple-system, 'Inter', 'Plus Jakarta Sans', sans-serif" fill="#ffffff">
+    <text x="340" y="158" font-size="100" font-weight="800" letter-spacing="-3">agent-gate</text>
+    <text x="344" y="208" font-size="24" font-weight="500" fill-opacity="0.92">
+      Personal audit gate for AI agent outbound HTTPS.
+    </text>
+    <text x="344" y="240" font-size="15" font-weight="500" fill="#7df4c2" fill-opacity="0.85" letter-spacing="0.8">
+      TLS-INTERCEPT · PARSE · FLAG · PERSIST · REVIEW
+    </text>
+
+    <!-- supported clients pill row -->
+    <g transform="translate(344,272)" font-size="13" font-weight="600">
+      <g>
+        <rect x="0" y="0" width="86" height="28" rx="14" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.25"/>
+        <text x="43" y="19" text-anchor="middle" fill="#ffffff" fill-opacity="0.92">Claude Code</text>
+      </g>
+      <g transform="translate(96,0)">
+        <rect x="0" y="0" width="62" height="28" rx="14" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.25"/>
+        <text x="31" y="19" text-anchor="middle" fill="#ffffff" fill-opacity="0.92">Codex</text>
+      </g>
+      <g transform="translate(168,0)">
+        <rect x="0" y="0" width="56" height="28" rx="14" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.25"/>
+        <text x="28" y="19" text-anchor="middle" fill="#ffffff" fill-opacity="0.92">Aider</text>
+      </g>
+      <g transform="translate(234,0)">
+        <rect x="0" y="0" width="80" height="28" rx="14" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.25"/>
+        <text x="40" y="19" text-anchor="middle" fill="#ffffff" fill-opacity="0.92">OpenCode</text>
+      </g>
+      <g transform="translate(324,0)">
+        <rect x="0" y="0" width="60" height="28" rx="14" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.25"/>
+        <text x="30" y="19" text-anchor="middle" fill="#ffffff" fill-opacity="0.92">MCP</text>
+      </g>
+      <g transform="translate(394,0)">
+        <rect x="0" y="0" width="80" height="28" rx="14" fill="#ffffff" fill-opacity="0.10" stroke="#ffffff" stroke-opacity="0.25"/>
+        <text x="40" y="19" text-anchor="middle" fill="#ffffff" fill-opacity="0.92">any HTTP</text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Right: terminal-style live capture preview -->
+  <g transform="translate(870,90)">
+    <rect x="0" y="0" width="280" height="220" rx="10" fill="url(#terminalBg)" stroke="#ffffff" stroke-opacity="0.18"/>
+    <!-- traffic light dots -->
+    <circle cx="16" cy="18" r="5" fill="#ff6b6b" fill-opacity="0.70"/>
+    <circle cx="32" cy="18" r="5" fill="#ffd17a" fill-opacity="0.70"/>
+    <circle cx="48" cy="18" r="5" fill="#7df4c2" fill-opacity="0.70"/>
+    <text x="138" y="22" text-anchor="middle" font-family="ui-sans-serif, system-ui, sans-serif" font-size="11" fill="#ffffff" fill-opacity="0.55" letter-spacing="0.5">capture · live</text>
+
+    <g font-family="ui-monospace, 'JetBrains Mono', monospace" font-size="12">
+      <!-- entry 1: ok -->
+      <path d="M 14 56 L 22 60 L 14 64 Z" fill="#7df4c2"/>
+      <text x="28" y="64" fill="#7df4c2" fill-opacity="0.95">POST api.anthropic.com</text>
+      <text x="28" y="84" fill="#ffffff" fill-opacity="0.55">/v1/messages · 200 · sse</text>
+
+      <!-- entry 2: flagged (warning) -->
+      <path d="M 14 114 L 22 118 L 14 122 Z" fill="#7df4c2"/>
+      <text x="28" y="122" fill="#7df4c2" fill-opacity="0.95">POST api.openai.com</text>
+      <rect x="28" y="132" width="9" height="11" fill="#ffd17a"/>
+      <line x1="28" y1="132" x2="28" y2="146" stroke="#ffd17a" stroke-width="1.5"/>
+      <text x="42" y="142" fill="#ffd17a" fill-opacity="0.95">secret_in_request</text>
+
+      <!-- entry 3: flagged (high) -->
+      <path d="M 14 172 L 22 176 L 14 180 Z" fill="#7df4c2"/>
+      <text x="28" y="180" fill="#7df4c2" fill-opacity="0.95">GET  github.com</text>
+      <rect x="28" y="190" width="9" height="11" fill="#ff8a8a"/>
+      <line x1="28" y1="190" x2="28" y2="204" stroke="#ff8a8a" stroke-width="1.5"/>
+      <text x="42" y="200" fill="#ff8a8a" fill-opacity="0.95">host_not_allowlisted</text>
+    </g>
+  </g>
+</svg>
