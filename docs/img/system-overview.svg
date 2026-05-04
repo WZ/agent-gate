@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" width="1200" height="540" role="img" aria-labelledby="ovTitle ovDesc">
+  <title id="ovTitle">agent-gate system overview</title>
+  <desc id="ovDesc">Launcher spawns the agent inside a per-OS network jail, forcing all egress through the local proxy, which parses, applies policy rules, and persists to JSONL plus SQLite. The dashboard reads from that store.</desc>
+
+  <defs>
+    <style>
+      .label-eyebrow { font-family: ui-sans-serif, system-ui, 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; fill: #6b7280; }
+      .label-title   { font-family: ui-sans-serif, system-ui, 'Inter', sans-serif; font-size: 20px; font-weight: 700; fill: #131519; }
+      .label-sub     { font-family: ui-sans-serif, system-ui, 'Inter', sans-serif; font-size: 13px; font-weight: 500; fill: #4b5563; }
+      .label-mono    { font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: 12px; fill: #0e7c5a; }
+      .label-arrow   { font-family: ui-monospace, 'JetBrains Mono', monospace; font-size: 11px; fill: #6b7280; }
+      .label-section { font-family: ui-sans-serif, system-ui, 'Inter', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: 0.4px; fill: #131519; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0e7c5a"/>
+    </marker>
+    <marker id="arrowMuted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9ca3af"/>
+    </marker>
+    <linearGradient id="cardBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fafaf7"/>
+    </linearGradient>
+    <linearGradient id="proxyBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0e7c5a"/>
+      <stop offset="100%" stop-color="#0a5f44"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="540" fill="#f8f6f3"/>
+
+  <!-- Outer "single binary" container -->
+  <rect x="40" y="40" width="1120" height="460" rx="16" fill="#ffffff" stroke="#d8d2c8" stroke-width="1.5"/>
+  <text x="64" y="72" class="label-section">SINGLE BINARY · LOOPBACK ONLY · LOCAL DISK</text>
+
+  <!-- Launcher box -->
+  <g>
+    <rect x="80" y="110" width="220" height="120" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <text x="100" y="138" class="label-eyebrow">SUBSYSTEM</text>
+    <text x="100" y="166" class="label-title">launcher</text>
+    <text x="100" y="190" class="label-sub">per-OS network jail</text>
+    <text x="100" y="210" class="label-mono">macOS · Linux · Windows</text>
+  </g>
+
+  <!-- Agent (child) box -->
+  <g>
+    <rect x="380" y="110" width="240" height="120" rx="10" fill="url(#cardBg)" stroke="#d8d2c8" stroke-dasharray="4 3"/>
+    <text x="400" y="138" class="label-eyebrow">CHILD PROCESS</text>
+    <text x="400" y="166" class="label-title">your agent</text>
+    <text x="400" y="190" class="label-sub">claude · codex · curl · gh</text>
+    <text x="400" y="210" class="label-mono">all egress forced through proxy</text>
+  </g>
+
+  <!-- Arrow: launcher -> agent -->
+  <line x1="300" y1="170" x2="380" y2="170" stroke="#9ca3af" stroke-width="2" marker-end="url(#arrowMuted)"/>
+  <text x="320" y="160" class="label-arrow">spawn</text>
+
+  <!-- Proxy (centerpiece) -->
+  <g>
+    <rect x="700" y="110" width="380" height="120" rx="12" fill="url(#proxyBg)"/>
+    <text x="724" y="138" class="label-eyebrow" fill="#bff5dd" opacity="0.85">CORE</text>
+    <text x="724" y="166" class="label-title" fill="#ffffff">proxy :8888</text>
+    <text x="724" y="190" class="label-sub" fill="#ffffff" opacity="0.85">TLS-intercept · CONNECT · passthrough</text>
+    <text x="724" y="210" class="label-mono" fill="#bff5dd">parse → policy → store</text>
+  </g>
+
+  <!-- Arrow: agent -> proxy -->
+  <line x1="620" y1="170" x2="700" y2="170" stroke="#0e7c5a" stroke-width="2.5" marker-end="url(#arrow)"/>
+  <text x="624" y="160" class="label-arrow">HTTPS</text>
+
+  <!-- Pipeline: parser -> policy -> store -->
+  <g transform="translate(80,300)">
+    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <text x="20" y="26" class="label-eyebrow">STAGE 1</text>
+    <text x="20" y="52" class="label-title">parser</text>
+    <text x="20" y="76" class="label-sub">RawFlow → ParsedEvent</text>
+  </g>
+  <g transform="translate(330,300)">
+    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <text x="20" y="26" class="label-eyebrow">STAGE 2</text>
+    <text x="20" y="52" class="label-title">policy</text>
+    <text x="20" y="76" class="label-sub">8 built-in rules · flags</text>
+  </g>
+  <g transform="translate(580,300)">
+    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <text x="20" y="26" class="label-eyebrow">STAGE 3</text>
+    <text x="20" y="52" class="label-title">store</text>
+    <text x="20" y="76" class="label-sub">JSONL + SQLite index</text>
+  </g>
+
+  <!-- pipeline arrows -->
+  <line x1="300" y1="350" x2="330" y2="350" stroke="#0e7c5a" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="550" y1="350" x2="580" y2="350" stroke="#0e7c5a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- proxy → parser arrow -->
+  <path d="M 740 230 L 740 270 Q 740 280 730 280 L 200 280 Q 190 280 190 290 L 190 300" fill="none" stroke="#0e7c5a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Dashboard box -->
+  <g transform="translate(870,300)">
+    <rect x="0" y="0" width="210" height="100" rx="10" fill="url(#cardBg)" stroke="#0e7c5a" stroke-width="2"/>
+    <text x="20" y="26" class="label-eyebrow" fill="#0e7c5a">REVIEW</text>
+    <text x="20" y="52" class="label-title">dashboard :7878</text>
+    <text x="20" y="76" class="label-sub">Operations · Explore</text>
+  </g>
+
+  <!-- store → dashboard arrow -->
+  <line x1="800" y1="350" x2="870" y2="350" stroke="#0e7c5a" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Footer note -->
+  <g transform="translate(80,450)">
+    <text class="label-sub" x="0" y="0">Loopback only · file modes 0600/0700 · drop-on-full is a correctness bug, not a knob.</text>
+    <text class="label-sub" x="0" y="22" fill="#6b7280">Three policy lists in <tspan font-family="ui-monospace, 'JetBrains Mono', monospace" fill="#0e7c5a">~/.config/agent-gate/</tspan>: allowlist · denylist · passthrough.</text>
+  </g>
+</svg>
