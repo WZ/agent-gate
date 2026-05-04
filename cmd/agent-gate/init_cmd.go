@@ -28,6 +28,7 @@ func initCmd() *cobra.Command {
 		regenerateCA   bool
 		allowHosts     []string
 		force          bool
+		quiet          bool
 		dryRun         bool
 		printConfig    bool
 	)
@@ -100,6 +101,7 @@ func initCmd() *cobra.Command {
 				Installer:     ca.SmallstepInstaller{},
 				Prompter:      prompter,
 				Force:         force,
+				Quiet:         quiet,
 				AllowHosts:    allowHosts,
 				InstallCert:   installMode,
 				SkipSmokeTest: !interactive,
@@ -137,6 +139,7 @@ func initCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&regenerateCA, "regenerate-ca", false, "Force-regenerate the local CA (rotates the cert)")
 	cmd.Flags().StringSliceVar(&allowHosts, "allow-host", nil, "Seed allowlist with HOST (repeatable; replaces detection)")
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing config.toml")
+	cmd.Flags().BoolVar(&quiet, "quiet", false, "Skip welcome and summary notes during interactive init")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print planned writes; change nothing")
 	cmd.Flags().BoolVar(&printConfig, "print-config", false, "Emit the would-be config.toml on stdout; exit 0")
 	return cmd

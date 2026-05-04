@@ -131,6 +131,9 @@ If your threat model needs filesystem isolation or RBAC, agent-gate alone is ins
 ### Flags
 
 ```
+agent-gate init [flags]
+  --quiet                           skip welcome and policy summary notes
+
 agent-gate run [flags] -- <cmd> [args...]
   --permissive                       env-only enforcement (HTTPS_PROXY exported, no kernel jail)
   --airtight-fail                    refuse to fall back to permissive if airtight unsupported
