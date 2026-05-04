@@ -180,7 +180,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		cancel()
 		_ = proxyLn.Close()
 		<-proxyDone
-		close(flowCh)
+		// flowCh intentionally not closed — see teardown comment.
 		<-pipelineDone
 		return 1, fmt.Errorf("dashboard listener bind %q: %w", dashAddr, err)
 	}
@@ -213,7 +213,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		_ = dashHTTP.Close()
 		_ = proxyLn.Close()
 		<-proxyDone
-		close(flowCh)
+		// flowCh intentionally not closed — see teardown comment.
 		<-pipelineDone
 		return 1, fmt.Errorf("spawn child: %w", err)
 	}
@@ -254,7 +254,15 @@ func teardown(proxyLn net.Listener, proxyDone <-chan error,
 	_ = proxyLn.Close()
 	waitWithTimeout(proxyDone, 2*time.Second)
 
-	close(flowCh)
+	// flowCh is intentionally NOT closed. proxy.Run returns as soon as the
+	// listener errors on Accept, but goproxy's per-connection goroutines
+	// (handleHttps + spawned response handlers) may still be in flight and
+	// trying to write to flowCh. Closing here caused panics like
+	// "panic: send on closed channel" in goproxy.FuncRespHandler.Handle on
+	// Ctrl-C exits. The pipeline exits via supCtx cancellation (RunPipeline
+	// drains buffered flows then returns); any handler goroutines that are
+	// still blocked on flowCh are reaped when the supervisor returns.
+	_ = flowCh
 	waitClose(pipelineDone, 2*time.Second)
 
 	shutdownCtx, c := context.WithTimeout(context.Background(), 1*time.Second)
