@@ -3,17 +3,18 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"agent-gate/internal/ca"
+	agruntime "agent-gate/internal/runtime"
+
 	"github.com/spf13/cobra"
 )
 
 func certCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "cert", Short: "Manage the local CA"}
 	cmd.AddCommand(certInstallCmd())
+	cmd.AddCommand(certUninstallCmd())
 	cmd.AddCommand(certPathCmd())
 	return cmd
 }
@@ -21,24 +22,53 @@ func certCmd() *cobra.Command {
 func certInstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "install",
-		Short: "Install the local root CA into the system trust store",
+		Short: "Install the local root CA into all available trust stores",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			home, _ := os.UserHomeDir()
-			caDir := filepath.Join(home, ".config", "agent-gate", "ca")
-			root, err := ca.Ensure(caDir)
+			caDir, err := agruntime.CADir()
+			if err != nil {
+				return err
+			}
+			if _, err := ca.Ensure(caDir); err != nil {
+				return err
+			}
+			certPath := filepath.Join(caDir, "cert.pem")
+			fmt.Fprintf(os.Stderr, "CA cert: %s\n", certPath)
+
+			installer := ca.SmallstepInstaller{}
+			if err := installer.InstallFile(certPath); err != nil {
+				return fmt.Errorf("install: %w", err)
+			}
+			for _, p := range installer.ProbeAll(certPath) {
+				glyph := "✓"
+				if !p.Present {
+					glyph = "✗"
+				}
+				fmt.Fprintf(os.Stderr, "  %s  %s  %s\n", glyph, p.Store, p.Note)
+			}
+			return nil
+		},
+	}
+}
+
+func certUninstallCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall",
+		Short: "Remove the local root CA from all trust stores",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			caDir, err := agruntime.CADir()
 			if err != nil {
 				return err
 			}
 			certPath := filepath.Join(caDir, "cert.pem")
-			fmt.Fprintf(os.Stderr, "CA cert at: %s\n", certPath)
-			fmt.Fprintf(os.Stderr, "Subject: %s\n", root.Cert.Subject)
-
-			switch runtime.GOOS {
-			case "darwin":
-				return installMacOS(certPath)
-			default:
-				return printManualInstructions(certPath)
+			if _, err := os.Stat(certPath); err != nil {
+				return fmt.Errorf("no CA at %s", certPath)
 			}
+			installer := ca.SmallstepInstaller{}
+			if err := installer.UninstallFile(certPath); err != nil {
+				return fmt.Errorf("uninstall: %w", err)
+			}
+			fmt.Fprintln(os.Stderr, "✓ CA removed from trust stores. (cert.pem and key.pem remain on disk; delete manually if you want them gone.)")
+			return nil
 		},
 	}
 }
@@ -48,8 +78,10 @@ func certPathCmd() *cobra.Command {
 		Use:   "path",
 		Short: "Print the path to the local CA cert",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			home, _ := os.UserHomeDir()
-			caDir := filepath.Join(home, ".config", "agent-gate", "ca")
+			caDir, err := agruntime.CADir()
+			if err != nil {
+				return err
+			}
 			if _, err := ca.Ensure(caDir); err != nil {
 				return err
 			}
@@ -57,35 +89,4 @@ func certPathCmd() *cobra.Command {
 			return nil
 		},
 	}
-}
-
-func installMacOS(certPath string) error {
-	c := exec.Command(
-		"sudo", "security", "add-trusted-cert",
-		"-d",
-		"-r", "trustRoot",
-		"-k", "/Library/Keychains/System.keychain",
-		certPath,
-	)
-	c.Stdout = os.Stdout
-	c.Stderr = os.Stderr
-	c.Stdin = os.Stdin
-	fmt.Fprintln(os.Stderr, "Running: "+c.String())
-	if err := c.Run(); err != nil {
-		return fmt.Errorf("security add-trusted-cert: %w", err)
-	}
-	fmt.Fprintln(os.Stderr, "✓ CA installed in System keychain.")
-	return nil
-}
-
-func printManualInstructions(certPath string) error {
-	fmt.Fprintf(os.Stderr, `
-Automated install not yet implemented for %s. Manual install:
-
-  - Linux: copy %s to /usr/local/share/ca-certificates/agent-gate.crt and run
-           sudo update-ca-certificates
-  - Windows: certutil -addstore -f Root %s    (run as administrator)
-
-`, runtime.GOOS, certPath, certPath)
-	return nil
 }

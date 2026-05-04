@@ -27,25 +27,88 @@ sudo mv agent-gate /usr/local/bin/
 ## First-time setup
 
 ```bash
-agent-gate init           # bootstrap config + CA + dirs (one-time)
-agent-gate cert install   # macOS only; Linux/Windows print manual steps.
+agent-gate init
 ```
+
+That's it. `agent-gate init` writes the config, mints the local CA,
+detects which AI agents you have installed (`claude`, `codex`, `aider`,
+`opencode`), pre-checks their upstream hosts in an interactive allowlist
+prompt, and installs the CA into your system trust stores (Keychain on
+macOS, `ca-certificates` + Firefox NSS on Linux, wincrypt on Windows) via
+[`smallstep/truststore`](https://github.com/smallstep/truststore).
+
+For headless / CI use:
+
+```bash
+agent-gate init --non-interactive --allow-host api.anthropic.com --install-cert=false
+agent-gate cert install   # run later from a TTY
+```
+
+To validate the install at any time:
+
+```bash
+agent-gate doctor
+```
+
+`doctor` checks every moving part — CA files, trust-store presence,
+port availability, lockfile freshness, host-list permissions, agents
+detected — and prints a one-line-per-check report with suggested fixes.
+Pass `--auto-repair=safe` for filesystem-perm fixes (never sudos);
+`--auto-repair=aggressive` will attempt `cert install` on a missing
+trust-store entry.
 
 On Windows, `agent-gate init` additionally registers the WFP provider and
 sublayer used by airtight mode. Run from an elevated PowerShell once.
 
+## Upgrading from older versions
+
+agent-gate v0.6.0 changes a few things you might notice:
+
+1. **The runtime no longer auto-adds `api.anthropic.com` to your
+   allowlist on every load.** If you removed it from the dashboard
+   previously and it "kept coming back," that bug is gone. Hosts you
+   remove stay removed. Run `agent-gate doctor` to see whether your
+   allowlist is what you expect.
+2. **`config.toml` no longer accepts `[allowlist] file = "..."`.** That
+   field was always ignored by the runtime; v0.6.0 removes it from the
+   schema. Existing config files with the field are silently tolerated.
+   The allowlist always lives at `~/.config/agent-gate/allowlist.txt`.
+3. **`cert install` no longer prints "manual install" instructions for
+   Linux/Windows.** The new truststore-backed installer handles
+   ca-certificates / Firefox NSS / wincrypt automatically. macOS still
+   prompts for sudo to write the System Keychain.
+4. **You don't need to run `cert install` separately after `init`**
+   unless you skipped it with `--skip-cert-install` or it failed.
+
+To regenerate your CA: `agent-gate init --force --regenerate-ca`. With
+`--force`, agent-gate overlays your existing user-set ports / storage /
+capture mode onto the new commented template — no values lost.
+
 ## CLI summary
 
 ```
-agent-gate init                  bootstrap config + CA + dirs (one-time)
-agent-gate cert install          add the local CA to your system trust store
-agent-gate run -- <cmd>          launch a command with airtight network capture
-agent-gate proxy                 run the proxy alone (foreground)
-agent-gate dashboard             run the dashboard alone (foreground)
-agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
-agent-gate tail                  live-follow events in the terminal
-agent-gate uninstall             (Windows) remove the WFP provider/sublayer
-agent-gate version               print version info
+Getting started:
+  agent-gate init                  one-command bootstrap (config + CA + agent detection + cert install)
+  agent-gate doctor                validate the install; suggest or apply repairs
+
+Daily use:
+  agent-gate run -- <cmd>          launch a command with airtight network capture
+  agent-gate dashboard             run the local web dashboard (foreground)
+  agent-gate proxy                 run the proxy alone (foreground)
+  agent-gate tail                  live-follow events in the terminal
+  agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
+
+Maintenance:
+  agent-gate cert install          install the local CA into trust stores
+  agent-gate cert uninstall        remove the local CA from trust stores
+  agent-gate cert path             print the CA cert path
+  agent-gate uninstall             (Windows) remove the WFP provider/sublayer
+  agent-gate version               print version info
+
+Help topics:
+  agent-gate help allowlist        explain allowlist semantics
+  agent-gate help denylist         explain denylist semantics
+  agent-gate help passthrough      explain passthrough semantics
 ```
 
 Each takes `--config PATH` to point at a non-default `config.toml`.

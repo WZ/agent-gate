@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -98,6 +99,47 @@ func (l *List) Add(host string) error {
 	if _, err := tmp.Write([]byte(host + "\n")); err != nil {
 		tmp.Close()
 		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, l.path)
+}
+
+// Remove deletes host from the passthrough list (in-memory + file). Idempotent.
+// Atomic write via tempfile + rename.
+func (l *List) Remove(host string) error {
+	host = strings.ToLower(host)
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if _, exists := l.hosts[host]; !exists {
+		return nil
+	}
+	delete(l.hosts, host)
+
+	if err := os.MkdirAll(filepath.Dir(l.path), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(l.path), ".passthrough-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	hosts := make([]string, 0, len(l.hosts))
+	for h := range l.hosts {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	for _, h := range hosts {
+		if _, err := tmp.Write([]byte(h + "\n")); err != nil {
+			tmp.Close()
+			return err
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return err
