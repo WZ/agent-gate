@@ -21,6 +21,8 @@ func newRenderer() *renderer {
 		"filterURL":       filterURL,
 		"presetOptions":   presetOptions,
 		"join":            strings.Join,
+		"add":             func(a, b int) int { return a + b },
+		"sub":             func(a, b int) int { return a - b },
 	}
 	full := template.Must(template.New("base").Funcs(funcs).ParseFS(tplFS, "*.html"))
 	return &renderer{full: full}

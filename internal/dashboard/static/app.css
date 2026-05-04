@@ -1275,3 +1275,28 @@ mark.search-hit-current {
   padding: 0 1px;
   border-radius: 2px;
 }
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-top: 1px solid hsl(var(--border));
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+}
+.pagination-link {
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsl(var(--border));
+}
+.pagination-link:hover {
+  background: hsl(var(--muted));
+  text-decoration: none;
+}
+.pagination-current {
+  font-family: var(--font-mono);
+  color: hsl(var(--muted-foreground));
+}
