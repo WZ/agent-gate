@@ -19,9 +19,34 @@ launcher (`agent-gate run --airtight`) ships in Plan 3.
 
 ## Install
 
+### Download the binary (recommended)
+
+Grab the archive for your platform from the
+[latest release](https://github.com/WZ/agent-gate/releases/latest):
+
+| Platform | Archive |
+|---|---|
+| macOS Apple Silicon | `agent-gate_<ver>_darwin_arm64.tar.gz` |
+| macOS Intel | `agent-gate_<ver>_darwin_x86_64.tar.gz` |
+| Linux arm64 | `agent-gate_<ver>_linux_arm64.tar.gz` |
+| Linux x86_64 | `agent-gate_<ver>_linux_x86_64.tar.gz` |
+| Windows x86_64 | `agent-gate_<ver>_windows_x86_64.zip` |
+
+Extract, then move `agent-gate` to a directory on your `PATH`. On
+macOS, the first run may need `xattr -d com.apple.quarantine ./agent-gate`
+to clear Gatekeeper.
+
+### Or build from source
+
 ```bash
 go build -o agent-gate ./cmd/agent-gate
 sudo mv agent-gate /usr/local/bin/
+```
+
+### Or `go install`
+
+```bash
+go install agent-gate/cmd/agent-gate@latest
 ```
 
 ## First-time setup
