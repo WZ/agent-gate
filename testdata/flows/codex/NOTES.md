@@ -177,11 +177,53 @@ The `id` field on each event is replaced with the placeholder
 `01CODEX_FIXTURE_REDACTED` (the original ULID could be cross-
 referenced against the user's local store).
 
+## Follow-up capture: codex with OPENAI_API_KEY (resolves the eureka)
+
+Captured: 2026-05-04 (same day, second run)
+Trigger: identical to the OAuth run, but with
+`OPENAI_API_KEY=sk-fake-test-not-real-...` exported.
+
+Goal: determine whether codex 0.128.0 falls back to
+`api.openai.com/v1/...` when `OPENAI_API_KEY` is in env. If yes,
+the public OpenAI Chat parser would cover codex too, and the
+"shape-based matching" eureka holds across auth paths.
+
+**Result: it doesn't.** codex completely ignored the env var and
+used the existing OAuth tokens in `~/.codex/auth.json`. Same exact
+endpoints as the OAuth-only run:
+
+- `chatgpt.com/backend-api/plugins/featured`
+- `chatgpt.com/backend-api/wham/apps` (×3, MCP tool list)
+- `chatgpt.com/backend-api/codex/analytics-events/events`
+- `chatgpt.com/backend-api/connectors/directory/list`
+- `github.com/openai/plugins.git/*` (git-protocol clone for plugins)
+
+Zero traffic to `api.openai.com`. The codex CLI prefers OAuth when
+auth.json exists, regardless of `OPENAI_API_KEY` in env.
+
+**Plan 5 implication (now locked):** codex is permanently in
+`chatgpt_backend` land for users who have logged in via `codex login`.
+Plan 5 ships 3 HTTP parsers (not 4): `openai_chat`, `openai_responses`,
+`chatgpt_backend`. Plus `chatgpt_realtime` over WS.
+
+**Caveat not tested:** a fresh codex install with `OPENAI_API_KEY`
+set BEFORE running `codex login` (i.e., no auth.json on disk). May
+behave differently. Not exercised here because we didn't want to
+log the user out of their existing codex session. If a user reports
+codex hitting `api.openai.com`, that path becomes the second
+fixture-capture target. Until then: assume `chatgpt_backend` is
+codex's only path.
+
+No new fixture files committed for this run — captured endpoints
+are identical to the OAuth-only run; the existing fixtures cover
+them. The point of this run was a routing question, and the
+routing is now answered.
+
 ## Open follow-ups
 
-- Capture codex with `OPENAI_API_KEY` set (forces the public-API
-  path). One more session, ~5 tokens. Confirms or kills the eureka
-  for the non-OAuth codex case.
-- Decide WebSocket capture in/out of Plan 5 scope.
+- Decide WebSocket capture in/out of Plan 5 scope. → DECIDED in
+  Plan 5 design 2026-05-04: WS capture IS in scope.
 - Capture opencode next — its multi-vendor design is the strongest
   test of "shape-based matching."
+- Fresh-install codex with API-key only (no auth.json) — only if a
+  user reports it hitting api.openai.com.
