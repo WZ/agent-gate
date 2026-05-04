@@ -1185,6 +1185,88 @@ mark.search-hit-current {
   }
 }
 
+/* Mobile-friendly cards. The default .data-table is dense and meant for
+   desktop; on narrow screens it horizontally-scrolls but reads poorly.
+   Add .responsive-cards (sessions list opts in) to stack each row as a
+   labeled card below 640px. The <td data-label="..."> attribute is the
+   column header repeated per row; we hide the real <thead>. */
+@media (max-width: 640px) {
+  .data-table.responsive-cards { min-width: 0; }
+  .data-table.responsive-cards thead { display: none; }
+  .data-table.responsive-cards tr {
+    display: block;
+    padding: 0.7rem 0.95rem;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .data-table.responsive-cards tr.row-flagged {
+    box-shadow: inset 3px 0 0 hsl(var(--accent));
+  }
+  .data-table.responsive-cards tbody tr:hover td { background: transparent; }
+  .data-table.responsive-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    border-bottom: 0;
+  }
+  .data-table.responsive-cards td::before {
+    content: attr(data-label);
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    flex-shrink: 0;
+  }
+  .data-table.responsive-cards td:first-child {
+    padding-bottom: 0.45rem;
+    border-bottom: 1px dashed hsl(var(--border));
+    margin-bottom: 0.25rem;
+  }
+}
+
+/* Risk-feed entry as a clickable link to the filtered Explore view. */
+.risk-link {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.55rem;
+  margin: -0.4rem -0.55rem;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.risk-link:hover {
+  background: hsl(var(--muted) / 0.55);
+  text-decoration: none;
+}
+.risk-link strong { font-weight: 600; }
+.risk-link em { color: hsl(var(--muted-foreground)); font-style: normal; margin-left: auto; font-size: 0.75rem; }
+
+/* Active flag filter pill (clear-filter affordance on /explore). */
+.filter-active {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.filter-active-label {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.filter-chip-clear {
+  margin-left: 0.4rem;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
 .filter-bar {
   margin: 1rem 0;
   padding: 1rem clamp(0.75rem, 2vw, 1.25rem);
