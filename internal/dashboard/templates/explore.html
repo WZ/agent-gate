@@ -19,6 +19,10 @@
       <input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">
       <input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">
       <input type="hidden" name="preset" value="{{ .Preset }}">
+      <div class="explore-search">
+        <input type="search" name="q" placeholder="Search bodies, URLs, hosts" value="{{ .Q }}" autocomplete="off" spellcheck="false">
+        <button type="submit">Search</button>
+      </div>
       <div class="filter-presets" aria-label="Time range">
         {{ range presetOptions }}
           <a class="filter-chip filter-preset{{ if eq $.Preset .Value }} active{{ end }}"
@@ -72,6 +76,9 @@
               <td class="mono path">{{ .Path }}</td>
               <td>{{ .Status }}</td>
             </tr>
+            {{ if .Snippet }}
+              <tr class="snippet-row"><td colspan="5" class="snippet">{{ .Snippet }}</td></tr>
+            {{ end }}
           {{ end }}
         </tbody>
       </table>

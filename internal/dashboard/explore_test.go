@@ -84,3 +84,24 @@ func TestExploreFiltersByHost(t *testing.T) {
 	assert.Contains(t, body, "01HOSTA")
 	assert.NotContains(t, body, "01HOSTB")
 }
+
+func TestExploreSearchBodyMatchesAndSnippets(t *testing.T) {
+	srv := httptest.NewServer(testServer(t,
+		seedEvent("01SRCH", "https://api.example.com/v1/x",
+			`{"prompt":"please contact alice@example.com today"}`),
+		seedEvent("01SRCH_OTHER", "https://api.example.com/v1/y",
+			`{"prompt":"unrelated payload"}`),
+	))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?q=alice&preset=all")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+
+	assert.Contains(t, body, "01SRCH")
+	assert.NotContains(t, body, "01SRCH_OTHER")
+	assert.Contains(t, body, `<mark>alice</mark>`)
+	// Surrounding context should be present.
+	assert.Contains(t, body, "contact <mark>alice</mark>@example.com")
+}
