@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 
 	"agent-gate/internal/pii"
 	"agent-gate/internal/types"
@@ -72,10 +73,12 @@ func (s *Store) ReindexPII(ctx context.Context) error {
 		ev, err := s.loadStoredEvent(r.ID)
 		if err != nil {
 			// One unreadable event must not abort the entire reindex.
+			log.Printf("store: reindex skipped %s (load): %v", r.ID, err)
 			continue
 		}
 		if err := s.indexPII(ev); err != nil {
 			// Same: skip and move on.
+			log.Printf("store: reindex skipped %s (index): %v", r.ID, err)
 			continue
 		}
 	}
