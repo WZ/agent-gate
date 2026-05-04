@@ -64,7 +64,7 @@ func handleExplore(opts Options, r *renderer) http.HandlerFunc {
 		}
 		since, until := presetWindow(preset, time.Now())
 
-		filter := store.QueryFilter{Limit: 500, Since: since, Until: until}
+		filter := store.QueryFilter{Limit: 0, Since: since, Until: until}
 		rows, err := opts.Store.Index().Query(filter)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -344,13 +344,7 @@ func toggleStringInList(active []string, value string) []string {
 // across navigation. `field` is one of: "kinds", "host", "preset", "q",
 // "page". `value` is a slice (kinds/host) or single string formatted as
 // the param value. Empty result means an empty querystring.
-func filterURL(view exploreView, field string, override interface{}) string {
-	parts := []string{}
-	emit := func(name, value string) {
-		if value != "" {
-			parts = append(parts, name+"="+value)
-		}
-	}
+func filterURL(view exploreView, field string, override interface{}) template.URL {
 	kinds := strings.Join(view.ActiveKinds, ",")
 	hosts := strings.Join(view.ActiveHosts, ",")
 	preset := view.Preset
@@ -368,19 +362,25 @@ func filterURL(view exploreView, field string, override interface{}) string {
 	case "page":
 		page = override.(int)
 	}
-	emit("q", urlQueryEscape(q))
-	emit("kinds", kinds)
-	emit("host", hosts)
-	emit("preset", preset)
-	if page > 1 {
-		emit("page", strconv.Itoa(page))
-	}
-	return strings.Join(parts, "&")
-}
 
-// urlQueryEscape is a thin wrapper so template callers don't need
-// to import net/url.
-func urlQueryEscape(s string) string { return url.QueryEscape(s) }
+	values := url.Values{}
+	if q != "" {
+		values.Set("q", q)
+	}
+	if kinds != "" {
+		values.Set("kinds", kinds)
+	}
+	if hosts != "" {
+		values.Set("host", hosts)
+	}
+	if preset != "" {
+		values.Set("preset", preset)
+	}
+	if page > 1 {
+		values.Set("page", strconv.Itoa(page))
+	}
+	return template.URL(values.Encode())
+}
 
 // snippetMaxContext bytes on each side of a hit.
 const snippetMaxContext = 60

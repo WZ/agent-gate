@@ -186,10 +186,10 @@ func TestStoreClearWipesEventPII(t *testing.T) {
 		},
 	}))
 
-	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii WHERE count > 0`)
 	var before int
 	require.NoError(t, row.Scan(&before))
-	require.Equal(t, 1, before, "precondition: event_pii has a row")
+	require.Equal(t, 1, before, "precondition: event_pii has a positive PII row")
 
 	require.NoError(t, s.Clear())
 

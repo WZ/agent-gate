@@ -12,6 +12,8 @@ import (
 	"agent-gate/internal/types"
 )
 
+const piiIndexedMarkerCode = "__indexed"
+
 // indexPII writes per-side, per-code counts into event_pii for one event.
 // Existing rows for (event_id, side, code) are replaced — callers may invoke
 // it repeatedly during reindex without producing duplicates.
@@ -28,11 +30,20 @@ func (s *Store) indexPII(ev types.StoredEvent) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := tx.Exec(`DELETE FROM event_pii WHERE event_id = ?`, ev.ID); err != nil {
+		return fmt.Errorf("delete stale event_pii %s: %w", ev.ID, err)
+	}
 	if err := writePIIBucket(tx, ev.ID, "req", pii.CountByCode(reqMatches)); err != nil {
 		return err
 	}
 	if err := writePIIBucket(tx, ev.ID, "resp", pii.CountByCode(respMatches)); err != nil {
 		return err
+	}
+	if _, err := tx.Exec(
+		`INSERT OR REPLACE INTO event_pii(event_id, side, code, count) VALUES (?, 'req', ?, 0)`,
+		ev.ID, piiIndexedMarkerCode,
+	); err != nil {
+		return fmt.Errorf("insert event_pii marker %s: %w", ev.ID, err)
 	}
 	return tx.Commit()
 }
