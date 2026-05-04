@@ -1184,3 +1184,38 @@ mark.search-hit-current {
     flex-direction: column;
   }
 }
+
+.filter-bar {
+  margin: 1rem 0;
+  padding: 1rem clamp(0.75rem, 2vw, 1.25rem);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+.filter-form { display: flex; flex-direction: column; gap: 0.6rem; }
+.filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.filter-chip {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.filter-chip:hover { text-decoration: none; border-color: hsl(var(--border-strong)); }
+.filter-chip.active {
+  background: hsl(var(--primary) / 0.12);
+  border-color: hsl(var(--primary) / 0.45);
+  color: hsl(var(--primary));
+}
+.filter-chip.pii-chip-sensitive.active {
+  background: hsl(var(--destructive) / 0.10);
+  border-color: hsl(var(--destructive) / 0.45);
+  color: hsl(var(--destructive));
+}

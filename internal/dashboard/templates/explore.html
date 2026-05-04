@@ -12,6 +12,22 @@
     {{ end }}
   </div>
 
+  <section class="filter-bar" aria-label="Filters">
+    <form class="filter-form" method="get" action="/explore">
+      <!-- Hidden inputs preserve sibling filter state when this form
+           is submitted (the search bar lives in the same form, Task 12). -->
+      <input type="hidden" name="kinds"  value="{{ join .ActiveKinds "," }}">
+      <input type="hidden" name="host"   value="{{ join .ActiveHosts "," }}">
+      <input type="hidden" name="preset" value="{{ .Preset }}">
+      <div class="filter-chips" aria-label="PII kind">
+        {{ range piiKindOptions }}
+          <a class="filter-chip pii-chip-{{ .Tier }}{{ if hasKind $.ActiveKinds .Code }} active{{ end }}"
+             href="/explore?{{ filterURL $ "kinds" .Code }}">{{ .Label }}</a>
+        {{ end }}
+      </div>
+    </form>
+  </section>
+
   <section class="panel">
     <div class="panel-header">
       <div>
@@ -44,7 +60,7 @@
         </tbody>
       </table>
     {{ else }}
-      <div class="empty-state">No events captured yet.</div>
+      <div class="empty-state">No events match these filters.</div>
     {{ end }}
   </section>
 </section>

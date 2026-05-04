@@ -16,6 +16,10 @@ func newRenderer() *renderer {
 	tplFS, _ := fs.Sub(assets, "templates")
 	funcs := template.FuncMap{
 		"hasSensitivePII": HasSensitivePII,
+		"piiKindOptions":  piiKindOptions,
+		"hasKind":         hasKind,
+		"filterURL":       filterURL,
+		"join":            strings.Join,
 	}
 	full := template.Must(template.New("base").Funcs(funcs).ParseFS(tplFS, "*.html"))
 	return &renderer{full: full}
