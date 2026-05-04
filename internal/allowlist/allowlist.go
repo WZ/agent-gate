@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -93,6 +94,48 @@ func (a *Allowlist) Add(host string) error {
 	if _, err := tmp.Write([]byte(host + "\n")); err != nil {
 		tmp.Close()
 		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, a.path)
+}
+
+// Remove deletes host from the allowlist (in-memory + file). Returns nil if
+// host wasn't present (idempotent). Atomic write via tempfile + rename.
+func (a *Allowlist) Remove(host string) error {
+	host = strings.ToLower(host)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, exists := a.hosts[host]; !exists {
+		return nil
+	}
+	delete(a.hosts, host)
+
+	if err := os.MkdirAll(filepath.Dir(a.path), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(a.path), ".allowlist-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+
+	hosts := make([]string, 0, len(a.hosts))
+	for h := range a.hosts {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	for _, h := range hosts {
+		if _, err := tmp.Write([]byte(h + "\n")); err != nil {
+			tmp.Close()
+			return err
+		}
 	}
 	if err := tmp.Close(); err != nil {
 		return err
