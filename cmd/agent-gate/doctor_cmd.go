@@ -58,10 +58,9 @@ func doctorCmd() *cobra.Command {
 				}
 			}
 
-			results = append(results, doctor.CheckPortBindable(proxyPort, "proxy"))
-			results = append(results, doctor.CheckPortBindable(dashPort, "dashboard"))
-
 			lockPath, _ := agruntime.LockfilePath()
+			results = append(results, doctor.CheckPortBindable(proxyPort, "proxy", lockPath))
+			results = append(results, doctor.CheckPortBindable(dashPort, "dashboard", lockPath))
 			results = append(results, doctor.CheckLockfile(lockPath))
 
 			results = append(results, doctor.CheckDataDir(dataDir))
