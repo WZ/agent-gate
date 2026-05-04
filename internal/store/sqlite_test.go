@@ -124,6 +124,38 @@ func TestSQLiteFilterByFlagCode(t *testing.T) {
 	assert.Empty(t, missing)
 }
 
+func TestSQLiteFilterByFlagCodeTreatsLikeMetacharactersLiterally(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "events.db")
+	idx, err := OpenIndex(dbPath)
+	require.NoError(t, err)
+	defer idx.Close()
+
+	cases := []struct {
+		id   string
+		code string
+	}{
+		{"literal-wildcards", "literal_%_flag"},
+		{"wildcard-lookalike", "literal_AX_flag"},
+		{"ordinary-flag", "parse_error"},
+	}
+	for _, c := range cases {
+		ev := types.StoredEvent{
+			ParsedEvent: types.ParsedEvent{RawFlow: types.RawFlow{ID: c.id, URL: "https://api.anthropic.com/x"}},
+			Flags:       []types.Flag{{Code: c.code, Severity: "info"}},
+		}
+		require.NoError(t, idx.Insert(ev, Location{}))
+	}
+
+	rows, err := idx.Query(QueryFilter{FlagCode: "literal_%_flag"})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "literal-wildcards", rows[0].ID)
+
+	rows, err = idx.Query(QueryFilter{FlagCode: "%"})
+	require.NoError(t, err)
+	assert.Empty(t, rows, "FlagCode=% must be treated as a literal code, not a LIKE wildcard")
+}
+
 func TestInsertStripsPortFromHost(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "events.db")
 	idx, err := OpenIndex(dbPath)
