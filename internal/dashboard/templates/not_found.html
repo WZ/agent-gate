@@ -1,0 +1,24 @@
+{{ define "not_found" }}
+<section class="detail-page">
+  <nav class="breadcrumbs"><a href="/">Sessions</a><span>/</span><strong>Not found</strong></nav>
+
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">404</p>
+      <h2>{{ .Title }}</h2>
+    </div>
+  </div>
+
+  <section class="panel">
+    <div class="empty-state">
+      <strong>{{ .Message }}</strong>
+      <span>It may have been cleared from the store, or the URL is mistyped.</span>
+      <p style="margin-top: 1rem;">
+        <a href="/" class="row-action">Back to Operations</a>
+        &nbsp;·&nbsp;
+        <a href="/explore" class="row-action">Open Explore</a>
+      </p>
+    </div>
+  </section>
+</section>
+{{ end }}
