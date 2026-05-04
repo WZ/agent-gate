@@ -165,3 +165,36 @@ func TestStoreAppendBestEffortOnPIIError(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, "01ERR", rows[0].ID)
 }
+
+func TestStoreClearWipesEventPII(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	// Append an event with PII so event_pii has a row.
+	require.NoError(t, s.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01CLR_PII",
+				URL:        "https://api.example.com/x",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}},
+				ReqBody:    []byte(`{"email":"a@b.co"}`),
+			},
+			Kind: "generic",
+		},
+	}))
+
+	row := s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	var before int
+	require.NoError(t, row.Scan(&before))
+	require.Equal(t, 1, before, "precondition: event_pii has a row")
+
+	require.NoError(t, s.Clear())
+
+	row = s.Index().db.QueryRow(`SELECT count(*) FROM event_pii`)
+	var after int
+	require.NoError(t, row.Scan(&after))
+	assert.Equal(t, 0, after, "Clear must wipe event_pii so MaybeReindexPII's never-ahead invariant holds")
+}
