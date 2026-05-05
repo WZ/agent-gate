@@ -175,6 +175,7 @@ func TestProxyHostGuardBlocksAndRecords(t *testing.T) {
 	resp.Body.Close()
 	assert.Equal(t, 403, resp.StatusCode)
 	assert.Contains(t, string(body), "host not in allowlist")
+	assert.Contains(t, string(body), "127.0.0.1")
 	assert.Equal(t, "host_not_allowlisted", resp.Header.Get("X-Agent-Gate-Block"))
 	assert.Equal(t, 0, upstreamHits, "upstream should NOT be contacted on block")
 
@@ -184,6 +185,7 @@ func TestProxyHostGuardBlocksAndRecords(t *testing.T) {
 		assert.NotEmpty(t, f.ID)
 		assert.Equal(t, 403, f.RespStatus)
 		assert.Contains(t, string(f.RespBody), "host not in allowlist")
+		assert.Contains(t, string(f.RespBody), "127.0.0.1")
 		assert.Equal(t, "airtight", f.CaptureMode)
 	case <-time.After(2 * time.Second):
 		t.Fatal("expected blocked RawFlow on channel")
