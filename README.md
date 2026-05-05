@@ -131,6 +131,9 @@ If your threat model needs filesystem isolation or RBAC, agent-gate alone is ins
 ### Flags
 
 ```
+agent-gate init [flags]
+  --quiet                           skip welcome and policy summary notes
+
 agent-gate run [flags] -- <cmd> [args...]
   --permissive                       env-only enforcement (HTTPS_PROXY exported, no kernel jail)
   --airtight-fail                    refuse to fall back to permissive if airtight unsupported
@@ -197,15 +200,24 @@ Extract, then move `agent-gate` to a directory on your `PATH`. On macOS, the fir
 ### Or build from source
 
 ```bash
+git clone https://github.com/WZ/agent-gate.git
+cd agent-gate
+
+# Plain build — produces "agent-gate 0.0.1-dev (commit unknown, built unknown)"
 go build -o agent-gate ./cmd/agent-gate
+
+# Or with version metadata baked in (matches what goreleaser ships):
+VERSION=$(git describe --tags --always)
+COMMIT=$(git rev-parse --short HEAD)
+DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+go build -trimpath \
+  -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
+  -o agent-gate ./cmd/agent-gate
+
 sudo mv agent-gate /usr/local/bin/
 ```
 
-### Or `go install`
-
-```bash
-go install agent-gate/cmd/agent-gate@latest
-```
+> `go install agent-gate/cmd/agent-gate@latest` does **not** work today — the module path in `go.mod` is the bare name `agent-gate` rather than a domain-prefixed path, so the toolchain can't fetch it from a remote. Use the binary download or `go build` from a clone.
 
 ## CLI summary
 

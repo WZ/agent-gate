@@ -23,9 +23,11 @@ func main() {
 func newRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "agent-gate",
-		Short: "Personal audit gate for Claude Code outbound traffic",
-		Long: `agent-gate intercepts outbound HTTPS from Claude Code and persists
-every request/response to a local JSONL log + SQLite index for later review.`,
+		Short: "Personal audit gate for AI agent outbound HTTPS",
+		Long: `agent-gate intercepts outbound HTTPS from any AI agent that talks HTTP
+(Claude Code, Codex, Aider, OpenCode, MCP clients, or a plain curl in a
+script) and persists every request/response to a local JSONL log + SQLite
+index. Review what your agent is doing in a local web dashboard.`,
 		SilenceUsage: true,
 	}
 

@@ -21,9 +21,16 @@ type Installer interface {
 
 // StoreProbe is the per-store install state. Used by `init`, `cert install`,
 // and `doctor` to render one-line-per-store status.
+//
+// Skip means the store exists on disk but the user clearly doesn't use
+// it — e.g. a Firefox profile directory with no cert9.db (the profile
+// has never been opened by Firefox). Doctor renders Skip as "–" rather
+// than treating it as a failure: the user shouldn't need to install the
+// CA into a profile they don't use.
 type StoreProbe struct {
 	Store   string
 	Present bool
+	Skip    bool
 	Note    string
 	Err     error
 }
@@ -140,7 +147,10 @@ func probeFirefoxProfile(certPath, profile string) StoreProbe {
 	db := filepath.Join(profile, "cert9.db")
 	store := "firefox-nss:" + filepath.Base(profile)
 	if _, err := os.Stat(db); err != nil {
-		return StoreProbe{Store: store, Present: false, Note: "no cert9.db in profile"}
+		// Profile directory exists but Firefox has never opened it (no
+		// NSS DB). Don't fail — the user doesn't actually use this
+		// profile, so the CA isn't needed there.
+		return StoreProbe{Store: store, Skip: true, Note: "no cert9.db (profile never opened)"}
 	}
 	return StoreProbe{Store: store, Present: true, Note: db}
 }

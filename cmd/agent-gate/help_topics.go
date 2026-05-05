@@ -1,11 +1,27 @@
 package main
 
-import "github.com/spf13/cobra"
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+// printLong prints the command's Long help to stdout. Without a Run, cobra
+// classifies a command as "help topic only" and renders it in a separate
+// "Additional help topics:" footer regardless of GroupID, leaving the
+// configured "Help topics:" group header empty. Giving the command a Run
+// that just prints Long puts it back under the configured group AND lets
+// users invoke it directly (`agent-gate allowlist`) instead of only via
+// `agent-gate help allowlist`.
+func printLong(cmd *cobra.Command, _ []string) {
+	fmt.Println(cmd.Long)
+}
 
 func helpTopicAllowlist() *cobra.Command {
 	return &cobra.Command{
 		Use:   "allowlist",
 		Short: "Explain agent-gate's allowlist semantics",
+		Run:   printLong,
 		Long: `THE ALLOWLIST
 
 agent-gate keeps a file at ~/.config/agent-gate/allowlist.txt listing hosts
@@ -48,6 +64,7 @@ func helpTopicDenylist() *cobra.Command {
 	return &cobra.Command{
 		Use:   "denylist",
 		Short: "Explain agent-gate's denylist semantics",
+		Run:   printLong,
 		Long: `THE DENYLIST
 
 A denylisted host always loses. The proxy returns a synthetic 403 to the
@@ -75,6 +92,7 @@ func helpTopicPassthrough() *cobra.Command {
 	return &cobra.Command{
 		Use:   "passthrough",
 		Short: "Explain agent-gate's passthrough semantics",
+		Run:   printLong,
 		Long: `THE PASSTHROUGH LIST
 
 Passthrough hosts are tunneled raw — agent-gate accepts the TCP connect,

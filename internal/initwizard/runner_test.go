@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -16,24 +17,48 @@ type mockPrompter struct {
 	addCustom          []string
 	confirmInstallCert bool
 	confirmSmokeTest   bool
+	callOrder          []string
+	ports              []int
+	summaryCounts      []int
+	suggestedHosts     []HostSuggestion
 }
 
-func (m *mockPrompter) PromptHosts(suggested []string) ([]string, error) {
+func (m *mockPrompter) PromptWelcome(port int) error {
+	m.callOrder = append(m.callOrder, "welcome")
+	m.ports = append(m.ports, port)
+	return nil
+}
+func (m *mockPrompter) PromptHosts(suggested []HostSuggestion, port int) ([]string, error) {
+	m.callOrder = append(m.callOrder, "hosts")
+	m.ports = append(m.ports, port)
+	m.suggestedHosts = append([]HostSuggestion(nil), suggested...)
 	if m.selectedHosts != nil {
 		return m.selectedHosts, nil
 	}
-	return suggested, nil
+	return suggestionHosts(suggested), nil
 }
-func (m *mockPrompter) PromptCustomHosts() ([]string, error) {
+func (m *mockPrompter) PromptCustomHosts(port int) ([]string, error) {
+	m.callOrder = append(m.callOrder, "custom")
+	m.ports = append(m.ports, port)
 	return m.addCustom, nil
 }
-func (m *mockPrompter) PromptThreeListNote() error {
+func (m *mockPrompter) PromptThreeListNote(port int) error {
+	m.callOrder = append(m.callOrder, "threelist")
+	m.ports = append(m.ports, port)
+	return nil
+}
+func (m *mockPrompter) PromptPolicySummary(quietCount int, port int) error {
+	m.callOrder = append(m.callOrder, "summary")
+	m.ports = append(m.ports, port)
+	m.summaryCounts = append(m.summaryCounts, quietCount)
 	return nil
 }
 func (m *mockPrompter) PromptInstallCert() (bool, error) {
+	m.callOrder = append(m.callOrder, "installcert")
 	return m.confirmInstallCert, nil
 }
 func (m *mockPrompter) PromptSmokeTest() (bool, error) {
+	m.callOrder = append(m.callOrder, "smoketest")
 	return m.confirmSmokeTest, nil
 }
 
@@ -150,6 +175,20 @@ func TestRunner_DryRunWritesNothing(t *testing.T) {
 	}
 }
 
+func TestInitCompleteMessage_IncludesNextSteps(t *testing.T) {
+	got := initCompleteMessage(9000)
+	for _, want := range []string{
+		"agent-gate init: complete",
+		"agent-gate run -- claude",
+		"http://localhost:9000",
+		"agent-gate doctor",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("completion message missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRunner_AllowHostReplacesDetection(t *testing.T) {
 	dir := t.TempDir()
 	mock := &ca.MockInstaller{}
@@ -180,6 +219,159 @@ func TestRunner_AllowHostReplacesDetection(t *testing.T) {
 
 func TestHuhPrompter_SatisfiesInterface(t *testing.T) {
 	var _ Prompter = HuhPrompter{}
+}
+
+func TestRunner_PromptSequenceMatchesDesign(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	_ = os.WriteFile(cfg, []byte(`
+[ports]
+dashboard = 9000
+`), 0o600)
+	prompter := &mockPrompter{}
+	opts := Options{
+		ConfigPath:  cfg,
+		ConfigDir:   dir,
+		DataDir:     filepath.Join(dir, "data"),
+		Installer:   &ca.MockInstaller{},
+		Prompter:    prompter,
+		Force:       true,
+		InstallCert: InstallCertAuto,
+		Detector: func() []agentdetect.DetectedAgent {
+			return []agentdetect.DetectedAgent{
+				{Name: "claude", Source: agentdetect.SourcePath, SuggestedHosts: []string{"api.anthropic.com"}},
+				{Name: "codex", Source: agentdetect.SourcePath, SuggestedHosts: []string{"api.openai.com"}},
+			}
+		},
+	}
+	if err := Run(opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	wantOrder := []string{"welcome", "threelist", "hosts", "custom", "summary", "installcert"}
+	if !reflect.DeepEqual(prompter.callOrder, wantOrder) {
+		t.Fatalf("call order: got %v, want %v", prompter.callOrder, wantOrder)
+	}
+	wantPorts := []int{9000, 9000, 9000, 9000, 9000}
+	if !reflect.DeepEqual(prompter.ports, wantPorts) {
+		t.Fatalf("prompt ports: got %v, want %v", prompter.ports, wantPorts)
+	}
+	if !reflect.DeepEqual(prompter.summaryCounts, []int{2}) {
+		t.Fatalf("summary counts: got %v, want [2]", prompter.summaryCounts)
+	}
+}
+
+func TestRunner_QuietSkipsWelcomeAndSummary(t *testing.T) {
+	dir := t.TempDir()
+	prompter := &mockPrompter{}
+	opts := Options{
+		ConfigPath:  filepath.Join(dir, "config.toml"),
+		ConfigDir:   dir,
+		DataDir:     filepath.Join(dir, "data"),
+		Installer:   &ca.MockInstaller{},
+		Prompter:    prompter,
+		Quiet:       true,
+		InstallCert: InstallCertFalse,
+		Detector:    func() []agentdetect.DetectedAgent { return nil },
+	}
+	if err := Run(opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	wantOrder := []string{"threelist", "hosts", "custom"}
+	if !reflect.DeepEqual(prompter.callOrder, wantOrder) {
+		t.Fatalf("call order: got %v, want %v", prompter.callOrder, wantOrder)
+	}
+	if len(prompter.summaryCounts) != 0 {
+		t.Fatalf("quiet mode should skip summary, got counts %v", prompter.summaryCounts)
+	}
+}
+
+func TestRunner_NonInteractive_SkipsNewPrompts(t *testing.T) {
+	dir := t.TempDir()
+	unusedPrompter := &mockPrompter{}
+	opts := Options{
+		ConfigPath:    filepath.Join(dir, "config.toml"),
+		ConfigDir:     dir,
+		DataDir:       filepath.Join(dir, "data"),
+		Installer:     &ca.MockInstaller{},
+		Prompter:      nil,
+		AllowHosts:    []string{"api.anthropic.com"},
+		InstallCert:   InstallCertFalse,
+		SkipSmokeTest: true,
+		Detector:      func() []agentdetect.DetectedAgent { return nil },
+	}
+	if err := Run(opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(unusedPrompter.callOrder) != 0 {
+		t.Fatalf("non-interactive run invoked prompts: %v", unusedPrompter.callOrder)
+	}
+}
+
+func TestRunner_PolicySummary_EmptyHostsCount(t *testing.T) {
+	tests := []struct {
+		name          string
+		allowHosts    []string
+		selectedHosts []string
+		wantCount     int
+	}{
+		{
+			name:      "fallback suggestion accepted",
+			wantCount: 1,
+		},
+		{
+			name:          "fallback suggestion cleared by user",
+			selectedHosts: []string{},
+			wantCount:     0,
+		},
+		{
+			name:       "invalid allow hosts bypass fallback",
+			allowHosts: []string{"not a host"},
+			wantCount:  0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			prompter := &mockPrompter{selectedHosts: tt.selectedHosts}
+			opts := Options{
+				ConfigPath:  filepath.Join(dir, "config.toml"),
+				ConfigDir:   dir,
+				DataDir:     filepath.Join(dir, "data"),
+				Installer:   &ca.MockInstaller{},
+				Prompter:    prompter,
+				AllowHosts:  tt.allowHosts,
+				InstallCert: InstallCertFalse,
+				Detector:    func() []agentdetect.DetectedAgent { return nil },
+			}
+			if err := Run(opts); err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			if !reflect.DeepEqual(prompter.summaryCounts, []int{tt.wantCount}) {
+				t.Fatalf("summary counts: got %v, want [%d]", prompter.summaryCounts, tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestSuggestHosts_LabelsDetectedAndCustomHosts(t *testing.T) {
+	detected := suggestHosts(nil, []agentdetect.DetectedAgent{
+		{Name: "claude", SuggestedHosts: []string{"api.anthropic.com", "api.shared.example.com"}},
+		{Name: "codex", SuggestedHosts: []string{"api.openai.com", "api.shared.example.com"}},
+	})
+	wantDetected := []HostSuggestion{
+		{Host: "api.anthropic.com", Agents: []string{"claude code"}},
+		{Host: "api.openai.com", Agents: []string{"codex"}},
+		{Host: "api.shared.example.com", Agents: []string{"claude code", "codex"}},
+	}
+	if !reflect.DeepEqual(detected, wantDetected) {
+		t.Fatalf("detected suggestions:\ngot  %#v\nwant %#v", detected, wantDetected)
+	}
+
+	custom := suggestHosts([]string{"override.example.com"}, nil)
+	wantCustom := []HostSuggestion{{Host: "override.example.com", Agents: []string{"custom"}}}
+	if !reflect.DeepEqual(custom, wantCustom) {
+		t.Fatalf("custom suggestions: got %#v, want %#v", custom, wantCustom)
+	}
 }
 
 // Custom hosts must always be offered after the multi-select, even when

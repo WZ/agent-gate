@@ -3,6 +3,18 @@
 (function () {
   "use strict";
 
+  // ─────────────────────── Suppress noSSESourceError ───────────────
+  // htmx core fires htmx:noSSESourceError when its initial sweep finds
+  // SSE-attribute elements before the SSE extension has installed the
+  // EventSource on them. The actual SSE wiring works (the home page's
+  // tbody connects to /api/live and live-swaps on capture). The error
+  // log is just startup-order noise that scares users into thinking
+  // capture-live is broken. Stop the event before it bubbles.
+  document.addEventListener("htmx:noSSESourceError", function (e) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+  }, true);
+
   // ─────────────────────── Copy buttons ───────────────────────
   // <button class="copy-btn" data-copy-target=".body-pane">Copy</button>
   // — looks for `.body-pane` inside the closest .panel, copies its

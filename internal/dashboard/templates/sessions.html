@@ -65,7 +65,7 @@
         </div>
       {{ else }}
         <div class="table-wrap">
-          <table class="data-table">
+          <table class="data-table responsive-cards">
             <thead><tr><th>Session</th><th>Latest host</th><th>Events</th><th>Flags</th><th>Latest event</th></tr></thead>
             <tbody hx-ext="sse" sse-connect="/api/live"
                    hx-trigger="sse:message"
@@ -74,17 +74,17 @@
                    hx-swap="outerHTML">
               {{ range .Sessions }}
                 <tr class="{{ if .HasFlags }}row-flagged{{ end }}">
-                  <td><a href="/sessions/{{ .Key }}">{{ .Label }}</a></td>
-                  <td>{{ .Host }}</td>
-                  <td>{{ .EventCount }}</td>
-                  <td>
+                  <td data-label="Session"><a href="/sessions/{{ .Key }}">{{ .Label }}</a></td>
+                  <td data-label="Latest host">{{ .Host }}</td>
+                  <td data-label="Events">{{ .EventCount }}</td>
+                  <td data-label="Flags">
                     {{ if .HasFlags }}
                       <span class="flag {{ .Severity }}">{{ .FlagCount }} {{ .Severity }}</span>
                     {{ else }}
                       <span class="flag clear">clear</span>
                     {{ end }}
                   </td>
-                  <td>{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
+                  <td data-label="Latest event">{{ .StartedAt.Format "2006-01-02 15:04:05" }}</td>
                 </tr>
               {{ end }}
             </tbody>
@@ -104,9 +104,12 @@
         <ol class="risk-list">
           {{ range .Summary.TopFlags }}
             <li>
-              <span class="flag {{ .Severity }}">{{ .Severity }}</span>
-              <strong>{{ .Code }}</strong>
-              <em>{{ .Count }} hits</em>
+              <a class="risk-link" href="/explore?flag={{ .Code }}&preset=all"
+                 title="Show all events flagged {{ .Code }}">
+                <span class="flag {{ .Severity }}">{{ .Severity }}</span>
+                <strong>{{ .Code }}</strong>
+                <em>{{ .Count }} hits</em>
+              </a>
             </li>
           {{ end }}
         </ol>

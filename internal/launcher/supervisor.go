@@ -218,7 +218,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		return 1, fmt.Errorf("spawn child: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "agent-gate run: %s mode; proxy %s; dashboard %s\n", captureMode, proxyAddr, dashAddr)
+	fmt.Fprint(os.Stderr, runStatusLine(captureMode, proxyAddr, dashAddr))
 
 	// 10. Signal handler.
 	sigCh := make(chan os.Signal, 2)
@@ -246,6 +246,17 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	teardown(proxyLn, proxyDone, flowCh, pipelineDone, dashHTTP)
 
 	return exitCode, nil
+}
+
+func runStatusLine(captureMode, proxyAddr, dashAddr string) string {
+	return fmt.Sprintf("agent-gate run: %s mode; proxy %s; dashboard %s\n", captureMode, proxyAddr, dashboardURL(dashAddr))
+}
+
+func dashboardURL(addr string) string {
+	if strings.HasPrefix(addr, "http://") || strings.HasPrefix(addr, "https://") {
+		return addr
+	}
+	return "http://" + addr
 }
 
 func teardown(proxyLn net.Listener, proxyDone <-chan error,

@@ -62,6 +62,17 @@
           </tbody>
         </table>
       </div>
+      {{ if or (gt .Page 1) .HasNextPage }}
+        <nav class="pagination" aria-label="Pages">
+          {{ if gt .Page 1 }}
+            <a class="pagination-link" href="/sessions/{{ .SessionID }}?page={{ sub .Page 1 }}">← Prev</a>
+          {{ end }}
+          <span class="pagination-current">Page {{ .Page }}</span>
+          {{ if .HasNextPage }}
+            <a class="pagination-link" href="/sessions/{{ .SessionID }}?page={{ add .Page 1 }}">Next →</a>
+          {{ end }}
+        </nav>
+      {{ end }}
     {{ end }}
   </section>
 </section>

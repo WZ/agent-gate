@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -134,7 +135,7 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 		if opts.HostGuard != nil {
 			host := req.URL.Hostname()
 			if opts.HostGuard(host) {
-				body := []byte(`{"error":"agent-gate: host not in allowlist; trust the host in the dashboard or disable enforcement"}` + "\n")
+				body := blockedHostBody(host)
 				resp := &http.Response{
 					Status:        "403 Forbidden",
 					StatusCode:    http.StatusForbidden,
@@ -213,6 +214,20 @@ func buildGoproxy(opts Options) *goproxy.ProxyHttpServer {
 		return resp
 	})
 	return gp
+}
+
+func blockedHostBody(host string) []byte {
+	body, err := json.Marshal(struct {
+		Error string `json:"error"`
+		Host  string `json:"host"`
+	}{
+		Error: "agent-gate: host not in allowlist: " + host + "; add it in the dashboard or disable enforcement",
+		Host:  host,
+	})
+	if err != nil {
+		return []byte(`{"error":"agent-gate: host not in allowlist"}` + "\n")
+	}
+	return append(body, '\n')
 }
 
 func mitmConnect(opts Options) func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
