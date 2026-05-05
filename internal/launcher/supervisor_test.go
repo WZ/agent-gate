@@ -111,6 +111,16 @@ func TestProxyOptionsForListenerCarriesPassthroughHost(t *testing.T) {
 	}
 }
 
+func TestRunStatusLine_DashboardIsClickableURL(t *testing.T) {
+	got := runStatusLine("airtight", "127.0.0.1:8888", "127.0.0.1:7878")
+	if !strings.Contains(got, "dashboard http://127.0.0.1:7878") {
+		t.Fatalf("status line should include clickable dashboard URL, got %q", got)
+	}
+	if strings.Contains(got, "dashboard 127.0.0.1:7878") {
+		t.Fatalf("status line kept non-clickable dashboard address: %q", got)
+	}
+}
+
 func TestExecArgvIncludesCommandAsArgv0(t *testing.T) {
 	got := execArgv("/usr/local/bin/helper", []string{"-exit", "0"})
 	want := []string{"/usr/local/bin/helper", "-exit", "0"}

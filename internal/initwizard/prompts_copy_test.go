@@ -66,3 +66,13 @@ func TestCopy_PortSubstitutionWorks(t *testing.T) {
 		}
 	}
 }
+
+func TestTheme_ButtonsDoNotUseDefaultPink(t *testing.T) {
+	got := fmt.Sprint(initWizardTheme().Focused.FocusedButton.GetBackground())
+	if got == "#F780E2" {
+		t.Fatalf("focused button background uses default huh pink/fuchsia")
+	}
+	if got != "#0E7C5A" {
+		t.Fatalf("focused button background = %q, want #0E7C5A", got)
+	}
+}

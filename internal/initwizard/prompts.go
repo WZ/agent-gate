@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 )
 
 const (
@@ -37,9 +38,9 @@ const (
 
 	promptCustomHostsTitle        = "Add a custom host? (leave blank to finish)"
 	promptCustomHostsPlaceholder  = "api.example.com"
-	promptCustomHostsDescTemplate = "Anything you add joins the quiet set above. Skip if you're\n" +
-		"not sure - you can add hosts from http://localhost:%d\n" +
-		"whenever they show up."
+	promptCustomHostsDescTemplate = "Anything you add joins the set you just picked. Skip if\n" +
+		"you're not sure - you can add hosts from http://localhost:%d\n" +
+		"whenever you spot one in the dashboard."
 
 	promptPolicySummaryTitle        = "Your starting policy:"
 	promptPolicySummaryDescTemplate = "  Quiet (allowed, audited, not flagged):  %s\n" +
@@ -64,8 +65,12 @@ type HuhPrompter struct{}
 func (HuhPrompter) PromptWelcome(port int) error {
 	note := huh.NewNote().
 		Title(promptWelcomeTitle).
-		Description(fmt.Sprintf(promptWelcomeDescTemplate, port))
-	return note.Run()
+		Description(fmt.Sprintf(promptWelcomeDescTemplate, port)).
+		Next(true).
+		NextLabel("Continue")
+	return huh.NewForm(huh.NewGroup(note)).
+		WithTheme(initWizardTheme()).
+		Run()
 }
 
 func (HuhPrompter) PromptHosts(suggested []HostSuggestion, port int) ([]string, error) {
@@ -87,7 +92,7 @@ func (HuhPrompter) PromptHosts(suggested []HostSuggestion, port int) ([]string, 
 			Description(fmt.Sprintf(promptHostsDescTemplate, port)).
 			Options(options...).
 			Value(&selected),
-	))
+	)).WithTheme(initWizardTheme())
 	if err := form.Run(); err != nil {
 		return nil, err
 	}
@@ -103,7 +108,9 @@ func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
 			Description(fmt.Sprintf(promptCustomHostsDescTemplate, port)).
 			Placeholder(promptCustomHostsPlaceholder).
 			Value(&host)
-		if err := input.Run(); err != nil {
+		if err := huh.NewForm(huh.NewGroup(input)).
+			WithTheme(initWizardTheme()).
+			Run(); err != nil {
 			return hosts, err
 		}
 		host = strings.TrimSpace(host)
@@ -117,15 +124,23 @@ func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
 func (HuhPrompter) PromptThreeListNote(port int) error {
 	note := huh.NewNote().
 		Title(promptThreeListTitle).
-		Description(fmt.Sprintf(promptThreeListDescTemplate, port))
-	return note.Run()
+		Description(fmt.Sprintf(promptThreeListDescTemplate, port)).
+		Next(true).
+		NextLabel("Continue")
+	return huh.NewForm(huh.NewGroup(note)).
+		WithTheme(initWizardTheme()).
+		Run()
 }
 
 func (HuhPrompter) PromptPolicySummary(quietCount int, port int) error {
 	note := huh.NewNote().
 		Title(promptPolicySummaryTitle).
-		Description(fmt.Sprintf(promptPolicySummaryDescTemplate, hostCountLabel(quietCount), port))
-	return note.Run()
+		Description(fmt.Sprintf(promptPolicySummaryDescTemplate, hostCountLabel(quietCount), port)).
+		Next(true).
+		NextLabel("Continue")
+	return huh.NewForm(huh.NewGroup(note)).
+		WithTheme(initWizardTheme()).
+		Run()
 }
 
 func (HuhPrompter) PromptInstallCert() (bool, error) {
@@ -136,7 +151,9 @@ func (HuhPrompter) PromptInstallCert() (bool, error) {
 		Affirmative("Install").
 		Negative("Skip").
 		Value(&ok)
-	if err := c.Run(); err != nil {
+	if err := huh.NewForm(huh.NewGroup(c)).
+		WithTheme(initWizardTheme()).
+		Run(); err != nil {
 		return false, err
 	}
 	return ok, nil
@@ -148,10 +165,28 @@ func (HuhPrompter) PromptSmokeTest() (bool, error) {
 		Title(promptSmokeTestTitle).
 		Description(promptSmokeTestDesc).
 		Value(&ok)
-	if err := c.Run(); err != nil {
+	if err := huh.NewForm(huh.NewGroup(c)).
+		WithTheme(initWizardTheme()).
+		Run(); err != nil {
 		return false, err
 	}
 	return ok, nil
+}
+
+func initWizardTheme() *huh.Theme {
+	theme := huh.ThemeCharm()
+	accent := lipgloss.Color("#0E7C5A")
+	buttonText := lipgloss.Color("#FFFDF5")
+
+	theme.Focused.SelectSelector = theme.Focused.SelectSelector.Foreground(accent)
+	theme.Focused.NextIndicator = theme.Focused.NextIndicator.Foreground(accent)
+	theme.Focused.PrevIndicator = theme.Focused.PrevIndicator.Foreground(accent)
+	theme.Focused.MultiSelectSelector = theme.Focused.MultiSelectSelector.Foreground(accent)
+	theme.Focused.FocusedButton = theme.Focused.FocusedButton.Foreground(buttonText).Background(accent)
+	theme.Focused.Next = theme.Focused.FocusedButton
+	theme.Focused.TextInput.Prompt = theme.Focused.TextInput.Prompt.Foreground(accent)
+
+	return theme
 }
 
 func hostCountLabel(count int) string {
