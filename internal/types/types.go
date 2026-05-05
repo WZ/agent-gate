@@ -60,6 +60,8 @@ type ParsedEvent struct {
 	Kind        string       `json:"kind"` // "anthropic_messages" | "mcp_http" | "generic"
 	SessionID   string       `json:"session_id"`
 	Model       string       `json:"model"`
+	Endpoint    string       `json:"endpoint,omitempty"`
+	ItemCount   int          `json:"item_count,omitempty"`
 	Usage       Usage        `json:"usage"`
 	Tools       []ToolUse    `json:"tools"`
 	ToolResults []ToolResult `json:"tool_results"`
