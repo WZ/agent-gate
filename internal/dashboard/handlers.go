@@ -247,7 +247,7 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		sid := strings.TrimPrefix(req.URL.Path, "/sessions/")
 		if sid == "" {
-			http.NotFound(w, req)
+			r.NotFound(w, req, "Session not found", "No session ID in URL.")
 			return
 		}
 
@@ -306,6 +306,10 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 				Host: normalizeHost(ix.Host), Path: ix.Path, Status: ix.Status, FlagCodes: codes,
 			})
 		}
+		if len(events) == 0 {
+			r.NotFound(w, req, "Session not found", "No session with ID "+sid+" in the store.")
+			return
+		}
 		summary := sessionDetailSummary{EventCount: len(events)}
 		for _, ev := range events {
 			if ev.StartedAt.After(summary.LatestEvent) {
@@ -316,11 +320,31 @@ func handleSessionDetail(opts Options, r *renderer) http.HandlerFunc {
 		if !summary.LatestEvent.IsZero() {
 			summary.LatestEventLabel = summary.LatestEvent.Format("2006-01-02 15:04:05")
 		}
+
+		// Paginate. A busy host (e.g. api.anthropic.com running for hours)
+		// can produce hundreds of events; rendering them all in one shot
+		// is a multi-megabyte HTML page. Match the explore page's 50/page
+		// rhythm so users see the same paging idiom in both views.
+		page := parsePageParam(req.URL.Query().Get("page"))
+		totalCount := len(events)
+		start := (page - 1) * exploreDefaultPageSize
+		end := start + exploreDefaultPageSize
+		if start > totalCount {
+			start = totalCount
+		}
+		if end > totalCount {
+			end = totalCount
+		}
+		paged := events[start:end]
+		hasNext := end < totalCount
+
 		r.Render(w, req, "session_detail", map[string]any{
-			"SessionID": sid,
-			"Label":     label,
-			"Events":    events,
-			"Summary":   summary,
+			"SessionID":   sid,
+			"Label":       label,
+			"Events":      paged,
+			"Summary":     summary,
+			"Page":        page,
+			"HasNextPage": hasNext,
 		})
 	}
 }
@@ -351,14 +375,14 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id := strings.TrimPrefix(req.URL.Path, "/events/")
 		if id == "" {
-			http.NotFound(w, req)
+			r.NotFound(w, req, "Event not found", "No event ID in URL.")
 			return
 		}
 		raw := req.URL.Query().Get("raw") == "1"
 
 		ix, err := opts.Store.Index().QueryByID(id)
 		if err != nil {
-			http.NotFound(w, req)
+			r.NotFound(w, req, "Event not found", "No event with ID "+id+" in the store.")
 			return
 		}
 		bodyR, err := opts.Store.Body(id)

@@ -75,17 +75,51 @@ func CheckCAFiles(caDir string) Result {
 		Detail: fmt.Sprintf("cert.pem 0%o, key.pem 0600", certInfo.Mode().Perm())}
 }
 
-func CheckPortBindable(port int, label string) Result {
+// CheckPortBindable verifies the configured proxy/dashboard port is
+// either free or already bound by the user's own running agent-gate.
+//
+// If lockPath points to a lockfile whose PID is alive, a bind failure
+// is treated as OK ("bound by agent-gate run (PID N)") rather than a
+// hard fail. Doctor's first job is to tell the user whether their
+// install is healthy; reporting "address already in use" while their
+// own agent-gate run is the holder is a false positive that sends them
+// chasing nonexistent conflicts.
+//
+// Pass lockPath="" to skip the lockfile cross-check (tests use this).
+func CheckPortBindable(port int, label, lockPath string) Result {
 	addr := "127.0.0.1:" + strconv.Itoa(port)
 	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return Result{ID: label + "-port", Status: StatusFail,
-			Detail:  fmt.Sprintf("%s: %v", addr, err),
-			FixHint: "edit ~/.config/agent-gate/config.toml [ports] section, or stop the conflicting process"}
+	if err == nil {
+		_ = ln.Close()
+		return Result{ID: label + "-port", Status: StatusOK,
+			Detail: addr + " bindable"}
 	}
-	_ = ln.Close()
-	return Result{ID: label + "-port", Status: StatusOK,
-		Detail: addr + " bindable"}
+	if lockPath != "" {
+		if pid := readLivePID(lockPath); pid > 0 {
+			return Result{ID: label + "-port", Status: StatusOK,
+				Detail: fmt.Sprintf("%s — bound by agent-gate run (PID %d)", addr, pid)}
+		}
+	}
+	return Result{ID: label + "-port", Status: StatusFail,
+		Detail:  fmt.Sprintf("%s: %v", addr, err),
+		FixHint: "edit ~/.config/agent-gate/config.toml [ports] section, or stop the conflicting process"}
+}
+
+// readLivePID returns the PID recorded in lockPath if the process is
+// still alive, or 0 otherwise (missing, unparseable, or stale lockfile).
+func readLivePID(lockPath string) int {
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return 0
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return 0
+	}
+	if !runtime.ProcessAlive(pid) {
+		return 0
+	}
+	return pid
 }
 
 func CheckDataDir(path string) Result {
@@ -181,6 +215,12 @@ func CheckCATrusted(installer ca.Installer, certPath string) []Result {
 		case p.Err != nil:
 			r.Status = StatusWarn
 			r.Detail = fmt.Sprintf("%s: probe error: %v", p.Store, p.Err)
+		case p.Skip:
+			r.Status = StatusSkip
+			r.Detail = p.Store
+			if p.Note != "" {
+				r.Detail += " (" + p.Note + ")"
+			}
 		case p.Present:
 			r.Status = StatusOK
 			r.Detail = p.Store

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"agent-gate/internal/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -105,6 +106,33 @@ func TestExploreSearchBodyMatchesAndSnippets(t *testing.T) {
 	assert.Contains(t, body, `<mark>alice</mark>`)
 	// Surrounding context should be present.
 	assert.Contains(t, body, "contact <mark>alice</mark>@example.com")
+}
+
+func TestExploreSearchFormPreservesFlagFilter(t *testing.T) {
+	opts := freshOpts(t)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:        "01FLAGFORM",
+				Method:    "POST",
+				URL:       "https://api.example.com/v1/x",
+				ReqBody:   []byte(`{"prompt":"flagged search target"}`),
+				StartedAt: time.Now(),
+			},
+			Kind: "generic",
+		},
+		Flags: []types.Flag{{Code: "host_not_allowlisted", Severity: "high"}},
+	}))
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore?flag=host_not_allowlisted&preset=all")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+
+	assert.Contains(t, body, `name="flag"`)
+	assert.Contains(t, body, `value="host_not_allowlisted"`)
 }
 
 func TestExploreCombinesAllFilters(t *testing.T) {
