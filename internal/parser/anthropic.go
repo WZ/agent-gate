@@ -9,6 +9,21 @@ import (
 	"agent-gate/internal/types"
 )
 
+type AnthropicMessages struct{}
+
+func (AnthropicMessages) Match(flow *types.RawFlow) bool {
+	return hostOf(flow.URL) == "api.anthropic.com"
+}
+
+func (AnthropicMessages) Parse(flow *types.RawFlow) (*types.ParsedEvent, error) {
+	ev := types.ParsedEvent{
+		RawFlow: *flow,
+		Kind:    "anthropic_messages",
+	}
+	parseAnthropic(&ev)
+	return &ev, nil
+}
+
 // anthropicRequest is the subset of the Messages request body we care about.
 type anthropicRequest struct {
 	Model    string `json:"model"`
