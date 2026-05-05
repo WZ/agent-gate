@@ -10,6 +10,7 @@ type Parser interface {
 
 var registry = []Parser{
 	AnthropicMessages{},
+	ChatGPTBackend{},
 }
 
 // ParseFlow dispatches flow through registered shape-specific parsers, falling
