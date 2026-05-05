@@ -34,12 +34,19 @@ func versionCmd() *cobra.Command {
 }
 
 // buildInfo returns the effective version, commit, and date for the running
-// binary. ldflags-set values (from goreleaser) win when present; otherwise
-// vcs metadata embedded by `go build` from a git checkout fills the gap, and
-// a "-dirty" suffix is appended to the version when the working tree had
-// uncommitted changes at build time.
+// binary. ldflags-set values (from goreleaser or `make build`) win when
+// present; otherwise vcs metadata embedded by `go build` from a git
+// checkout fills the gap, and a "-dirty" suffix is appended to the version
+// when the working tree had uncommitted changes at build time.
+//
+// When ldflags supplied commit, the version string is trusted as-is.
+// `make build` already runs `git describe --dirty` so the suffix is in
+// place when warranted, and Go's runtime/debug reports a stale
+// vcs.modified flag from inside a git worktree (Go 1.25 quirk where the
+// parent repo's state leaks in).
 func buildInfo() (v, c, d string) {
 	v, c, d = version, commit, date
+	ldflagsProvidedCommit := c != "unknown" && c != ""
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return v, c, d
@@ -48,7 +55,7 @@ func buildInfo() (v, c, d string) {
 	for _, s := range info.Settings {
 		switch s.Key {
 		case "vcs.revision":
-			if c == "unknown" || c == "" {
+			if !ldflagsProvidedCommit {
 				c = shortCommit(s.Value)
 			}
 		case "vcs.time":
@@ -61,7 +68,7 @@ func buildInfo() (v, c, d string) {
 			}
 		}
 	}
-	if dirty && !strings.HasSuffix(v, "-dirty") {
+	if !ldflagsProvidedCommit && dirty && !strings.HasSuffix(v, "-dirty") {
 		v = v + "-dirty"
 	}
 	return v, c, d
