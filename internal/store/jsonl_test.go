@@ -112,6 +112,90 @@ func TestJSONLReadAtOffset(t *testing.T) {
 	assert.Equal(t, "01HX", decoded.ID)
 }
 
+func TestJSONLPreservesWebSocketFieldsAndOmitsZeroValues(t *testing.T) {
+	dir := t.TempDir()
+	w, err := NewJSONLWriter(dir, fixedClock(time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer w.Close()
+
+	parentID := "parent-upgrade"
+	messageType := "control"
+	direction := "c2s"
+	controlOp := "close"
+	closeCode := 1000
+	ev := types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID:          "ws-child",
+			ParentID:    &parentID,
+			MessageType: &messageType,
+			Direction:   &direction,
+			IsWSMessage: true,
+			ControlOp:   &controlOp,
+			CloseCode:   &closeCode,
+		},
+		Kind: "websocket_message",
+	}}
+	loc, err := w.Append(ev)
+	require.NoError(t, err)
+
+	line := readJSONLLine(t, loc)
+	assert.Contains(t, line, `"parent_id":"parent-upgrade"`)
+	assert.Contains(t, line, `"message_type":"control"`)
+	assert.Contains(t, line, `"direction":"c2s"`)
+	assert.Contains(t, line, `"is_ws_message":true`)
+	assert.Contains(t, line, `"control_op":"close"`)
+	assert.Contains(t, line, `"close_code":1000`)
+
+	var decoded types.StoredEvent
+	require.NoError(t, json.Unmarshal([]byte(line), &decoded))
+	require.NotNil(t, decoded.ParentID)
+	assert.Equal(t, parentID, *decoded.ParentID)
+	require.NotNil(t, decoded.MessageType)
+	assert.Equal(t, messageType, *decoded.MessageType)
+	require.NotNil(t, decoded.Direction)
+	assert.Equal(t, direction, *decoded.Direction)
+	assert.True(t, decoded.IsWSMessage)
+	require.NotNil(t, decoded.ControlOp)
+	assert.Equal(t, controlOp, *decoded.ControlOp)
+	require.NotNil(t, decoded.CloseCode)
+	assert.Equal(t, closeCode, *decoded.CloseCode)
+
+	loc, err = w.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{ID: "plain-http"},
+		Kind:    "generic",
+	}})
+	require.NoError(t, err)
+	line = readJSONLLine(t, loc)
+	assert.NotContains(t, line, "parent_id")
+	assert.NotContains(t, line, "message_type")
+	assert.NotContains(t, line, "direction")
+	assert.NotContains(t, line, "is_ws_message")
+	assert.NotContains(t, line, "control_op")
+	assert.NotContains(t, line, "close_code")
+
+	decoded = types.StoredEvent{}
+	require.NoError(t, json.Unmarshal([]byte(line), &decoded))
+	assert.Nil(t, decoded.ParentID)
+	assert.Nil(t, decoded.MessageType)
+	assert.Nil(t, decoded.Direction)
+	assert.False(t, decoded.IsWSMessage)
+	assert.Nil(t, decoded.ControlOp)
+	assert.Nil(t, decoded.CloseCode)
+}
+
+func readJSONLLine(t *testing.T, loc Location) string {
+	t.Helper()
+	f, err := os.Open(loc.Path)
+	require.NoError(t, err)
+	defer f.Close()
+	_, err = f.Seek(loc.Offset, 0)
+	require.NoError(t, err)
+	buf := make([]byte, loc.Length)
+	_, err = f.Read(buf)
+	require.NoError(t, err)
+	return strings.TrimSpace(string(buf))
+}
+
 // helpers
 func fixedClock(t time.Time) func() time.Time { return func() time.Time { return t } }
 

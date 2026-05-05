@@ -3,6 +3,7 @@ package ca
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -170,6 +171,23 @@ func (c *CA) SignLeaf(host string) (*Leaf, error) {
 	leaf := &Leaf{Cert: cert, Key: key}
 	c.leaves[host] = leaf
 	return leaf, nil
+}
+
+// LeafSignerFunc returns a TLS server config with a CA-signed leaf for
+// serverName. It exposes the same signing path used by the HTTP MITM proxy for
+// callers that terminate TLS themselves.
+func (c *CA) LeafSignerFunc(serverName string) (*tls.Config, error) {
+	leaf, err := c.SignLeaf(serverName)
+	if err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{leaf.Cert.Raw, c.Cert.Raw},
+			PrivateKey:  leaf.Key,
+		}},
+	}, nil
 }
 
 func writePEM(path, blockType string, der []byte, mode os.FileMode) error {
