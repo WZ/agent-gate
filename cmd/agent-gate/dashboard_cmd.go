@@ -50,14 +50,15 @@ func runDashboard(configPath, addrOverride string) error {
 	defer st.Close()
 
 	// First-launch (or post-upgrade) auto-reindex: if event_pii is behind
-	// the events table, kick off a synchronous reindex. This is bounded —
-	// roughly 50ms × event count — so even a 5000-event corpus takes a few
-	// seconds. Background reindexing with SSE-driven progress is the
-	// upgrade path documented in the spec.
-	if ran, err := st.MaybeReindexPII(context.Background()); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: pii reindex failed: %v\n", err)
+	// the events table, or if a schema migration added derived SQLite
+	// columns, kick off a synchronous reindex from JSONL truth. This is
+	// bounded — roughly 50ms × event count — so even a 5000-event corpus
+	// takes a few seconds. Background reindexing with SSE-driven progress
+	// is the upgrade path documented in the spec.
+	if ran, err := st.MaybeReindex(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: reindex failed: %v\n", err)
 	} else if ran {
-		fmt.Fprintln(os.Stderr, "pii reindex complete")
+		fmt.Fprintln(os.Stderr, "reindex complete")
 	}
 
 	configDir := filepath.Dir(configPath)

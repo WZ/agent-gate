@@ -18,10 +18,11 @@ func reindexCmd() *cobra.Command {
 	var configPath string
 	cmd := &cobra.Command{
 		Use:   "reindex",
-		Short: "Rebuild the PII count index from the JSONL log",
+		Short: "Rebuild derived indexes from the JSONL log",
 		Long: `Walks every event in the audit log and recomputes its PII
-counts. Useful after upgrading agent-gate to a release that
-adds new PII detectors, or after manually deleting event_pii.
+counts plus any derived SQLite metadata. Useful after upgrading
+agent-gate to a release that adds new PII detectors or schema
+columns, or after manually deleting derived index data.
 
 This command is foreground; cancel with Ctrl-C.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -63,7 +64,7 @@ func runReindex(configPath string) error {
 	}
 	fmt.Fprintf(os.Stderr, "reindex: scanning %d events...\n", eventCount)
 
-	if err := st.ReindexPII(ctx); err != nil {
+	if err := st.Reindex(ctx); err != nil {
 		return fmt.Errorf("reindex: %w", err)
 	}
 

@@ -57,7 +57,8 @@ CREATE INDEX IF NOT EXISTS idx_event_pii_code ON event_pii(code, event_id);
 
 // Index is a SQLite-backed event index.
 type Index struct {
-	db *sql.DB
+	db                         *sql.DB
+	eventWebSocketColumnsAdded bool
 }
 
 // IndexRow is a column-projection of one event for list/search.
@@ -105,14 +106,20 @@ func OpenIndex(path string) (*Index, error) {
 		db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
-	if err := migrateEventWebSocketColumns(db); err != nil {
+	added, err := migrateEventWebSocketColumns(db)
+	if err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate event websocket columns: %w", err)
 	}
-	return &Index{db: db}, nil
+	return &Index{db: db, eventWebSocketColumnsAdded: added}, nil
 }
 
 func (i *Index) Close() error { return i.db.Close() }
+
+// EventWebSocketColumnsAdded reports whether OpenIndex added the Plan 5
+// WebSocket metadata columns to an existing events table. Callers use this
+// as a one-shot signal to refresh SQLite metadata from JSONL truth.
+func (i *Index) EventWebSocketColumnsAdded() bool { return i.eventWebSocketColumnsAdded }
 
 // Truncate removes all rows from the events table and reclaims disk space.
 func (i *Index) Truncate() error {
@@ -181,6 +188,27 @@ INSERT INTO events (
 		loc.Path,
 		loc.Offset,
 		loc.Length,
+	)
+	return err
+}
+
+func (i *Index) UpdateWebSocketFields(ev types.StoredEvent) error {
+	_, err := i.db.Exec(`
+UPDATE events
+SET parent_id = ?,
+	message_type = ?,
+	direction = ?,
+	is_ws_message = ?,
+	control_op = ?,
+	close_code = ?
+WHERE id = ?`,
+		nullableString(ev.ParentID),
+		nullableString(ev.MessageType),
+		nullableString(ev.Direction),
+		boolInt(ev.IsWSMessage),
+		nullableString(ev.ControlOp),
+		nullableInt(ev.CloseCode),
+		ev.ID,
 	)
 	return err
 }
@@ -284,10 +312,10 @@ func scanIndexRow(row scanner, r *IndexRow, startedMs *int64) error {
 	return nil
 }
 
-func migrateEventWebSocketColumns(db *sql.DB) error {
+func migrateEventWebSocketColumns(db *sql.DB) (bool, error) {
 	columns, err := eventColumns(db)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defs := []struct {
 		name string
@@ -300,18 +328,20 @@ func migrateEventWebSocketColumns(db *sql.DB) error {
 		{name: "control_op", sql: "control_op TEXT"},
 		{name: "close_code", sql: "close_code INTEGER"},
 	}
+	added := false
 	for _, def := range defs {
 		if columns[def.name] {
 			continue
 		}
+		added = true
 		if _, err := db.Exec("ALTER TABLE events ADD COLUMN " + def.sql); err != nil && !isDuplicateColumn(err) {
-			return err
+			return false, err
 		}
 	}
 	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_events_parent_id ON events(parent_id)"); err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return added, nil
 }
 
 func eventColumns(db *sql.DB) (map[string]bool, error) {

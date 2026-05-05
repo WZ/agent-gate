@@ -63,14 +63,24 @@ func writePIIBucket(tx *sql.Tx, eventID, side string, counts map[string]int) err
 	return nil
 }
 
-// ReindexPII walks every event in the index, opens its JSONL slice, decodes
-// the StoredEvent, runs pii.Find on its bodies, and writes counts back into
-// event_pii via INSERT OR REPLACE. Safe to invoke while Append is running
-// concurrently — INSERT OR REPLACE makes per-event updates atomic and the
-// reindex iterates a snapshot of event ids.
+// Reindex walks every event in the index, opens its JSONL slice, decodes the
+// StoredEvent, refreshes SQLite metadata from JSONL truth, and rebuilds PII
+// counts. Safe to invoke while Append is running concurrently — updates are
+// per-event and the reindex iterates a snapshot of event ids.
 //
 // Cancelling ctx aborts cleanly between events.
+func (s *Store) Reindex(ctx context.Context) error {
+	return s.reindex(ctx, true)
+}
+
+// ReindexPII preserves the narrower legacy API used by tests and older call
+// sites. New code should prefer Reindex so schema-backed metadata is refreshed
+// from JSONL at the same time.
 func (s *Store) ReindexPII(ctx context.Context) error {
+	return s.reindex(ctx, false)
+}
+
+func (s *Store) reindex(ctx context.Context, updateWebSocketFields bool) error {
 	rows, err := s.idx.Query(QueryFilter{Limit: 0})
 	if err != nil {
 		return fmt.Errorf("list events: %w", err)
@@ -87,6 +97,11 @@ func (s *Store) ReindexPII(ctx context.Context) error {
 			log.Printf("store: reindex skipped %s (load): %v", r.ID, err)
 			continue
 		}
+		if updateWebSocketFields {
+			if err := s.idx.UpdateWebSocketFields(ev); err != nil {
+				return fmt.Errorf("update websocket metadata %s: %w", r.ID, err)
+			}
+		}
 		if err := s.indexPII(ev); err != nil {
 			// Same: skip and move on.
 			log.Printf("store: reindex skipped %s (index): %v", r.ID, err)
@@ -94,6 +109,25 @@ func (s *Store) ReindexPII(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// MaybeReindex extends MaybeReindexPII with schema migration awareness. If
+// this Store opened an old events table and added the WebSocket metadata
+// columns, it refreshes those columns from JSONL even when event_pii is
+// already caught up.
+func (s *Store) MaybeReindex(ctx context.Context) (bool, error) {
+	piiBehind, err := s.needsPIIReindex()
+	if err != nil {
+		return false, err
+	}
+	if !piiBehind && !s.idx.EventWebSocketColumnsAdded() {
+		return false, nil
+	}
+	if err := s.Reindex(ctx); err != nil {
+		return true, err
+	}
+	s.idx.eventWebSocketColumnsAdded = false
+	return true, nil
 }
 
 // MaybeReindexPII compares the count of distinct event_ids in event_pii
@@ -110,6 +144,17 @@ func (s *Store) ReindexPII(ctx context.Context) error {
 // Relies on Store.Clear truncating event_pii so the "behind never ahead"
 // invariant holds — see Index.Truncate.
 func (s *Store) MaybeReindexPII(ctx context.Context) (bool, error) {
+	piiBehind, err := s.needsPIIReindex()
+	if err != nil {
+		return false, err
+	}
+	if !piiBehind {
+		return false, nil
+	}
+	return true, s.ReindexPII(ctx)
+}
+
+func (s *Store) needsPIIReindex() (bool, error) {
 	var eventCount int
 	if err := s.idx.db.QueryRow(`SELECT count(*) FROM events`).Scan(&eventCount); err != nil {
 		return false, fmt.Errorf("count events: %w", err)
@@ -118,10 +163,7 @@ func (s *Store) MaybeReindexPII(ctx context.Context) (bool, error) {
 	if err := s.idx.db.QueryRow(`SELECT count(DISTINCT event_id) FROM event_pii`).Scan(&indexedCount); err != nil {
 		return false, fmt.Errorf("count event_pii: %w", err)
 	}
-	if eventCount <= indexedCount {
-		return false, nil
-	}
-	return true, s.ReindexPII(ctx)
+	return eventCount > indexedCount, nil
 }
 
 func (s *Store) loadStoredEvent(id string) (types.StoredEvent, error) {

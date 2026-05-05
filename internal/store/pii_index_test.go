@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -255,6 +257,56 @@ func TestMaybeReindexSkipsWhenZeroPIIEventsAreCaughtUp(t *testing.T) {
 	assert.False(t, ran, "zero-PII events should still be marked as indexed")
 }
 
+func TestMaybeReindexTriggersWhenWebSocketColumnsWereMigrated(t *testing.T) {
+	dir := t.TempDir()
+	parentID := "upgrade-parent"
+	messageType := "text"
+	direction := "s2c"
+	controlOp := "pong"
+	closeCode := 1001
+	ev := types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID:          "01WSMIGRATE",
+			URL:         "https://chatgpt.com/backend-api/codex/session",
+			ParentID:    &parentID,
+			MessageType: &messageType,
+			Direction:   &direction,
+			IsWSMessage: true,
+			ControlOp:   &controlOp,
+			CloseCode:   &closeCode,
+		},
+		Kind: "chatgpt_realtime",
+	}}
+	w, err := NewJSONLWriter(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	loc, err := w.Append(ev)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	createOldIndexWithPIIMarker(t, filepath.Join(dir, "events.db"), ev, loc)
+
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	ran, err := s.MaybeReindex(context.Background())
+	require.NoError(t, err)
+	assert.True(t, ran, "schema migration should trigger metadata reindex even when event_pii is caught up")
+
+	row, err := s.Index().QueryByID("01WSMIGRATE")
+	require.NoError(t, err)
+	require.NotNil(t, row.ParentID)
+	assert.Equal(t, parentID, *row.ParentID)
+	require.NotNil(t, row.MessageType)
+	assert.Equal(t, messageType, *row.MessageType)
+	require.NotNil(t, row.Direction)
+	assert.Equal(t, direction, *row.Direction)
+	assert.True(t, row.IsWSMessage)
+	require.NotNil(t, row.ControlOp)
+	assert.Equal(t, controlOp, *row.ControlOp)
+	require.NotNil(t, row.CloseCode)
+	assert.Equal(t, closeCode, *row.CloseCode)
+}
+
 func TestIndexPIIRemovesStaleRowsForEvent(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
@@ -283,4 +335,59 @@ func TestIndexPIIRemovesStaleRowsForEvent(t *testing.T) {
 	var n int
 	require.NoError(t, row.Scan(&n))
 	assert.Equal(t, 0, n, "stale positive PII rows should be removed before reindexing an event")
+}
+
+func createOldIndexWithPIIMarker(t *testing.T, dbPath string, ev types.StoredEvent, loc Location) {
+	t.Helper()
+	db, err := sql.Open("sqlite", dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	_, err = db.Exec(`
+CREATE TABLE events (
+	id            TEXT PRIMARY KEY,
+	started_at    INTEGER,
+	ended_at      INTEGER,
+	host          TEXT,
+	method        TEXT,
+	path          TEXT,
+	status        INTEGER,
+	kind          TEXT,
+	session_id    TEXT,
+	model         TEXT,
+	input_tokens  INTEGER,
+	output_tokens INTEGER,
+	cache_read    INTEGER,
+	capture_mode  TEXT,
+	flag_codes    TEXT,
+	flags_json    TEXT,
+	jsonl_path    TEXT,
+	jsonl_offset  INTEGER,
+	jsonl_length  INTEGER
+);
+CREATE TABLE event_pii (
+	event_id   TEXT NOT NULL,
+	side       TEXT NOT NULL CHECK(side IN ('req','resp')),
+	code       TEXT NOT NULL,
+	count      INTEGER NOT NULL,
+	PRIMARY KEY (event_id, side, code)
+);
+CREATE INDEX idx_event_pii_code ON event_pii(code, event_id);
+INSERT INTO events (
+	id, started_at, ended_at, host, method, path, status, kind,
+	session_id, model, input_tokens, output_tokens, cache_read,
+	capture_mode, flag_codes, flags_json, jsonl_path, jsonl_offset, jsonl_length
+) VALUES (?, 0, 0, 'chatgpt.com', '', '/backend-api/codex/session', 0, ?,
+	'', '', 0, 0, 0, '', '', '[]', ?, ?, ?);
+INSERT INTO event_pii(event_id, side, code, count)
+VALUES (?, 'req', ?, 0);`,
+		ev.ID,
+		ev.Kind,
+		loc.Path,
+		loc.Offset,
+		loc.Length,
+		ev.ID,
+		piiIndexedMarkerCode,
+	)
+	require.NoError(t, err)
 }
