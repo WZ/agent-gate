@@ -63,8 +63,38 @@ func TestReindexCommandRebuildsIndex(t *testing.T) {
 			},
 		}))
 	}
+	parentID := "upgrade-parent"
+	messageType := "text"
+	direction := "c2s"
+	controlOp := "ping"
+	closeCode := 1000
+	require.NoError(t, st.Append(types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:          "01WS",
+				URL:         "https://chatgpt.com/backend-api/codex/session",
+				ParentID:    &parentID,
+				MessageType: &messageType,
+				Direction:   &direction,
+				IsWSMessage: true,
+				ControlOp:   &controlOp,
+				CloseCode:   &closeCode,
+			},
+			Kind: "chatgpt_realtime",
+		},
+	}))
 	// Wipe event_pii to make reindex meaningful.
 	_, err = st.Index().Exec("DELETE FROM event_pii")
+	require.NoError(t, err)
+	_, err = st.Index().Exec(`
+UPDATE events
+SET parent_id = NULL,
+	message_type = NULL,
+	direction = NULL,
+	is_ws_message = 0,
+	control_op = NULL,
+	close_code = NULL
+WHERE id = ?`, "01WS")
 	require.NoError(t, err)
 	require.NoError(t, st.Close())
 
@@ -84,6 +114,20 @@ func TestReindexCommandRebuildsIndex(t *testing.T) {
 	var n int
 	require.NoError(t, row.Scan(&n))
 	assert.Equal(t, 2, n)
+
+	wsRow, err := st2.Index().QueryByID("01WS")
+	require.NoError(t, err)
+	require.NotNil(t, wsRow.ParentID)
+	assert.Equal(t, parentID, *wsRow.ParentID)
+	require.NotNil(t, wsRow.MessageType)
+	assert.Equal(t, messageType, *wsRow.MessageType)
+	require.NotNil(t, wsRow.Direction)
+	assert.Equal(t, direction, *wsRow.Direction)
+	assert.True(t, wsRow.IsWSMessage)
+	require.NotNil(t, wsRow.ControlOp)
+	assert.Equal(t, controlOp, *wsRow.ControlOp)
+	require.NotNil(t, wsRow.CloseCode)
+	assert.Equal(t, closeCode, *wsRow.CloseCode)
 }
 
 // projectRoot walks upward from the test cwd until it finds a go.mod.
