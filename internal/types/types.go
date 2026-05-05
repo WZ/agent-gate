@@ -22,6 +22,15 @@ type RawFlow struct {
 	CaptureMode   string      `json:"capture_mode"`             // "airtight" | "permissive"
 	Err           string      `json:"err,omitempty"`
 	ClientConnID  string      `json:"client_conn_id,omitempty"`
+
+	// WebSocket child events link back to their parent upgrade flow. Direction
+	// is "c2s" for client-to-server and "s2c" for server-to-client.
+	ParentID    *string `json:"parent_id,omitempty"`
+	MessageType *string `json:"message_type,omitempty"` // "text" | "binary" | "control"
+	Direction   *string `json:"direction,omitempty"`    // "c2s" | "s2c"
+	IsWSMessage bool    `json:"is_ws_message,omitempty"`
+	ControlOp   *string `json:"control_op,omitempty"` // "close" | "ping" | "pong"
+	CloseCode   *int    `json:"close_code,omitempty"` // RFC 6455 close code
 }
 
 // Usage tracks Anthropic-style token accounting.

@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS events (
 	output_tokens INTEGER,
 	cache_read    INTEGER,
 	capture_mode  TEXT,
+	parent_id     TEXT,
+	message_type  TEXT,
+	direction     TEXT,
+	is_ws_message INTEGER NOT NULL DEFAULT 0,
+	control_op    TEXT,
+	close_code    INTEGER,
 	flag_codes    TEXT,
 	flags_json    TEXT,
 	jsonl_path    TEXT,
@@ -73,6 +79,12 @@ type IndexRow struct {
 	JSONLPath    string
 	JSONLOffset  int64
 	JSONLLength  int64
+	ParentID     *string
+	MessageType  *string
+	Direction    *string
+	IsWSMessage  bool
+	ControlOp    *string
+	CloseCode    *int
 }
 
 // QueryFilter narrows a Query.
@@ -92,6 +104,10 @@ func OpenIndex(path string) (*Index, error) {
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
+	}
+	if err := migrateEventWebSocketColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate event websocket columns: %w", err)
 	}
 	return &Index{db: db}, nil
 }
@@ -136,8 +152,10 @@ func (i *Index) Insert(ev types.StoredEvent, loc Location) error {
 INSERT INTO events (
 	id, started_at, ended_at, host, method, path, status, kind,
 	session_id, model, input_tokens, output_tokens, cache_read,
-	capture_mode, flag_codes, flags_json, jsonl_path, jsonl_offset, jsonl_length
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	capture_mode, parent_id, message_type, direction, is_ws_message,
+	control_op, close_code, flag_codes, flags_json, jsonl_path, jsonl_offset,
+	jsonl_length
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		ev.ID,
 		ev.StartedAt.UnixMilli(),
 		ev.EndedAt.UnixMilli(),
@@ -152,6 +170,12 @@ INSERT INTO events (
 		ev.Usage.OutputTokens,
 		ev.Usage.CacheRead,
 		ev.CaptureMode,
+		nullableString(ev.ParentID),
+		nullableString(ev.MessageType),
+		nullableString(ev.Direction),
+		boolInt(ev.IsWSMessage),
+		nullableString(ev.ControlOp),
+		nullableInt(ev.CloseCode),
 		codes,
 		string(flagsJSON),
 		loc.Path,
@@ -184,7 +208,8 @@ func (i *Index) Query(f QueryFilter) ([]IndexRow, error) {
 	}
 	q := `SELECT id, started_at, host, method, path, status, kind, session_id, model,
 		input_tokens, output_tokens, cache_read, capture_mode, flag_codes,
-		jsonl_path, jsonl_offset, jsonl_length FROM events`
+		jsonl_path, jsonl_offset, jsonl_length, parent_id, message_type,
+		direction, is_ws_message, control_op, close_code FROM events`
 	if len(conds) > 0 {
 		q += " WHERE " + strings.Join(conds, " AND ")
 	}
@@ -202,12 +227,7 @@ func (i *Index) Query(f QueryFilter) ([]IndexRow, error) {
 	for rows.Next() {
 		var r IndexRow
 		var startedMs int64
-		if err := rows.Scan(
-			&r.ID, &startedMs, &r.Host, &r.Method, &r.Path, &r.Status, &r.Kind,
-			&r.SessionID, &r.Model, &r.InputTokens, &r.OutputTokens, &r.CacheRead,
-			&r.CaptureMode, &r.FlagCodes,
-			&r.JSONLPath, &r.JSONLOffset, &r.JSONLLength,
-		); err != nil {
+		if err := scanIndexRow(rows, &r, &startedMs); err != nil {
 			return nil, err
 		}
 		r.StartedAt = time.UnixMilli(startedMs).UTC()
@@ -233,19 +253,113 @@ func splitURL(rawURL string) (host, path string, err error) {
 func (i *Index) QueryByID(id string) (IndexRow, error) {
 	row := i.db.QueryRow(`SELECT id, started_at, host, method, path, status, kind, session_id, model,
 		input_tokens, output_tokens, cache_read, capture_mode, flag_codes,
-		jsonl_path, jsonl_offset, jsonl_length FROM events WHERE id = ?`, id)
+		jsonl_path, jsonl_offset, jsonl_length, parent_id, message_type,
+		direction, is_ws_message, control_op, close_code FROM events WHERE id = ?`, id)
 	var r IndexRow
 	var startedMs int64
-	if err := row.Scan(
-		&r.ID, &startedMs, &r.Host, &r.Method, &r.Path, &r.Status, &r.Kind,
-		&r.SessionID, &r.Model, &r.InputTokens, &r.OutputTokens, &r.CacheRead,
-		&r.CaptureMode, &r.FlagCodes,
-		&r.JSONLPath, &r.JSONLOffset, &r.JSONLLength,
-	); err != nil {
+	if err := scanIndexRow(row, &r, &startedMs); err != nil {
 		return IndexRow{}, err
 	}
 	r.StartedAt = time.UnixMilli(startedMs).UTC()
 	return r, nil
+}
+
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanIndexRow(row scanner, r *IndexRow, startedMs *int64) error {
+	var isWSMessage int
+	if err := row.Scan(
+		&r.ID, startedMs, &r.Host, &r.Method, &r.Path, &r.Status, &r.Kind,
+		&r.SessionID, &r.Model, &r.InputTokens, &r.OutputTokens, &r.CacheRead,
+		&r.CaptureMode, &r.FlagCodes,
+		&r.JSONLPath, &r.JSONLOffset, &r.JSONLLength,
+		&r.ParentID, &r.MessageType, &r.Direction, &isWSMessage, &r.ControlOp,
+		&r.CloseCode,
+	); err != nil {
+		return err
+	}
+	r.IsWSMessage = isWSMessage != 0
+	return nil
+}
+
+func migrateEventWebSocketColumns(db *sql.DB) error {
+	columns, err := eventColumns(db)
+	if err != nil {
+		return err
+	}
+	defs := []struct {
+		name string
+		sql  string
+	}{
+		{name: "parent_id", sql: "parent_id TEXT"},
+		{name: "message_type", sql: "message_type TEXT"},
+		{name: "direction", sql: "direction TEXT"},
+		{name: "is_ws_message", sql: "is_ws_message INTEGER NOT NULL DEFAULT 0"},
+		{name: "control_op", sql: "control_op TEXT"},
+		{name: "close_code", sql: "close_code INTEGER"},
+	}
+	for _, def := range defs {
+		if columns[def.name] {
+			continue
+		}
+		if _, err := db.Exec("ALTER TABLE events ADD COLUMN " + def.sql); err != nil && !isDuplicateColumn(err) {
+			return err
+		}
+	}
+	if _, err := db.Exec("CREATE INDEX IF NOT EXISTS idx_events_parent_id ON events(parent_id)"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func eventColumns(db *sql.DB) (map[string]bool, error) {
+	rows, err := db.Query("PRAGMA table_info(events)")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name string
+		var typ string
+		var notNull int
+		var defaultValue any
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return nil, err
+		}
+		columns[name] = true
+	}
+	return columns, rows.Err()
+}
+
+func isDuplicateColumn(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "duplicate column")
+}
+
+func nullableString(s *string) any {
+	if s == nil {
+		return nil
+	}
+	return *s
+}
+
+func nullableInt(n *int) any {
+	if n == nil {
+		return nil
+	}
+	return *n
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func flagCodes(flags []types.Flag) string {
