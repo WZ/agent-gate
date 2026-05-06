@@ -1,0 +1,114 @@
+{
+  "id": "01OPENAIRESPONSES000000001",
+  "started_at": "2026-04-01T00:00:00Z",
+  "ended_at": "2026-04-01T00:00:00.300Z",
+  "method": "POST",
+  "url": "https://api.fazai.fortinet.com:443/v1/responses",
+  "req_headers": {
+    "Accept": [
+      "*/*"
+    ],
+    "Authorization": [
+      "REDACTED"
+    ],
+    "Content-Length": [
+      "53"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "User-Agent": [
+      "curl/8.7.1"
+    ]
+  },
+  "req_body": "eyJtb2RlbCI6ImdwdC1vc3MtMTIwYiIsImlucHV0Ijoic2F5IGhpIGluIG9uZSB3b3JkIn0=",
+  "resp_status": 200,
+  "resp_headers": {
+    "Content-Length": [
+      "1574"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Date": [
+      "Wed, 01 Apr 2026 00:00:00 GMT"
+    ],
+    "Llm_provider-Connection": [
+      "close"
+    ],
+    "Llm_provider-Content-Length": [
+      "798"
+    ],
+    "Llm_provider-Content-Type": [
+      "application/json"
+    ],
+    "Llm_provider-Date": [
+      "Wed, 01 Apr 2026 00:00:00 GMT"
+    ],
+    "Llm_provider-Server": [
+      "nginx/1.29.5"
+    ],
+    "Server": [
+      "uvicorn"
+    ],
+    "X-Litellm-Attempted-Fallbacks": [
+      "0"
+    ],
+    "X-Litellm-Attempted-Retries": [
+      "0"
+    ],
+    "X-Litellm-Call-Id": [
+      "fixture"
+    ],
+    "X-Litellm-Callback-Duration-Ms": [
+      "0.0"
+    ],
+    "X-Litellm-Key-Spend": [
+      "0.0"
+    ],
+    "X-Litellm-Model-Api-Base": [
+      "REDACTED"
+    ],
+    "X-Litellm-Model-Group": [
+      "gpt-oss-120b"
+    ],
+    "X-Litellm-Model-Id": [
+      "fixture"
+    ],
+    "X-Litellm-Overhead-Duration-Ms": [
+      "2.557"
+    ],
+    "X-Litellm-Response-Cost-Discount-Amount": [
+      "0.0"
+    ],
+    "X-Litellm-Response-Cost-Margin-Amount": [
+      "0.0"
+    ],
+    "X-Litellm-Response-Cost-Margin-Percent": [
+      "0.0"
+    ],
+    "X-Litellm-Response-Cost-Original": [
+      "0.0"
+    ],
+    "X-Litellm-Response-Duration-Ms": [
+      "344.84700000000004"
+    ],
+    "X-Litellm-Version": [
+      "1.82.0"
+    ]
+  },
+  "resp_body": "eyJpZCI6InJlc3BfeGI1alhab3Q4YkFFRzZMYWRRbXNOcDhyUUZlbHljNHkzSlU1NlBXbnVMeEY3RmdkUHZVZE9NemZFWXV1b0Jpb000OU5feTNaR0U5WjJRc0JUT3hwaFZ4a0d5RkU1M3JzWGdJdGtmLS1tM18yU2R1Ymx3SHU4SjdraExXU1RIMFVTNUhBVUJTSXhRdUZLOThnSDJzYXVTNTBadkRyRXNpZUJXYW5ZX0RaZFMwUzdyQ18xZzlnTGJDbTFhQnp5dEtzcWVEYnVCQ3FhbGRIX21halY3NmY1MktRNWVwc3hfVjB0MGZDcng3Tk5KWF84ZGg5bTZMMTFpckY3UzNnVDFuYVFZeTdJN3FCT0dPTlBaQUtkU2xSZEVTbXc2RG1TVWdRUWc1Q0VudGdiU184RHJQUWZSZXdYQy1UZFhjWk8zV1dGa0pvVmVvaXlNblFENHVhYzdPUHJDLUZKRGhWUGJiRmNWclFtRzlxbWZ1SVdWelo3c3pmamhDVkhrc25NRl9YTWxxN2xwZUxDTmlORjgxaE5ENFVtZTVxd3JHTUpJSzY1UzFuNjhRLVhGZVktZjh5YXgyUFdJc3k5ZlRWQTNyNDUxTXZnQW5MN29ZWXVmdFJ4Zz09IiwiY3JlYXRlZF9hdCI6MTc3ODA5MTA0NiwiZXJyb3IiOm51bGwsImluY29tcGxldGVfZGV0YWlscyI6bnVsbCwiaW5zdHJ1Y3Rpb25zIjpudWxsLCJtZXRhZGF0YSI6e30sIm1vZGVsIjoiZ3B0LW9zcy0xMjBiIiwib2JqZWN0IjoiY2hhdC5jb21wbGV0aW9uIiwib3V0cHV0IjpbeyJ0eXBlIjoicmVhc29uaW5nIiwiaWQiOiJyc18xOTk0NzAwMzYyMTcyNTc5ODUiLCJzdGF0dXMiOiJjb21wbGV0ZWQiLCJyb2xlIjoiYXNzaXN0YW50IiwiY29udGVudCI6W3sidHlwZSI6Im91dHB1dF90ZXh0IiwidGV4dCI6IlRoZSB1c2VyIHNheXM6IFwic2F5IGhpIGluIG9uZSB3b3JkXCIuIFRoZXkgd2FudCBhIG9uZS13b3JkIGdyZWV0aW5nIHRoYXQgZXhwcmVzc2VzIFwiaGlcIi4gQ291bGQgYmUgXCJIZXlcIiBvciBcIkhpXCIuIFwiSGV5XCIgaXMgb25lIHdvcmQgbWVhbmluZyBncmVldGluZy4gXCJIaVwiIGl0c2VsZiBpcyBhIHdvcmQuIFNvIGFuc3dlcjogXCJIaVwiLiBQcm9iYWJseSBqdXN0IG91dHB1dCBcIkhpXCIuIiwiYW5ub3RhdGlvbnMiOltdfV0sInBoYXNlIjpudWxsfSx7InR5cGUiOiJtZXNzYWdlIiwiaWQiOiJjaGF0Y21wbC05YzJjZmI3YjA3MmU5ZjYxIiwic3RhdHVzIjoiY29tcGxldGVkIiwicm9sZSI6ImFzc2lzdGFudCIsImNvbnRlbnQiOlt7InR5cGUiOiJvdXRwdXRfdGV4dCIsInRleHQiOiJIaSIsImFubm90YXRpb25zIjpbXX1dLCJwaGFzZSI6bnVsbH1dLCJwYXJhbGxlbF90b29sX2NhbGxzIjpmYWxzZSwidGVtcGVyYXR1cmUiOjAuMCwidG9vbF9jaG9pY2UiOiJhdXRvIiwidG9vbHMiOltdLCJ0b3BfcCI6bnVsbCwibWF4X291dHB1dF90b2tlbnMiOm51bGwsInByZXZpb3VzX3Jlc3BvbnNlX2lkIjpudWxsLCJyZWFzb25pbmciOm51bGwsInN0YXR1cyI6ImNvbXBsZXRlZCIsInRleHQiOnt9LCJ0cnVuY2F0aW9uIjpudWxsLCJ1c2FnZSI6eyJpbnB1dF90b2tlbnMiOjcyLCJpbnB1dF90b2tlbnNfZGV0YWlscyI6bnVsbCwib3V0cHV0X3Rva2VucyI6NzEsIm91dHB1dF90b2tlbnNfZGV0YWlscyI6bnVsbCwidG90YWxfdG9rZW5zIjoxNDMsImNvc3QiOm51bGx9LCJ1c2VyIjpudWxsLCJzdG9yZSI6bnVsbH0=",
+  "is_streamed": false,
+  "capture_mode": "airtight",
+  "kind": "generic",
+  "session_id": "",
+  "model": "",
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "tools": null,
+  "tool_results": null,
+  "flags": null
+}
