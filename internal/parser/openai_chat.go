@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -46,9 +48,7 @@ func (OpenAIChat) Parse(flow *types.RawFlow) (*types.ParsedEvent, error) {
 	parseOpenAIChatRequest(&ev)
 	if isSSE(ev.RespHeaders) {
 		ev.IsStreamed = true
-		// Streaming is fixture-driven once we have an SSE capture; for now we
-		// still return the parsed-request half so the dashboard shows model +
-		// message count rather than "generic" for streaming completions.
+		parseOpenAIChatSSEResponse(&ev)
 	} else {
 		parseOpenAIChatJSONResponse(&ev)
 	}
@@ -174,6 +174,133 @@ func decodeToolCallArguments(raw json.RawMessage) map[string]any {
 	}
 	_ = json.Unmarshal([]byte(inner), &out)
 	return out
+}
+
+// parseOpenAIChatSSEResponse re-assembles a streamed Chat Completions response
+// into the same parsed-event shape as the non-streaming branch.
+//
+// Each line is "data: <json>" where <json> is a chunk with object
+// "chat.completion.chunk". The chunk's choices[*].delta carries incremental
+// fields:
+//   - role: "assistant" (first chunk only)
+//   - content: text token (concatenated across chunks; not stored on
+//     ParsedEvent today, matching the Anthropic streamed parser)
+//   - tool_calls: streamed entries with a stable index (used as bucket key,
+//     NOT the per-delta order)
+//
+// A final chunk with empty delta and finish_reason closes the stream. The
+// "[DONE]" sentinel is the literal string after the last data line.
+//
+// Usage may appear in a trailing chunk only when stream_options.include_usage
+// is set on the request; we surface it when present and leave zeros otherwise.
+func parseOpenAIChatSSEResponse(ev *types.ParsedEvent) {
+	scanner := bufio.NewScanner(bytes.NewReader(ev.RespBody))
+	scanner.Buffer(make([]byte, 1<<16), 1<<24)
+
+	type toolBucket struct {
+		ID      string
+		Name    string
+		ArgsBuf strings.Builder
+	}
+	var (
+		modelFromStream string
+		buckets         []*toolBucket
+		usageInput      int
+		usageOutput     int
+	)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+
+		var chunk struct {
+			Model   string `json:"model"`
+			Choices []struct {
+				Delta struct {
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
+				} `json:"delta"`
+			} `json:"choices"`
+			Usage struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+			} `json:"usage"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+
+		if chunk.Model != "" && modelFromStream == "" {
+			modelFromStream = chunk.Model
+		}
+		if chunk.Usage.PromptTokens > 0 || chunk.Usage.CompletionTokens > 0 {
+			usageInput = chunk.Usage.PromptTokens
+			usageOutput = chunk.Usage.CompletionTokens
+		}
+
+		for _, choice := range chunk.Choices {
+			for _, tc := range choice.Delta.ToolCalls {
+				for tc.Index >= len(buckets) {
+					buckets = append(buckets, &toolBucket{})
+				}
+				b := buckets[tc.Index]
+				if tc.ID != "" {
+					b.ID = tc.ID
+				}
+				if tc.Function.Name != "" {
+					b.Name = tc.Function.Name
+				}
+				if tc.Function.Arguments != "" {
+					b.ArgsBuf.WriteString(tc.Function.Arguments)
+				}
+			}
+		}
+	}
+
+	if modelFromStream != "" {
+		ev.Model = modelFromStream
+	}
+	for _, b := range buckets {
+		if b.ID == "" && b.Name == "" {
+			// Empty bucket — only happens if a delta referenced an out-of-range
+			// index without ever providing identity. Skip rather than emit a
+			// placeholder ToolUse the dashboard would render as blank.
+			continue
+		}
+		ev.Tools = append(ev.Tools, types.ToolUse{
+			ID:    b.ID,
+			Name:  b.Name,
+			Input: decodeToolCallArguments(json.RawMessage(quoteJSONString(b.ArgsBuf.String()))),
+		})
+	}
+	ev.Usage.InputTokens = usageInput
+	ev.Usage.OutputTokens = usageOutput
+}
+
+// quoteJSONString wraps a raw assembled-arguments string in JSON quotes so
+// decodeToolCallArguments (which expects the OpenAI "JSON-encoded string"
+// shape) can unwrap it. Inputs like {"city":"SF"} → "{\"city\":\"SF\"}".
+func quoteJSONString(s string) []byte {
+	if s == "" {
+		return nil
+	}
+	encoded, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	return encoded
 }
 
 // stringifyContent flattens the `content` field which can be a plain string OR
