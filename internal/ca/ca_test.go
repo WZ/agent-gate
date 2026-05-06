@@ -73,6 +73,34 @@ func TestSignLeafProducesValidCert(t *testing.T) {
 	assert.NotNil(t, tlsCert.PrivateKey)
 }
 
+func TestLeafSignerFuncReturnsTLSConfigForHost(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := Ensure(dir)
+	require.NoError(t, err)
+
+	cfg, err := ca.LeafSignerFunc("chatgpt.com")
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	assert.Equal(t, uint16(tls.VersionTLS12), cfg.MinVersion)
+	require.Len(t, cfg.Certificates, 1)
+	require.NotEmpty(t, cfg.Certificates[0].Certificate)
+	assert.NotNil(t, cfg.Certificates[0].PrivateKey)
+
+	leaf, err := x509.ParseCertificate(cfg.Certificates[0].Certificate[0])
+	require.NoError(t, err)
+	assert.Equal(t, "chatgpt.com", leaf.Subject.CommonName)
+	assert.Contains(t, leaf.DNSNames, "chatgpt.com")
+
+	pool := x509.NewCertPool()
+	pool.AddCert(ca.Cert)
+	_, err = leaf.Verify(x509.VerifyOptions{
+		Roots:       pool,
+		CurrentTime: time.Now().Add(time.Minute),
+		KeyUsages:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	})
+	require.NoError(t, err)
+}
+
 func TestEnsureRejectsKeySymlink(t *testing.T) {
 	dir := t.TempDir()
 	_, err := Ensure(dir)
