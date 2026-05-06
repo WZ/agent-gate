@@ -1,0 +1,110 @@
+{
+  "id": "01CODEX_FIXTURE_REDACTED",
+  "started_at": "2026-05-04T13:42:57.764646-07:00",
+  "ended_at": "2026-05-04T13:42:57.844521-07:00",
+  "method": "POST",
+  "url": "https://chatgpt.com:443/backend-api/codex/analytics-events/events",
+  "req_headers": {
+    "Accept": [
+      "*/*"
+    ],
+    "Authorization": [
+      "Bearer REDACTED_OAUTH_TOKEN"
+    ],
+    "Chatgpt-Account-Id": [
+      "REDACTED_ACCOUNT_UUID"
+    ],
+    "Content-Length": [
+      "567"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Cookie": [
+      "REDACTED"
+    ],
+    "Originator": [
+      "codex_exec"
+    ],
+    "User-Agent": [
+      "codex_exec/0.128.0 (Mac OS 26.4.0; arm64) ghostty/1.3.0-HEAD_80d3fa0 (codex_exec; 0.128.0)"
+    ]
+  },
+  "req_body": "eyJldmVudHMiOlt7ImV2ZW50X3R5cGUiOiJjb2RleF90aHJlYWRfaW5pdGlhbGl6ZWQiLCJldmVudF9wYXJhbXMiOnsidGhyZWFkX2lkIjoiMDE5ZGY0YmEtZDMyYS03ODUxLThmMGYtZjM4NmQyN2EzNDRkIiwiYXBwX3NlcnZlcl9jbGllbnQiOnsicHJvZHVjdF9jbGllbnRfaWQiOiJjb2RleF9leGVjIiwiY2xpZW50X25hbWUiOiJjb2RleF9leGVjIiwiY2xpZW50X3ZlcnNpb24iOiIwLjEyOC4wIiwicnBjX3RyYW5zcG9ydCI6ImluX3Byb2Nlc3MiLCJleHBlcmltZW50YWxfYXBpX2VuYWJsZWQiOnRydWV9LCJydW50aW1lIjp7ImNvZGV4X3JzX3ZlcnNpb24iOiIwLjEyOC4wIiwicnVudGltZV9vcyI6Im1hY29zIiwicnVudGltZV9vc192ZXJzaW9uIjoiMjYuNC4wIiwicnVudGltZV9hcmNoIjoiYWFyY2g2NCJ9LCJtb2RlbCI6ImdwdC01LjUiLCJlcGhlbWVyYWwiOmZhbHNlLCJ0aHJlYWRfc291cmNlIjoidXNlciIsImluaXRpYWxpemF0aW9uX21vZGUiOiJuZXciLCJzdWJhZ2VudF9zb3VyY2UiOm51bGwsInBhcmVudF90aHJlYWRfaWQiOm51bGwsImNyZWF0ZWRfYXQiOjE3Nzc5MjczNzd9fV19",
+  "resp_status": 200,
+  "resp_headers": {
+    "Alt-Svc": [
+      "h3=\":443\"; ma=86400"
+    ],
+    "Cf-Cache-Status": [
+      "DYNAMIC"
+    ],
+    "Cf-Ray": [
+      "REDACTED"
+    ],
+    "Connection": [
+      "keep-alive"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Cross-Origin-Opener-Policy": [
+      "same-origin-allow-popups"
+    ],
+    "Date": [
+      "Mon, 04 May 2026 20:42:57 GMT"
+    ],
+    "Nel": [
+      "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}"
+    ],
+    "Referrer-Policy": [
+      "strict-origin-when-cross-origin"
+    ],
+    "Report-To": [
+      "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=YEOUpOJ%2Bdyph3uNBgWn26Vzx9p8zqSs50wFSjeMabphp%2Bd3%2FReGhHACSX6I9kE%2FVTTfI%2B1cYpSQ3VE6fGlolnQ37iqb8uFpRuwvnmsWXFv8hPIBLuyAyYJbk%2B4bA\"}]}"
+    ],
+    "Server": [
+      "cloudflare"
+    ],
+    "Set-Cookie": [
+      "REDACTED"
+    ],
+    "Strict-Transport-Security": [
+      "max-age=31536000; includeSubDomains; preload"
+    ],
+    "X-Content-Type-Options": [
+      "nosniff"
+    ],
+    "X-Oai-Request-Id": [
+      "REDACTED_UUID"
+    ],
+    "X-Openai-Proxy-Wasm": [
+      "v0.1"
+    ]
+  },
+  "resp_body": "ewogICJzdGF0dXMiOiAib2siLAogICJ0b3RhbF9ldmVudHMiOiAxLAogICJhY2NlcHRlZF9ldmVudHMiOiAxLAogICJza2lwcGVkX2V2ZW50cyI6IDAKfQ==",
+  "is_streamed": false,
+  "capture_mode": "permissive",
+  "kind": "generic",
+  "session_id": "",
+  "model": "",
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "tools": null,
+  "tool_results": null,
+  "flags": [
+    {
+      "code": "host_not_allowlisted",
+      "severity": "high",
+      "detail": "host chatgpt.com is not in the allowlist"
+    },
+    {
+      "code": "permissive_capture",
+      "severity": "info",
+      "detail": "captured under env-only enforcement; airtight mode is recommended"
+    }
+  ]
+}
