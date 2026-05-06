@@ -36,9 +36,81 @@ func TestOpenAIChatMatch(t *testing.T) {
 	}), "missing messages field is not chat-completion-shaped")
 
 	assert.False(t, p.Match(&types.RawFlow{
+		URL:     "https://api.openai.com/v1/chat/completions",
+		ReqBody: []byte(`{"model":"gpt-4o","messages":[]}`),
+	}), "empty messages array is not a real completion request")
+
+	assert.False(t, p.Match(&types.RawFlow{
 		URL:     "https://api.openai.com/v1/embeddings",
 		ReqBody: []byte(`{"input":"hi","model":"text-embedding-3-small"}`),
 	}), "embeddings endpoint is a different shape")
+}
+
+func TestOpenAIChatStringifyContentMultimodal(t *testing.T) {
+	// content can be a list of {type,text,image_url,...} chunks for vision /
+	// multimodal calls. We flatten just the text parts; non-text chunks are
+	// represented elsewhere in the flow (raw bytes, response).
+	flow := types.RawFlow{
+		Method: "POST",
+		URL:    "https://api.openai.com/v1/chat/completions",
+		ReqBody: []byte(`{
+			"model": "gpt-4o",
+			"messages": [
+				{"role":"user","content":[{"type":"text","text":"hi"}]},
+				{"role":"assistant","content":null,"tool_calls":[{"id":"c1","type":"function","function":{"name":"f","arguments":"{}"}}]},
+				{"role":"tool","tool_call_id":"c1","content":[{"type":"text","text":"first"},{"type":"image_url","image_url":{"url":"data:..."}},{"type":"text","text":"second"}]}
+			]
+		}`),
+		RespStatus:  200,
+		RespHeaders: http.Header{"Content-Type": []string{"application/json"}},
+		RespBody:    []byte(`{"object":"chat.completion","model":"gpt-4o","choices":[],"usage":{}}`),
+	}
+
+	ev := Parse(flow)
+
+	require.Len(t, ev.ToolResults, 1)
+	assert.Equal(t, "first\nsecond", ev.ToolResults[0].Content,
+		"text chunks should be joined with newlines, image chunks dropped")
+}
+
+func TestParseOpenAIChatToolCallArgumentsInlinedObject(t *testing.T) {
+	// Some compatibility layers and older models inline the arguments object
+	// directly instead of double-encoding it as a string. The fallback branch
+	// in decodeToolCallArguments should still pick out the values.
+	flow := types.RawFlow{
+		Method: "POST",
+		URL:    "https://compat-gateway.example.com/v1/chat/completions",
+		ReqBody: []byte(`{
+			"model": "some-model",
+			"messages": [{"role":"user","content":"weather?"}]
+		}`),
+		RespStatus:  200,
+		RespHeaders: http.Header{"Content-Type": []string{"application/json"}},
+		RespBody: []byte(`{
+			"object": "chat.completion",
+			"model": "some-model",
+			"choices": [{
+				"index": 0,
+				"finish_reason": "tool_calls",
+				"message": {
+					"role": "assistant",
+					"tool_calls": [{
+						"id": "call_2",
+						"type": "function",
+						"function": {"name": "get_weather", "arguments": {"city": "NYC"}}
+					}]
+				}
+			}],
+			"usage": {"prompt_tokens": 1, "completion_tokens": 1}
+		}`),
+	}
+
+	ev := Parse(flow)
+
+	require.Len(t, ev.Tools, 1)
+	assert.Equal(t, "get_weather", ev.Tools[0].Name)
+	assert.Equal(t, "NYC", ev.Tools[0].Input["city"],
+		"inlined-object arguments must still decode")
 }
 
 func TestParseOpenAIChatNonstreaming(t *testing.T) {

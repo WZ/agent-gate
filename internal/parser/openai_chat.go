@@ -14,10 +14,13 @@ import (
 // path + body shape rather than hostname.
 type OpenAIChat struct{}
 
-// Match accepts any flow whose URL path ends in "/chat/completions" and whose
-// request body parses as JSON with a "messages" array. The path check alone
-// would pull in unrelated tooling; the body check anchors us on the actual
-// request shape.
+// Match uses a dual anchor: path suffix "/chat/completions" plus a non-empty
+// "messages" array in the request body. Either one alone would over-claim —
+// a path-only match pulls in proxies that wrap unrelated bodies under the
+// same URL, and a body-only match would steal Anthropic Messages flows
+// (their request body also has a top-level messages array). Together they
+// pin us to genuine OpenAI Chat Completions exchanges across vanilla OpenAI,
+// Azure deployments, and every "OpenAI-compatible" gateway.
 func (OpenAIChat) Match(flow *types.RawFlow) bool {
 	u, err := url.Parse(flow.URL)
 	if err != nil || u == nil {
