@@ -69,18 +69,19 @@
     </div>
 
     {{ if .Rows }}
-      <table class="data-table results-table">
-        <thead>
-          <tr>
-            <th class="col-time">Time</th>
-            <th class="col-method">Method</th>
-            <th class="col-host">Host</th>
-            <th>Path</th>
-            <th class="col-status">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{ range .Rows }}
+      <div class="table-wrap">
+        <table class="data-table results-table">
+          <thead>
+            <tr>
+              <th class="col-time">Time</th>
+              <th class="col-method">Method</th>
+              <th class="col-host">Host</th>
+              <th>Path</th>
+              <th class="col-status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{ range .Rows }}
             <tr>
               <td class="mono"><a href="/events/{{ .ID }}">{{ .StartedAt.Format "15:04:05" }}</a></td>
               <td><span class="method">{{ .Method }}</span></td>
@@ -98,9 +99,10 @@
             {{ if .Snippet }}
               <tr class="snippet-row"><td colspan="5" class="snippet">{{ .Snippet }}</td></tr>
             {{ end }}
-          {{ end }}
-        </tbody>
-      </table>
+            {{ end }}
+          </tbody>
+        </table>
+      </div>
       {{ if or (gt .Page 1) .HasNextPage }}
         <nav class="pagination" aria-label="Pages">
           {{ if gt .Page 1 }}
