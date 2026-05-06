@@ -544,6 +544,40 @@ button.action.danger:hover {
   color: hsl(var(--foreground) / 0.85);
 }
 
+/* Explore page: path + inline PII chips share one cell, so each event stays
+   on a single row. Chips wrap underneath the path when the cell is narrow,
+   keeping every match visually attached to its event instead of dropping to
+   a separate ghost row. */
+.path-pii-cell {
+  color: hsl(var(--foreground) / 0.9);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+}
+
+.path-pii-cell .path-text {
+  color: hsl(var(--foreground) / 0.85);
+  word-break: break-all;
+}
+
+.path-pii-cell .pii-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* Predictable column widths for the explore results table. Without these,
+   each row's column boundaries shifted with content length and the
+   eye couldn't follow values down a column. */
+.results-table {
+  table-layout: fixed;
+}
+.results-table .col-time   { width: 7rem; }
+.results-table .col-method { width: 5rem; }
+.results-table .col-host   { width: 18rem; }
+.results-table .col-status { width: 5rem; }
+
 /* ── Flag chips (severities) ─────────────────────────────────────────────── */
 
 .flag {

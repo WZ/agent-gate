@@ -52,8 +52,8 @@
         <div class="filter-active" aria-label="Active flag filter">
           <span class="filter-active-label">Flag:</span>
           <a class="filter-chip active" href="/explore?{{ filterURL . "flag" "" }}"
-             title="Clear flag filter">
-            {{ .ActiveFlag }} <span class="filter-chip-clear" aria-hidden="true">✕</span>
+             title="Clear filter — {{ .ActiveFlag }}">
+            {{ flagLabel .ActiveFlag }} <span class="filter-chip-clear" aria-hidden="true">✕</span>
           </a>
         </div>
       {{ end }}
@@ -69,36 +69,40 @@
     </div>
 
     {{ if .Rows }}
-      <table class="results-table">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Method</th>
-            <th>Host</th>
-            <th>Path</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{ range .Rows }}
+      <div class="table-wrap">
+        <table class="data-table results-table">
+          <thead>
+            <tr>
+              <th class="col-time">Time</th>
+              <th class="col-method">Method</th>
+              <th class="col-host">Host</th>
+              <th>Path</th>
+              <th class="col-status">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{ range .Rows }}
             <tr>
               <td class="mono"><a href="/events/{{ .ID }}">{{ .StartedAt.Format "15:04:05" }}</a></td>
               <td><span class="method">{{ .Method }}</span></td>
               <td>{{ .Host }}</td>
-              <td class="mono path">{{ .Path }}</td>
-              <td>{{ .Status }}</td>
+              <td class="path-pii-cell">
+                <span class="path-text mono">{{ .Path }}</span>
+                {{ if .PIICounts }}
+                  <span class="pii-inline">
+                    {{ range .PIICounts }}<span class="pii-chip pii-chip-{{ .Tier }}">{{ .Count }} {{ .Label }}</span>{{ end }}
+                  </span>
+                {{ end }}
+              </td>
+              <td><span class="status-code">{{ .Status }}</span></td>
             </tr>
-            {{ if .PIICounts }}
-              <tr class="pii-row"><td colspan="5">
-                {{ range .PIICounts }}<span class="pii-chip pii-chip-{{ .Tier }}">{{ .Count }} {{ .Label }}</span>{{ end }}
-              </td></tr>
-            {{ end }}
             {{ if .Snippet }}
               <tr class="snippet-row"><td colspan="5" class="snippet">{{ .Snippet }}</td></tr>
             {{ end }}
-          {{ end }}
-        </tbody>
-      </table>
+            {{ end }}
+          </tbody>
+        </table>
+      </div>
       {{ if or (gt .Page 1) .HasNextPage }}
         <nav class="pagination" aria-label="Pages">
           {{ if gt .Page 1 }}

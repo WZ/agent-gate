@@ -107,7 +107,7 @@
               <a class="risk-link" href="/explore?flag={{ .Code }}&preset=all"
                  title="Show all events flagged {{ .Code }}">
                 <span class="flag {{ .Severity }}">{{ .Severity }}</span>
-                <strong>{{ .Code }}</strong>
+                <strong>{{ flagLabel .Code }}</strong>
                 <em>{{ .Count }} hits</em>
               </a>
             </li>

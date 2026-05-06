@@ -32,6 +32,22 @@ func TestExploreRendersAllEvents(t *testing.T) {
 	assert.Contains(t, body, "api.openai.com")
 }
 
+func TestExploreWrapsResultsTableForNarrowScreens(t *testing.T) {
+	srv := httptest.NewServer(testServer(t,
+		seedEvent("01WRAP", "https://api.anthropic.com/v1/messages",
+			`{"email":"alice@example.com"}`),
+	))
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/explore")
+	require.NoError(t, err)
+	defer res.Body.Close()
+	body := readAll(t, res.Body)
+
+	assert.Contains(t, body, `<div class="table-wrap">`)
+	assert.Contains(t, body, `<table class="data-table results-table">`)
+}
+
 func TestExploreFiltersByKind(t *testing.T) {
 	srv := httptest.NewServer(testServer(t,
 		seedEvent("01KIND_E", "https://api.anthropic.com/v1/messages",
