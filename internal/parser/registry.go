@@ -11,6 +11,8 @@ type Parser interface {
 var registry = []Parser{
 	AnthropicMessages{},
 	ChatGPTBackend{},
+	OpenAIChat{},
+	OpenAIResponses{},
 }
 
 // ParseFlow dispatches flow through registered shape-specific parsers, falling

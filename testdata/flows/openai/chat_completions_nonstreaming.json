@@ -1,0 +1,115 @@
+{
+  "id": "01OPENAICHATCOMPLETIONS001",
+  "started_at": "2026-04-01T00:00:00Z",
+  "ended_at": "2026-04-01T00:00:00.300Z",
+  "method": "POST",
+  "url": "https://api.compat.example:443/v1/chat/completions",
+  "req_headers": {
+    "Accept": [
+      "*/*"
+    ],
+    "Authorization": [
+      "REDACTED"
+    ],
+    "Content-Length": [
+      "84"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "User-Agent": [
+      "curl/8.7.1"
+    ],
+    "X-Forwarded-For": null
+  },
+  "req_body": "eyJtb2RlbCI6ImdwdC1vc3MtMTIwYiIsIm1lc3NhZ2VzIjpbeyJyb2xlIjoidXNlciIsImNvbnRlbnQiOiJzYXkgaGkgaW4gb25lIHdvcmQifV19",
+  "resp_status": 200,
+  "resp_headers": {
+    "Content-Length": [
+      "967"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Date": [
+      "Wed, 01 Apr 2026 00:00:00 GMT"
+    ],
+    "Llm_provider-Connection": [
+      "close"
+    ],
+    "Llm_provider-Content-Length": [
+      "746"
+    ],
+    "Llm_provider-Content-Type": [
+      "application/json"
+    ],
+    "Llm_provider-Date": [
+      "Wed, 01 Apr 2026 00:00:00 GMT"
+    ],
+    "Llm_provider-Server": [
+      "nginx/1.29.5"
+    ],
+    "Server": [
+      "uvicorn"
+    ],
+    "X-Compatible-Gateway-Attempted-Fallbacks": [
+      "0"
+    ],
+    "X-Compatible-Gateway-Attempted-Retries": [
+      "0"
+    ],
+    "X-Compatible-Gateway-Call-Id": [
+      "fixture"
+    ],
+    "X-Compatible-Gateway-Callback-Duration-Ms": [
+      "0.0"
+    ],
+    "X-Compatible-Gateway-Key-Spend": [
+      "0.0"
+    ],
+    "X-Compatible-Gateway-Model-Api-Base": [
+      "REDACTED"
+    ],
+    "X-Compatible-Gateway-Model-Group": [
+      "gpt-oss-120b"
+    ],
+    "X-Compatible-Gateway-Model-Id": [
+      "fixture"
+    ],
+    "X-Compatible-Gateway-Overhead-Duration-Ms": [
+      "0.995"
+    ],
+    "X-Compatible-Gateway-Response-Cost-Discount-Amount": [
+      "0.0"
+    ],
+    "X-Compatible-Gateway-Response-Cost-Margin-Amount": [
+      "0.0"
+    ],
+    "X-Compatible-Gateway-Response-Cost-Margin-Percent": [
+      "0.0"
+    ],
+    "X-Compatible-Gateway-Response-Cost-Original": [
+      "0.0"
+    ],
+    "X-Compatible-Gateway-Response-Duration-Ms": [
+      "263.668"
+    ],
+    "X-Compatible-Gateway-Version": [
+      "1.82.0"
+    ]
+  },
+  "resp_body": "eyJpZCI6ImNoYXRjbXBsLTljNzJlMWE5OGRjYWVhZjQiLCJjcmVhdGVkIjoxNzc4MDU2NzUxLCJtb2RlbCI6ImdwdC1vc3MtMTIwYiIsIm9iamVjdCI6ImNoYXQuY29tcGxldGlvbiIsImNob2ljZXMiOlt7ImZpbmlzaF9yZWFzb24iOiJzdG9wIiwiaW5kZXgiOjAsIm1lc3NhZ2UiOnsiY29udGVudCI6IkhlbGxvIiwicm9sZSI6ImFzc2lzdGFudCIsInJlYXNvbmluZ19jb250ZW50IjoiVXNlciBhc2tzOiBcInNheSBoaSBpbiBvbmUgd29yZFwiLiBUaGV5IHdhbnQgYSBvbmUtd29yZCBncmVldGluZy4gQ291bGQgYmUgXCJIaSFcIiBidXQgdGhhdCdzIG9uZSB3b3JkPyBcIkhlbGxvXCIgaXMgb25lIHdvcmQuIFNvIGFuc3dlcjogXCJIZWxsb1wiLiBQcm9iYWJseSBqdXN0IG91dHB1dCB0aGF0LiIsInByb3ZpZGVyX3NwZWNpZmljX2ZpZWxkcyI6eyJyZWZ1c2FsIjpudWxsLCJyZWFzb25pbmciOiJVc2VyIGFza3M6IFwic2F5IGhpIGluIG9uZSB3b3JkXCIuIFRoZXkgd2FudCBhIG9uZS13b3JkIGdyZWV0aW5nLiBDb3VsZCBiZSBcIkhpIVwiIGJ1dCB0aGF0J3Mgb25lIHdvcmQ/IFwiSGVsbG9cIiBpcyBvbmUgd29yZC4gU28gYW5zd2VyOiBcIkhlbGxvXCIuIFByb2JhYmx5IGp1c3Qgb3V0cHV0IHRoYXQuIiwicmVhc29uaW5nX2NvbnRlbnQiOiJVc2VyIGFza3M6IFwic2F5IGhpIGluIG9uZSB3b3JkXCIuIFRoZXkgd2FudCBhIG9uZS13b3JkIGdyZWV0aW5nLiBDb3VsZCBiZSBcIkhpIVwiIGJ1dCB0aGF0J3Mgb25lIHdvcmQ/IFwiSGVsbG9cIiBpcyBvbmUgd29yZC4gU28gYW5zd2VyOiBcIkhlbGxvXCIuIFByb2JhYmx5IGp1c3Qgb3V0cHV0IHRoYXQuIn19LCJwcm92aWRlcl9zcGVjaWZpY19maWVsZHMiOnsic3RvcF9yZWFzb24iOm51bGwsInRva2VuX2lkcyI6bnVsbH19XSwidXNhZ2UiOnsiY29tcGxldGlvbl90b2tlbnMiOjU2LCJwcm9tcHRfdG9rZW5zIjo3MiwidG90YWxfdG9rZW5zIjoxMjh9fQ==",
+  "is_streamed": false,
+  "capture_mode": "airtight",
+  "kind": "generic",
+  "session_id": "",
+  "model": "",
+  "usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cache_read_input_tokens": 0
+  },
+  "tools": null,
+  "tool_results": null,
+  "flags": null
+}
