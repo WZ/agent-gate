@@ -76,6 +76,30 @@ func severityForFlagCode(code string) string {
 	}
 }
 
+// flagLabelFor returns the human-friendly badge label for a policy flag code.
+// Falls back to the raw code so unknown / future rules still render.
+func flagLabelFor(code string) string {
+	switch code {
+	case "host_not_allowlisted":
+		return "Host not allowlisted"
+	case "secret_in_request":
+		return "Secret in request"
+	case "env_in_tool_result":
+		return "Env in tool result"
+	case "oversized_request":
+		return "Oversized request"
+	case "oversized_response":
+		return "Oversized response"
+	case "unknown_mcp_endpoint":
+		return "Unknown MCP endpoint"
+	case "permissive_capture":
+		return "Permissive capture"
+	case "parse_error":
+		return "Parse error"
+	}
+	return code
+}
+
 func splitFlagCodes(codes string) []string {
 	if codes == "" {
 		return nil

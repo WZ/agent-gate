@@ -20,6 +20,8 @@ func newRenderer() *renderer {
 		"hasKind":         hasKind,
 		"filterURL":       filterURL,
 		"presetOptions":   presetOptions,
+		"flagLabel":       flagLabelFor,
+		"flagSeverity":    severityForFlagCode,
 		"join":            strings.Join,
 		"add":             func(a, b int) int { return a + b },
 		"sub":             func(a, b int) int { return a - b },
