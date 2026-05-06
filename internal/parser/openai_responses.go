@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"net/url"
 	"strings"
@@ -53,6 +55,7 @@ func (OpenAIResponses) Parse(flow *types.RawFlow) (*types.ParsedEvent, error) {
 	parseOpenAIResponsesRequest(&ev)
 	if isSSE(ev.RespHeaders) {
 		ev.IsStreamed = true
+		parseOpenAIResponsesSSEResponse(&ev)
 	} else {
 		parseOpenAIResponsesJSONResponse(&ev)
 	}
@@ -157,6 +160,68 @@ func countResponsesInput(input json.RawMessage) int {
 		return len(list)
 	}
 	return 0
+}
+
+// parseOpenAIResponsesSSEResponse re-assembles a streamed Responses API
+// response into the same parsed-event shape as the non-streaming branch.
+//
+// Unlike Chat Completions SSE — where each chunk is an anonymous fragment
+// and you accumulate state across them — Responses streaming emits typed
+// events. The terminator event "response.completed" carries the FULL final
+// response object (model, output items including function_calls, usage),
+// so we re-use the JSON-response parser on its embedded `.response` field.
+//
+// If "response.completed" doesn't arrive (truncated stream), we fall back to
+// "response.created" / "response.in_progress" / individual output items so
+// at least the model surfaces.
+func parseOpenAIResponsesSSEResponse(ev *types.ParsedEvent) {
+	scanner := bufio.NewScanner(bytes.NewReader(ev.RespBody))
+	scanner.Buffer(make([]byte, 1<<16), 1<<24)
+
+	var (
+		modelFromStream   string
+		completedResponse json.RawMessage
+	)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		var envelope struct {
+			Type     string          `json:"type"`
+			Model    string          `json:"model"`
+			Response json.RawMessage `json:"response"`
+		}
+		if err := json.Unmarshal([]byte(data), &envelope); err != nil {
+			continue
+		}
+		if envelope.Model != "" && modelFromStream == "" {
+			modelFromStream = envelope.Model
+		}
+		if envelope.Type == "response.completed" && len(envelope.Response) > 0 {
+			completedResponse = envelope.Response
+		}
+	}
+
+	if len(completedResponse) > 0 {
+		// The completed event carries the same shape as a non-streaming response,
+		// so re-use that parser with the embedded body.
+		bodyBackup := ev.RespBody
+		ev.RespBody = []byte(completedResponse)
+		parseOpenAIResponsesJSONResponse(ev)
+		ev.RespBody = bodyBackup
+		return
+	}
+
+	// Truncated stream — at least surface the streamed model id.
+	if modelFromStream != "" {
+		ev.Model = modelFromStream
+	}
 }
 
 // extractResponsesToolResults pulls every function_call_output item out of
