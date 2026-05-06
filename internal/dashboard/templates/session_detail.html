@@ -50,7 +50,7 @@
                 <td>
                   {{ if .FlagCodes }}
                     {{ range .FlagCodes }}
-                      <span class="flag info">{{ . }}</span>
+                      <span class="flag {{ flagSeverity . }}" title="{{ . }}">{{ flagLabel . }}</span>
                     {{ end }}
                   {{ else }}
                     <span class="flag clear">clear</span>

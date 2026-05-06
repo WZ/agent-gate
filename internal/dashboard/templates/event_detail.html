@@ -27,8 +27,8 @@
     {{ if .Flags }}
       <div class="flag-row">
         {{ range .Flags }}
-          <span class="flag {{ .Severity }} flag-with-action" data-code="{{ .Code }}">
-            <span class="flag-label">{{ .Code }}</span>
+          <span class="flag {{ .Severity }} flag-with-action" data-code="{{ .Code }}" title="{{ .Code }}">
+            <span class="flag-label">{{ flagLabel .Code }}</span>
             <form class="flag-dismiss"
                   hx-post="/api/dismiss"
                   hx-target="closest .flag-with-action"
