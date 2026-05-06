@@ -102,14 +102,14 @@ func parseOpenAIResponsesRequest(ev *types.ParsedEvent) {
 	}
 	ev.Model = req.Model
 
-	// Conversation chaining (`previous_response_id`) is Responses-API-native;
-	// when present it groups follow-on calls with their parent. Otherwise fall
-	// back to the OpenAI-stable end-user identifier.
+	// `user` is stable across a conversation and keeps dashboard session groups
+	// together. `previous_response_id` changes on each follow-up, so only use it
+	// when there is no stable end-user identifier.
 	switch {
-	case req.PreviousResponseID != "":
-		ev.SessionID = req.PreviousResponseID
 	case req.User != "":
 		ev.SessionID = req.User
+	case req.PreviousResponseID != "":
+		ev.SessionID = req.PreviousResponseID
 	}
 
 	ev.ItemCount = countResponsesInput(req.Input)

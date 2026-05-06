@@ -126,9 +126,9 @@ func TestParseOpenAIResponsesExtractsToolResults(t *testing.T) {
 	assert.Equal(t, "sunny, 68°F", ev.ToolResults[0].Content)
 }
 
-func TestParseOpenAIResponsesPrefersPreviousResponseID(t *testing.T) {
-	// previous_response_id wins over `user` because it's the API-native
-	// conversation-chaining marker — ties follow-on calls to their parent.
+func TestParseOpenAIResponsesPrefersUserForSessionGrouping(t *testing.T) {
+	// `user` is stable across a conversation, while previous_response_id
+	// changes on each follow-up and would fragment dashboard session groups.
 	flow := types.RawFlow{
 		Method: "POST",
 		URL:    "https://api.openai.com/v1/responses",
@@ -145,7 +145,7 @@ func TestParseOpenAIResponsesPrefersPreviousResponseID(t *testing.T) {
 
 	ev := Parse(flow)
 
-	assert.Equal(t, "resp_parent", ev.SessionID)
+	assert.Equal(t, "u-42", ev.SessionID)
 }
 
 func TestParseOpenAIResponsesStreamingMarksFlag(t *testing.T) {
