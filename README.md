@@ -74,6 +74,9 @@ agent-gate init
 
 # 3. Run your agent through it
 agent-gate run -- claude
+
+# Later, to pick up new releases:
+brew upgrade agent-gate
 ```
 
 **Linux / Windows / Mac without Homebrew:** grab the binary from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
@@ -234,7 +237,13 @@ brew tap WZ/tap
 brew install agent-gate
 ```
 
-`brew upgrade agent-gate` picks up new releases. The formula is published automatically on every `vX.Y.Z` tag and points at the same darwin archives as the binary download path below.
+To upgrade in place:
+
+```bash
+brew upgrade agent-gate
+```
+
+The formula is published automatically on every `vX.Y.Z` tag and points at the same darwin archives as the binary download path below, so `brew upgrade` always tracks the newest release.
 
 ### Download the binary
 
