@@ -154,3 +154,43 @@ func TestParseErrorFiresWhenRawFlowErrIsSet(t *testing.T) {
 	assert.Equal(t, "parse_error", flags[0].Code)
 	assert.Equal(t, "info", flags[0].Severity)
 }
+
+func TestWSPinnedUpstreamFiresOn101WebSocketUpgrade(t *testing.T) {
+	e, _ := mkengine(t, WSPinnedUpstreamRule{})
+	ev := &types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:         "e",
+		URL:        "wss://chatgpt.com/backend-api/codex/responses",
+		RespStatus: 101,
+		RespHeaders: map[string][]string{
+			"Upgrade":    {"websocket"},
+			"Connection": {"upgrade"},
+		},
+	}}
+	flags := e.Evaluate(ev)
+	require.Len(t, flags, 1)
+	assert.Equal(t, "ws_pinned_upstream", flags[0].Code)
+	assert.Equal(t, "info", flags[0].Severity)
+	assert.Contains(t, flags[0].Detail, "WebSocket")
+}
+
+func TestWSPinnedUpstreamSilentForNon101(t *testing.T) {
+	e, _ := mkengine(t, WSPinnedUpstreamRule{})
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:          "e",
+		RespStatus:  200,
+		RespHeaders: map[string][]string{"Upgrade": {"websocket"}},
+	}})
+	assert.Empty(t, flags)
+}
+
+func TestWSPinnedUpstreamSilentForOther101Switches(t *testing.T) {
+	// HTTP/2 prior-knowledge or other Upgrade: h2c switches also use 101.
+	// Don't claim them; only websocket upgrades carry the codex pinning gotcha.
+	e, _ := mkengine(t, WSPinnedUpstreamRule{})
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:          "e",
+		RespStatus:  101,
+		RespHeaders: map[string][]string{"Upgrade": {"h2c"}},
+	}})
+	assert.Empty(t, flags)
+}

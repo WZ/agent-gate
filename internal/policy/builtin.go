@@ -156,3 +156,25 @@ func (ParseErrorRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
 	}
 	return false, ""
 }
+
+// WSPinnedUpstreamRule fires on every WebSocket upgrade flow (status 101 with
+// Upgrade: websocket on the response). The flag explains an empty 101: when
+// the upstream client pins TLS — codex 0.128.0 is the canonical case — the
+// upgrade succeeds at the HTTP layer but the client closes the conn upon
+// detecting agent-gate's CA leaf, so no WS frames flow and no child events
+// appear. Without this flag, an empty 101 looks like a parser bug; with it,
+// reviewers can see at a glance that the body is intentionally not captured.
+type WSPinnedUpstreamRule struct{}
+
+func (WSPinnedUpstreamRule) Code() string       { return "ws_pinned_upstream" }
+func (WSPinnedUpstreamRule) Severity() Severity { return SevInfo }
+func (WSPinnedUpstreamRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
+	if ev.RawFlow.RespStatus != 101 {
+		return false, ""
+	}
+	upgrade := strings.ToLower(strings.TrimSpace(ev.RawFlow.RespHeaders.Get("Upgrade")))
+	if upgrade != "websocket" {
+		return false, ""
+	}
+	return true, "WebSocket upgrade succeeded; if no child message events follow, the upstream client likely pinned TLS and the body cannot be captured through MITM"
+}
