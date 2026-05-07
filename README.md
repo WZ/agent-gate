@@ -33,7 +33,7 @@ agent-gate support has three separate layers:
 | Platform | Supported today | Current behavior | TODO |
 |---|---|---|---|
 | **macOS** | Yes | Airtight `agent-gate run` via `sandbox-exec`; proxy, dashboard, `init`, `doctor`, and cert install are supported. | ✅ **None.** Platform parity is complete. |
-| **Linux** | Yes, when unprivileged user namespaces are allowed | Airtight `agent-gate run` via user + network namespace. Hardened hosts fall back to permissive unless `--airtight-fail` is set. | Better hardened-distro story if demand justifies it. |
+| **Linux** | Yes, when unprivileged user namespaces are allowed | Airtight `agent-gate run` via user + network namespace. Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set. | Better hardened-distro story if demand justifies it. |
 | **Windows** | Partial | Windows binaries, `init`, `doctor`, cert install, proxy, dashboard, and permissive proxy capture exist. Airtight `agent-gate run` is not wired yet and falls back to permissive with a clear message. | **Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants. |
 
 ### Agents and API Parsing
@@ -155,8 +155,8 @@ Three host-policy buttons sit at the top of the page: **Trust** (allowlist), **B
 | Platform | Mechanism | Notes |
 |---|---|---|
 | **macOS** | `sandbox-exec` profile denies all `network*` ops except loopback to the proxy port | No installation step. Descendants inherit the sandbox automatically. |
-| **Linux** | Hidden `__netns-helper` subprocess enters an unprivileged user + network namespace, binds the proxy port inside it, passes the listener FD back via `SCM_RIGHTS` | Requires `kernel.unprivileged_userns_clone=1` (default on Ubuntu/Fedora). Falls back to `--permissive` on hardened distros unless `--airtight-fail`. |
-| **Windows** | WFP provider/sublayer registered by `agent-gate init`; runtime path scaffolded for Plan 4 | Currently stubs to `--permissive` with a clear message. |
+| **Linux** | Hidden `__netns-helper` subprocess enters an unprivileged user + network namespace, binds the proxy port inside it, passes the listener FD back via `SCM_RIGHTS` | Requires `kernel.unprivileged_userns_clone=1` (default on Ubuntu/Fedora). Falls back to `--mode=permissive` on hardened distros unless `--mode=airtight-strict` is set. |
+| **Windows** | WFP provider/sublayer registered by `agent-gate init`; runtime path scaffolded for Plan 4 | Currently stubs to `--mode=permissive` with a clear message. |
 
 ### Threat model
 
@@ -181,21 +181,26 @@ agent-gate init [flags]
   --quiet                           skip welcome and policy summary notes
 
 agent-gate run [flags] -- <cmd> [args...]
-  --permissive                       env-only enforcement (HTTPS_PROXY exported, no kernel jail)
-  --airtight-fail                    refuse to fall back to permissive if airtight unsupported
+  --mode VALUE                       egress enforcement mode (default airtight):
+                                       airtight        per-OS network jail; falls back to
+                                                         permissive with a warning if unsupported
+                                       airtight-strict require the jail; abort if unsupported
+                                                         (use in CI)
+                                       permissive      skip jail; sets HTTPS_PROXY only
+                                                         — agent could ignore and bypass capture
   --enforce-allowlist                proxy returns 403 for hosts not in the allowlist
   --upstream-ca PEM                  extra root CA(s) to trust on proxy→upstream
                                        (use for self-signed ANTHROPIC_BASE_URL)
   --upstream-insecure-skip-verify    skip upstream cert verification entirely
                                        (testing only; captures still happen)
-  --hijack-host HOST                 frame-decode WebSocket sessions on HOST
-                                       (repeatable; non-pinned WS upstreams only —
-                                       codex on chatgpt.com pins TLS, captured
-                                       via HTTP fallback without this flag)
+  --hijack-host HOST                 advanced — most users don't need this.
+                                       Capture WebSocket message bodies for HOST.
+                                       claude / codex / aider are captured by
+                                       default; reach for this only when auditing
+                                       a custom or internal agent that talks to
+                                       your own WebSocket backend (repeatable)
   --config PATH                      config.toml path
 ```
-
-Default mode is **airtight**. If airtight isn't available on this OS or this host's config, agent-gate prints a warning and falls back to permissive — pass `--airtight-fail` to refuse the fallback.
 
 ## Three-list policy model
 

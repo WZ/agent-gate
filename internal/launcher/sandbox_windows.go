@@ -47,13 +47,13 @@ func airtightFeasible() (bool, string) {
 	if major < 10 || (major == 10 && build < 17763) {
 		return false, "Windows 10 1809 or later required"
 	}
-	return false, "Windows airtight is pending Plan 4 (use --permissive); see README"
+	return false, "Windows airtight is pending Plan 4 (use --mode=permissive); see README"
 }
 
 func spawnAirtight(ctx context.Context, opts Options, env []string) (*childHandle, error) {
 	// Belt-and-suspenders: even if the supervisor's feasibility probe is
 	// bypassed, fail loudly here with a clear message rather than half-running.
-	return nil, errors.New("launcher: Windows airtight is pending Plan 4 (use --permissive); see README")
+	return nil, errors.New("launcher: Windows airtight is pending Plan 4 (use --mode=permissive); see README")
 }
 
 // portFromAddr is shared with sandbox_darwin / sandbox_linux but each platform

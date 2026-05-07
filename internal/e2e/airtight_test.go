@@ -39,12 +39,12 @@ func TestAirtight_DirectDialIsDenied(t *testing.T) {
 	// Pre-flight: confirm airtight is actually feasible on this host. On
 	// Ubuntu 24 with kernel.apparmor_restrict_unprivileged_userns=1, agent-gate
 	// will fall back to permissive — in which case dial-direct succeeds and
-	// the assertion below would misfire. We pass --airtight-fail to force
+	// the assertion below would misfire. We pass --mode=airtight-strict to force
 	// agent-gate to error out at startup if airtight is unavailable; if that
 	// happens we skip the test cleanly.
 	probeCtx, probeCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer probeCancel()
-	probe := exec.CommandContext(probeCtx, bin, "run", "--airtight-fail", "--config", configPath, "--",
+	probe := exec.CommandContext(probeCtx, bin, "run", "--mode", "airtight-strict", "--config", configPath, "--",
 		helper, "-exit", "0")
 	if probeOut, err := probe.CombinedOutput(); err != nil {
 		t.Skipf("airtight not feasible on this host: %v\n%s", err, probeOut)
@@ -53,7 +53,7 @@ func TestAirtight_DirectDialIsDenied(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, bin, "run", "--airtight-fail", "--config", configPath, "--",
+	cmd := exec.CommandContext(ctx, bin, "run", "--mode", "airtight-strict", "--config", configPath, "--",
 		helper, "-dial-direct", "1.1.1.1:80", "-timeout", "1s")
 	cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 	err := cmd.Run()
