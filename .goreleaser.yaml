@@ -49,6 +49,34 @@ archives:
       # and ships internal roadmap text in user downloads.
       - LICENSE*
 
+brews:
+  - name: agent-gate
+    # Auto-pushes a Ruby formula to WZ/homebrew-tap on every stable v* tag.
+    # Users install via:
+    #   brew tap WZ/tap
+    #   brew install agent-gate
+    # The tap repo + a HOMEBREW_TAP_TOKEN secret with write access to it
+    # are required (see .github/workflows/release.yml). If the token is
+    # missing, the release fails loud rather than silently skipping —
+    # that's intentional, since a partial release without the brew bump
+    # would surprise users on `brew upgrade`.
+    repository:
+      owner: WZ
+      name: homebrew-tap
+      branch: main
+      token: '{{ .Env.HOMEBREW_TAP_TOKEN }}'
+    homepage: https://github.com/WZ/agent-gate
+    description: Single-user audit gate for AI agent HTTPS traffic
+    license: Apache-2.0
+    # `auto` skips on pre-release tags (anything goreleaser flags as
+    # prerelease via the SemVer pattern, e.g. v0.4.0-rc1). Stable tags
+    # bump the formula.
+    skip_upload: auto
+    install: |
+      bin.install "agent-gate"
+    test: |
+      system "#{bin}/agent-gate", "version"
+
 checksum:
   name_template: 'checksums.txt'
 
@@ -84,24 +112,26 @@ release:
 
     ### Install
 
-    Download the archive for your platform below, extract, and put
-    `agent-gate` on your `PATH`. Then:
+    **macOS — Homebrew:**
 
     ```
-    agent-gate init
+    brew tap WZ/tap
+    brew install agent-gate
     ```
 
-    On macOS, you may need to clear the quarantine attribute the first
-    time:
+    **Other platforms — binary download:** grab the archive for your
+    platform below, extract, and put `agent-gate` on your `PATH`. On
+    macOS without Homebrew, you may need to clear the quarantine
+    attribute the first time:
 
     ```
     xattr -d com.apple.quarantine ./agent-gate
     ```
 
-    Or install from source:
+    Either way, finish with:
 
     ```
-    go install agent-gate/cmd/agent-gate@{{ .Tag }}
+    agent-gate init
     ```
   footer: |
     **Full Changelog:** https://github.com/WZ/agent-gate/compare/{{ .PreviousTag }}...{{ .Tag }}

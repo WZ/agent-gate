@@ -214,7 +214,16 @@ default → MITM, decrypt, capture, forward
 
 ## Install
 
-### Download the binary (recommended)
+### Homebrew (macOS, recommended)
+
+```bash
+brew tap WZ/tap
+brew install agent-gate
+```
+
+`brew upgrade agent-gate` picks up new releases. The formula is published automatically on every `vX.Y.Z` tag and points at the same darwin archives as the binary download path below.
+
+### Download the binary
 
 Grab the archive for your platform from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
 
