@@ -40,6 +40,12 @@ func NewServer(opts Options) http.Handler {
 	staticFS, _ := fs.Sub(assets, "static")
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
+	// Some browsers still request /favicon.ico even with <link rel="icon">.
+	// Send them to the SVG instead of letting it 404.
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/static/favicon.svg", http.StatusFound)
+	})
+
 	// Routes.
 	mux.HandleFunc("/", handleSessionsList(opts, r))
 	mux.HandleFunc("/sessions/", handleSessionDetail(opts, r))
