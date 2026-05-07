@@ -18,14 +18,23 @@ import (
 )
 
 // runHijack owns the raw client TCP conn for a CONNECT that matched
-// HijackHost. It TLS-terminates with our local CA, reads the request the
-// agent sends inside the tunnel, dials upstream, and — if the request is a
-// WebSocket Upgrade — runs bidirectional frame-aware pumps that persist
-// per-message events linked to a parent upgrade flow.
+// HijackHost. It TLS-terminates with our local CA, dials upstream, then
+// loops reading HTTP/1.1 requests off the client (keepalive). For each
+// request:
 //
-// Non-WebSocket traffic on a hijack-targeted host is closed; we only register
-// the hijack for hosts whose protocol we want to frame-decode, and falling
-// through to a plain HTTP forward would silently bypass the audit pipeline.
+//   - If it's a WebSocket Upgrade: forward the upgrade, persist it as a
+//     parent flow, and run bidirectional frame-aware pumps that emit
+//     per-message events linked via parent_id. WebSocket sessions are
+//     terminal — once a conn upgrades, no more HTTP requests can ride
+//     on it, so the function returns when the pumps drain.
+//
+//   - Otherwise: forward as a normal HTTP request, capture req+resp
+//     bodies, emit a RawFlow that looks identical to one the standard
+//     MITM path would have produced, then loop for the next request on
+//     the same conn. This is what keeps the hijack predicate safe to
+//     enable on hosts that mix HTTP and WebSocket traffic (codex's
+//     chatgpt.com is the canonical case — setup endpoints over HTTP,
+//     model invocation over WebSockets, often on the same TCP conn).
 func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 	defer client.Close()
 
@@ -46,18 +55,40 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 	}
 	defer tlsClient.Close()
 
-	clientReader := bufio.NewReader(tlsClient)
-	req, err := http.ReadRequest(clientReader)
+	tlsUpstream, err := dialUpstreamTLS(opts, hostport, serverName)
 	if err != nil {
-		opts.Logger("proxy hijack: read request: %v", err)
+		opts.Logger("proxy hijack: %v", err)
 		return
 	}
+	defer tlsUpstream.Close()
 
-	if !isWebSocketUpgrade(req) {
-		opts.Logger("proxy hijack: %s sent non-WS request %s %s; closing", serverName, req.Method, req.URL.RequestURI())
-		return
+	clientReader := bufio.NewReader(tlsClient)
+	upstreamReader := bufio.NewReader(tlsUpstream)
+
+	for {
+		req, err := http.ReadRequest(clientReader)
+		if err != nil {
+			if !isPumpClose(err) {
+				opts.Logger("proxy hijack: read request from %s: %v", serverName, err)
+			}
+			return
+		}
+
+		if isWebSocketUpgrade(req) {
+			handleHijackedWSUpgrade(opts, serverName, req, clientReader, upstreamReader, tlsClient, tlsUpstream)
+			return
+		}
+
+		if err := forwardHijackedHTTP(opts, serverName, req, upstreamReader, tlsClient, tlsUpstream); err != nil {
+			if !isPumpClose(err) {
+				opts.Logger("proxy hijack: forward HTTP %s %s: %v", req.Method, req.URL.RequestURI(), err)
+			}
+			return
+		}
 	}
+}
 
+func dialUpstreamTLS(opts Options, hostport, serverName string) (*tls.Conn, error) {
 	upstreamCfg := &tls.Config{
 		ServerName:         serverName,
 		RootCAs:            opts.UpstreamRootCAs,
@@ -66,23 +97,31 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 	}
 	rawUpstream, err := net.DialTimeout("tcp", hostport, 30*time.Second)
 	if err != nil {
-		opts.Logger("proxy hijack: dial upstream %s: %v", hostport, err)
-		return
+		return nil, fmt.Errorf("dial upstream %s: %w", hostport, err)
 	}
 	tlsUpstream := tls.Client(rawUpstream, upstreamCfg)
 	if err := tlsUpstream.Handshake(); err != nil {
-		opts.Logger("proxy hijack: upstream handshake %s: %v", serverName, err)
 		rawUpstream.Close()
-		return
+		return nil, fmt.Errorf("upstream handshake %s: %w", serverName, err)
 	}
-	defer tlsUpstream.Close()
+	return tlsUpstream, nil
+}
 
+// handleHijackedWSUpgrade forwards the upgrade request upstream, writes the
+// response back to the client, persists the upgrade as the parent flow, and
+// — on 101 — runs the bidirectional frame pumps until both directions exit.
+func handleHijackedWSUpgrade(
+	opts Options,
+	serverName string,
+	req *http.Request,
+	clientReader, upstreamReader *bufio.Reader,
+	tlsClient, tlsUpstream *tls.Conn,
+) {
 	if err := req.Write(tlsUpstream); err != nil {
 		opts.Logger("proxy hijack: forward upgrade request: %v", err)
 		return
 	}
 
-	upstreamReader := bufio.NewReader(tlsUpstream)
 	resp, err := http.ReadResponse(upstreamReader, req)
 	if err != nil {
 		opts.Logger("proxy hijack: read upgrade response: %v", err)
@@ -99,7 +138,8 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 	}
 
 	if resp.StatusCode != http.StatusSwitchingProtocols {
-		// Upstream refused the upgrade; nothing to pump.
+		// Upstream refused the upgrade; the conn is now in an undefined
+		// state — codex won't try to send more HTTP on it. Return.
 		return
 	}
 
@@ -116,6 +156,113 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 		_ = tlsClient.CloseWrite()
 	}()
 	wg.Wait()
+}
+
+// forwardHijackedHTTP forwards a single non-WS HTTP/1.1 request to upstream,
+// captures the request and response bodies, emits a RawFlow that mirrors
+// what the standard MITM path produces, then writes the response back to
+// the client. Returns an error to stop the request loop (e.g. on
+// `Connection: close`), nil to keep looping.
+func forwardHijackedHTTP(
+	opts Options,
+	serverName string,
+	req *http.Request,
+	upstreamReader *bufio.Reader,
+	tlsClient, tlsUpstream *tls.Conn,
+) error {
+	startedAt := time.Now()
+	id := opts.IDGen.New()
+
+	reqBody, reqTrunc, _ := readLimited(req.Body, opts.BodyLimit)
+	if req.Body != nil {
+		req.Body.Close()
+	}
+	if reqBody != nil {
+		req.Body = io.NopCloser(bytes.NewReader(reqBody))
+		req.ContentLength = int64(len(reqBody))
+	} else {
+		req.Body = http.NoBody
+		req.ContentLength = 0
+	}
+	reqHeaders := req.Header.Clone()
+
+	if err := req.Write(tlsUpstream); err != nil {
+		return fmt.Errorf("write request upstream: %w", err)
+	}
+
+	resp, err := http.ReadResponse(upstreamReader, req)
+	if err != nil {
+		return fmt.Errorf("read response: %w", err)
+	}
+
+	respBody, respTrunc, _ := readLimited(resp.Body, opts.BodyLimit)
+	if resp.Body != nil {
+		resp.Body.Close()
+	}
+	respHeaders := resp.Header.Clone()
+	if respBody != nil {
+		resp.Body = io.NopCloser(bytes.NewReader(respBody))
+		resp.ContentLength = int64(len(respBody))
+	} else {
+		resp.Body = http.NoBody
+		resp.ContentLength = 0
+	}
+
+	flow := types.RawFlow{
+		ID:            id,
+		StartedAt:     startedAt,
+		EndedAt:       time.Now(),
+		Method:        req.Method,
+		URL:           hijackedHTTPURL(req, serverName),
+		ReqHeaders:    reqHeaders,
+		ReqBody:       reqBody,
+		RespStatus:    resp.StatusCode,
+		RespHeaders:   respHeaders,
+		RespBody:      respBody,
+		IsStreamed:    isSSE(respHeaders),
+		BodyTruncated: reqTrunc || respTrunc,
+		CaptureMode:   opts.CaptureMode,
+	}
+	opts.Out <- flow
+
+	if err := resp.Write(tlsClient); err != nil {
+		return fmt.Errorf("write response to client: %w", err)
+	}
+
+	if shouldCloseAfter(req, resp) {
+		return io.EOF
+	}
+	return nil
+}
+
+func hijackedHTTPURL(req *http.Request, serverName string) string {
+	u := &url.URL{
+		Scheme: "https",
+		Host:   serverName,
+		Path:   req.URL.Path,
+	}
+	if req.URL.RawQuery != "" {
+		u.RawQuery = req.URL.RawQuery
+	}
+	return u.String()
+}
+
+func shouldCloseAfter(req *http.Request, resp *http.Response) bool {
+	if req.ProtoAtLeast(1, 1) {
+		// HTTP/1.1 default is keepalive; explicit Connection: close on
+		// either side terminates.
+		if headerHasToken(req.Header, "Connection", "close") ||
+			headerHasToken(resp.Header, "Connection", "close") {
+			return true
+		}
+		return false
+	}
+	// HTTP/1.0 default is close; only keep-alive opts in.
+	if headerHasToken(req.Header, "Connection", "keep-alive") &&
+		headerHasToken(resp.Header, "Connection", "keep-alive") {
+		return false
+	}
+	return true
 }
 
 // runWSPump reads RFC 6455 frames from src, forwards them to dst, and emits

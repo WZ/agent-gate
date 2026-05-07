@@ -174,6 +174,105 @@ func newEchoWSServer(t *testing.T) *httptest.Server {
 	return httptest.NewTLSServer(mux)
 }
 
+// TestHijackForwardsNonWSHTTPRequest covers the request-loop fall-through:
+// when the hijack predicate matches but the request inside the tunnel is a
+// regular HTTP GET, the handler must forward it upstream, capture the
+// response body, and emit a RawFlow that mirrors the standard MITM path.
+// This is the property that lets us safely enable hijack on a host like
+// chatgpt.com that mixes HTTP setup endpoints with WebSocket sessions.
+func TestHijackForwardsNonWSHTTPRequest(t *testing.T) {
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/echo" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer upstream.Close()
+
+	upstreamHost := upstream.Listener.Addr().String()
+	upstreamServerName, _, err := net.SplitHostPort(upstreamHost)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	testCA, err := ca.Ensure(dir)
+	require.NoError(t, err)
+	upstreamRoots := x509.NewCertPool()
+	upstreamRoots.AddCert(upstream.Certificate())
+
+	out := make(chan types.RawFlow, 4)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	go func() {
+		_ = Run(Options{
+			Listener:        listener,
+			CA:              testCA,
+			Out:             out,
+			IDGen:           idgen.NewGenerator(),
+			CaptureMode:     "permissive",
+			UpstreamRootCAs: upstreamRoots,
+			BodyLimit:       1 << 20,
+			HijackHost: func(h string) bool {
+				return h == upstreamServerName
+			},
+		})
+	}()
+	defer listener.Close()
+
+	clientCAs := x509.NewCertPool()
+	clientCAs.AddCert(testCA.Cert)
+
+	rawConn, err := net.DialTimeout("tcp", listener.Addr().String(), 5*time.Second)
+	require.NoError(t, err)
+	defer rawConn.Close()
+
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamHost, upstreamHost)
+	_, err = rawConn.Write([]byte(connectReq))
+	require.NoError(t, err)
+
+	br := bufio.NewReader(rawConn)
+	statusLine, err := br.ReadString('\n')
+	require.NoError(t, err)
+	require.Contains(t, statusLine, "200")
+	for {
+		line, err := br.ReadString('\n')
+		require.NoError(t, err)
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	tlsClient := tls.Client(rawConn, &tls.Config{
+		ServerName: upstreamServerName,
+		RootCAs:    clientCAs,
+	})
+	require.NoError(t, tlsClient.Handshake())
+
+	httpReq := fmt.Sprintf("GET /api/echo HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", upstreamHost)
+	_, err = tlsClient.Write([]byte(httpReq))
+	require.NoError(t, err)
+
+	respReader := bufio.NewReader(tlsClient)
+	resp, err := http.ReadResponse(respReader, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, `{"ok":true}`, string(body))
+
+	flow := receiveFlow(t, out, "non-WS HTTP flow")
+	assert.False(t, flow.IsWSMessage)
+	assert.Equal(t, "GET", flow.Method)
+	assert.Contains(t, flow.URL, "/api/echo")
+	assert.True(t, strings.HasPrefix(flow.URL, "https://"))
+	assert.Equal(t, http.StatusOK, flow.RespStatus)
+	assert.Equal(t, []byte(`{"ok":true}`), flow.RespBody)
+}
+
 // fixedConnTransport is a minimal http.RoundTripper that returns a single
 // pre-established net.Conn for any DialTLSContext call. coder/websocket uses
 // the http.Client to send the upgrade request and inspect the 101; we wedge
