@@ -60,6 +60,33 @@ func TestServerRendersFullPageOnGetRoot(t *testing.T) {
 	assert.Contains(t, bodyStr, "<html")
 	assert.Contains(t, bodyStr, "agent-gate")
 	assert.Contains(t, bodyStr, `src="/static/htmx.min.js"`)
+	assert.Contains(t, bodyStr, `href="/static/favicon.svg"`)
+}
+
+func TestServerServesFavicon(t *testing.T) {
+	srv := httptest.NewServer(NewServer(freshOpts(t)))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/static/favicon.svg")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, 200, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "<svg")
+}
+
+func TestServerRedirectsFaviconIco(t *testing.T) {
+	srv := httptest.NewServer(NewServer(freshOpts(t)))
+	defer srv.Close()
+
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := client.Get(srv.URL + "/favicon.ico")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Equal(t, "/static/favicon.svg", resp.Header.Get("Location"))
 }
 
 func TestServerRefusesNonLoopbackBind(t *testing.T) {

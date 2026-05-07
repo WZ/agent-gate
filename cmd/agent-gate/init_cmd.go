@@ -40,6 +40,14 @@ func initCmd() *cobra.Command {
 			caDir := filepath.Join(configDir, "ca")
 
 			interactive := !nonInteractive && isInteractive()
+
+			// Banner: show for any non-quiet run. Suppressed for
+			// --print-config (stdout is structured) and --quiet. Goes
+			// to stderr so it never contaminates a piped --print-config.
+			if !quiet && !printConfig {
+				v, _, _ := buildInfo()
+				initwizard.PrintBanner(cmd.ErrOrStderr(), v)
+			}
 			var prompter initwizard.Prompter
 			if interactive {
 				prompter = initwizard.HuhPrompter{}

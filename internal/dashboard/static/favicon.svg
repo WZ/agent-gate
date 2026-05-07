@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="agent-gate favicon">
+  <defs>
+    <linearGradient id="shield" x1="20" y1="12" x2="44" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3DD9A8"/>
+      <stop offset=".55" stop-color="#0E7C5A"/>
+      <stop offset="1" stop-color="#0A4D3A"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#061A18"/>
+  <path d="M32 9 L51 16 V32 C51 44.5 43 53 32 57 C21 53 13 44.5 13 32 V16 Z"
+        fill="url(#shield)" stroke="#FAFAF7" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M19 33 H26 L29 24 L34 42 L37 33 H45"
+        fill="none" stroke="#FAFAF7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
