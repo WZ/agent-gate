@@ -198,9 +198,9 @@ func TestParseOpenAIChatExtractsToolResults(t *testing.T) {
 }
 
 func TestParseOpenAIChatStreamingFixture(t *testing.T) {
-	// Real captured stream from a Fortinet LiteLLM gateway. The first chunk's
-	// model wins over the request's model, no tool_calls fired, and this
-	// particular gateway didn't include a usage trailer (no
+	// Real captured stream from an OpenAI-compatible gateway. The first
+	// chunk's model wins over the request's model, no tool_calls fired, and
+	// this particular gateway didn't include a usage trailer (no
 	// stream_options.include_usage on the request).
 	flow := loadFlow(t, "../../testdata/flows/openai/chat_completions_streaming.json")
 

@@ -150,9 +150,9 @@ func TestParseOpenAIResponsesPrefersUserForSessionGrouping(t *testing.T) {
 }
 
 func TestParseOpenAIResponsesStreamingFixture(t *testing.T) {
-	// Real captured streaming response from a Fortinet LiteLLM gateway. The
-	// terminal `response.completed` event carries the final response object
-	// with model, output items, and usage tokens — same shape as the
+	// Real captured streaming response from an OpenAI-compatible gateway.
+	// The terminal `response.completed` event carries the final response
+	// object with model, output items, and usage tokens — same shape as the
 	// non-streaming branch, so the SSE decoder re-uses that parser.
 	flow := loadFlow(t, "../../testdata/flows/openai/responses_streaming.json")
 
