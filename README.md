@@ -62,47 +62,18 @@ agent-gate support has three separate layers:
 
 ## Quick Start
 
-**macOS:**
-
 ```bash
-# 1. Install
 brew tap WZ/tap
 brew install agent-gate
-
-# 2. Bootstrap (one-time): writes config, mints a local CA, installs it into your trust stores
-agent-gate init
-
-# 3. Run your agent through it
-agent-gate run -- claude
-
-# Later, to pick up new releases:
-brew upgrade agent-gate
+agent-gate init               # one-time bootstrap: config + CA + agent detection + cert install
+agent-gate run -- claude      # launch your agent through the gate
 ```
 
-**Linux / Windows / Mac without Homebrew:** grab the binary from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
+Then open <http://127.0.0.1:7878> to review what your agent is doing.
 
-```bash
-# 1. Install — pick the archive for your platform
-tar xz < agent-gate_<ver>_<os>_<arch>.tar.gz
-sudo mv agent-gate /usr/local/bin/
+On macOS and supported Linux hosts this runs in airtight mode by default; Windows currently falls back to permissive capture. To validate the install at any time: `agent-gate doctor`.
 
-# 2 & 3. Same as above
-agent-gate init
-agent-gate run -- claude
-```
-
-Then open <http://127.0.0.1:7878> to review what your agent is doing. See [Install](#install) below for the exact archive names and other options.
-
-On macOS and supported Linux hosts this runs in airtight mode by default. On Windows today it falls back to permissive capture; use the standalone proxy flow below or track Plan 4 for the airtight runtime.
-
-For headless / CI use:
-
-```bash
-agent-gate init --non-interactive --allow-host api.anthropic.com --install-cert=false
-agent-gate cert install   # run later from a TTY
-```
-
-To validate the install at any time: `agent-gate doctor`.
+For binary download, build-from-source, headless/CI install, and every flag the binary takes, see the [runbook](docs/RUNBOOK.md).
 
 ## How It Works
 
@@ -174,37 +145,7 @@ It does **not** defend against:
 
 If your threat model needs filesystem isolation or RBAC, agent-gate alone is insufficient.
 
-### Flags
-
-```
-agent-gate init [flags]
-  --quiet                           skip welcome and policy summary notes
-
-agent-gate run [flags] -- <cmd> [args...]
-  --mode VALUE                       egress enforcement mode (default airtight):
-                                       airtight        per-OS network jail; falls back to
-                                                         permissive with a warning if unsupported
-                                       airtight-strict require the jail; abort if unsupported
-                                                         (use in CI)
-                                       permissive      skip jail; sets HTTPS_PROXY only
-                                                         — agent could ignore and bypass capture
-  --enforce-allowlist                proxy returns 403 for hosts not in the allowlist
-  --config PATH                      config.toml path
-
-agent-gate run advanced flags (most users don't need these):
-  --upstream-ca PEM                  extra root CA(s) to trust on proxy→upstream
-                                       (use for self-signed ANTHROPIC_BASE_URL)
-  --upstream-insecure-skip-verify    skip upstream cert verification entirely
-                                       (testing only; captures still happen)
-  --hijack-host HOST                 capture WebSocket message bodies for HOST;
-                                       claude / codex / aider are captured by
-                                       default and don't need this. Reach for it
-                                       only when auditing a custom or internal
-                                       agent that talks to your own WebSocket
-                                       backend (repeatable)
-```
-
-Run `agent-gate run --help` to see the same layout from the binary.
+For the full flag reference, mode-picking guide, and run recipes, see the [runbook](docs/RUNBOOK.md#agent-gate-run). Or run `agent-gate run --help` from the binary.
 
 ## Three-list policy model
 
@@ -243,143 +184,13 @@ default → MITM, decrypt, capture, forward
 
 ## Install
 
-### Homebrew (macOS, recommended)
-
 ```bash
 brew tap WZ/tap
 brew install agent-gate
+brew upgrade agent-gate   # later, to pick up new releases
 ```
 
-To upgrade in place:
-
-```bash
-brew upgrade agent-gate
-```
-
-The formula is published automatically on every `vX.Y.Z` tag and points at the same darwin archives as the binary download path below, so `brew upgrade` always tracks the newest release.
-
-### Download the binary
-
-Grab the archive for your platform from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
-
-| Platform | Archive |
-|---|---|
-| macOS Apple Silicon | `agent-gate_<ver>_darwin_arm64.tar.gz` |
-| macOS Intel | `agent-gate_<ver>_darwin_x86_64.tar.gz` |
-| Linux arm64 | `agent-gate_<ver>_linux_arm64.tar.gz` |
-| Linux x86_64 | `agent-gate_<ver>_linux_x86_64.tar.gz` |
-| Windows x86_64 | `agent-gate_<ver>_windows_x86_64.zip` (permissive capture today; airtight is Plan 4) |
-
-Extract, then move `agent-gate` to a directory on your `PATH`. On macOS, the first run may need `xattr -d com.apple.quarantine ./agent-gate` to clear Gatekeeper.
-
-### Or build from source
-
-```bash
-git clone https://github.com/WZ/agent-gate.git
-cd agent-gate
-
-# Plain build — produces "agent-gate 0.0.1-dev (commit unknown, built unknown)"
-go build -o agent-gate ./cmd/agent-gate
-
-# Or with version metadata baked in (matches what goreleaser ships):
-VERSION=$(git describe --tags --always)
-COMMIT=$(git rev-parse --short HEAD)
-DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-go build -trimpath \
-  -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-  -o agent-gate ./cmd/agent-gate
-
-sudo mv agent-gate /usr/local/bin/
-```
-
-> `go install agent-gate/cmd/agent-gate@latest` does **not** work today — the module path in `go.mod` is the bare name `agent-gate` rather than a domain-prefixed path, so the toolchain can't fetch it from a remote. Use the binary download or `go build` from a clone.
-
-## CLI summary
-
-```
-Getting started:
-  agent-gate init                  one-command bootstrap (config + CA + agent detection + cert install)
-  agent-gate doctor                validate the install; suggest or apply repairs
-
-Daily use:
-  agent-gate run -- <cmd>          launch a command with airtight network capture
-  agent-gate dashboard             run the local web dashboard (foreground)
-  agent-gate proxy                 run the proxy alone (foreground)
-  agent-gate tail                  live-follow events in the terminal
-  agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
-
-Maintenance:
-  agent-gate cert install          install the local CA into trust stores
-  agent-gate cert uninstall        remove the local CA from trust stores
-  agent-gate cert path             print the CA cert path
-  agent-gate reindex               rebuild the PII count index from JSONL
-  agent-gate uninstall             (Windows) remove the WFP provider/sublayer
-  agent-gate version               print version info
-
-Help topics:
-  agent-gate help allowlist        explain allowlist semantics
-  agent-gate help denylist         explain denylist semantics
-  agent-gate help passthrough      explain passthrough semantics
-```
-
-Each takes `--config PATH` to point at a non-default `config.toml`.
-
-## Workflow
-
-### Recommended: launch through `agent-gate run`
-
-One command starts the proxy + dashboard + jail and runs your agent inside it:
-
-```bash
-agent-gate run -- claude
-```
-
-While Claude is running, open <http://127.0.0.1:7878> — sessions, events, and flags appear live. When Claude exits, agent-gate tears everything down and releases the lockfile.
-
-If your shell aliases `claude` with flags (fish/zsh aliases aren't visible to `exec`), invoke through your shell so the alias resolves:
-
-```bash
-agent-gate run -- fish -ic 'claude'
-```
-
-For a self-hosted Anthropic-compatible endpoint with a non-standard cert:
-
-```bash
-echo | openssl s_client -connect your-anthropic-endpoint.example:443 -servername your-anthropic-endpoint.example 2>/dev/null \
-  | openssl x509 -outform PEM > /tmp/upstream.pem
-ANTHROPIC_BASE_URL=https://your-anthropic-endpoint.example \
-ANTHROPIC_API_KEY=$YOUR_KEY \
-  agent-gate run --upstream-ca /tmp/upstream.pem -- claude
-```
-
-### Alternative: standalone proxy + dashboard
-
-For ad-hoc captures (curl, an existing daemon, a script), run the proxy and dashboard separately and point a client at the proxy via env:
-
-```bash
-agent-gate proxy --capture-mode permissive   # terminal 1
-agent-gate dashboard                          # terminal 2
-
-HTTPS_PROXY=http://127.0.0.1:8888 \
-HTTP_PROXY=http://127.0.0.1:8888 \
-NO_PROXY="" \
-  curl https://api.anthropic.com/v1/messages \
-       -H "x-api-key: $ANTHROPIC_API_KEY" \
-       -H "anthropic-version: 2023-06-01" \
-       -H "content-type: application/json" \
-       -d '{"model":"claude-opus-4-7","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'
-```
-
-Same dashboard at <http://127.0.0.1:7878>. No kernel jail in this mode — the client must honor `HTTPS_PROXY`.
-
-## Where things live
-
-- Config: `~/.config/agent-gate/config.toml`
-- CA: `~/.config/agent-gate/ca/{cert.pem,key.pem}` (key is 0600 on macOS/Linux; Windows skips the unix-mode check)
-- Allowlist / denylist / passthrough: `~/.config/agent-gate/{allowlist,denylist,passthrough}.txt`
-- Dismissals: `~/.config/agent-gate/dismissals.json` (also logs `raw_peek` events)
-- Lockfile: `~/.local/share/agent-gate/agent-gate.lock` — auto-reclaimed if stale
-- Data: `~/.local/share/agent-gate/{events.db, YYYY-MM-DD.jsonl}`
+For the binary download, build-from-source, and the full file-by-file list of where agent-gate stores config and data, see [Install in the runbook](docs/RUNBOOK.md#install).
 
 ## What's next
 
@@ -396,17 +207,6 @@ See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
 - **Detect filesystem exfiltration.** agent-gate audits network. If the agent reads `.env` and writes it somewhere on disk, we don't see it.
 - **Run as a service / agent / daemon.** Single-shot supervisor + dashboard per `agent-gate run`. The lockfile enforces "one instance at a time."
 - **Ship to a remote backend.** No telemetry, no upload, no cross-machine collation. Everything stays local.
-
-## Limitations
-
-- HTTP/1.1 client-facing; upstream HTTP/2 transparent.
-- Windows airtight is stubbed — Windows targets fall back to `--permissive` with a clear message. Plan 4 lands the Job Object + WFP filter runtime path.
-- macOS airtight only matches loopback to the proxy port (no other localhost ports). MCP-over-localhost-HTTP works because the proxy reaches into the child's loopback, not the other direction.
-- Linux airtight requires `kernel.unprivileged_userns_clone=1`. Hardened distros (Ubuntu 24+ with `apparmor_restrict_unprivileged_userns=1`, hardened kernels) fall back to `--permissive` unless `--airtight-fail` is set.
-- Codex 0.128.0 client-pins TLS on its WebSocket transport. Empty 101 upgrades on `chatgpt.com` are expected and get flagged `ws_pinned_upstream` for clarity. The actual model conversation lands via codex's HTTP fallback path (`POST /backend-api/codex/responses`), which agent-gate decodes through the same OpenAI Responses parser used for `api.openai.com`.
-- Cert-pinned upstreams reject TLS interception. Add them to `passthrough.txt` so agent-gate tunnels TCP raw — body capture is skipped, only the CONNECT host + byte counts get audited.
-- Some TUIs (Claude Code) catch SIGINT and don't propagate exit on Ctrl-C. Type `/exit` inside Claude or run `agent-gate stop` from another terminal.
-- Custom rules via TOML config: schema is reserved but not yet wired.
 
 ## Project layout
 
