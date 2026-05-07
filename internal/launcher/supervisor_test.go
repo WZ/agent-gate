@@ -124,6 +124,28 @@ func TestProxyOptionsForListenerCarriesHijackHost(t *testing.T) {
 	}
 }
 
+func TestProxyRunConfigWithListenerPreservesHostPredicates(t *testing.T) {
+	hostGuard := func(host string) bool { return host == "blocked.example" }
+	passthrough := func(host string) bool { return host == "mcp-proxy.anthropic.com" }
+	hijack := func(host string) bool { return host == "chatgpt.com" }
+
+	cfg := proxyRunConfigWithListener(proxyRunConfig{
+		hostGuard:       hostGuard,
+		passthroughHost: passthrough,
+		hijackHost:      hijack,
+	}, nil)
+
+	if cfg.hostGuard == nil || !cfg.hostGuard("blocked.example") {
+		t.Fatal("expected HostGuard predicate to be preserved")
+	}
+	if cfg.passthroughHost == nil || !cfg.passthroughHost("mcp-proxy.anthropic.com") {
+		t.Fatal("expected PassthroughHost predicate to be preserved")
+	}
+	if cfg.hijackHost == nil || !cfg.hijackHost("chatgpt.com") {
+		t.Fatal("expected HijackHost predicate to be preserved")
+	}
+}
+
 func TestBuildHijackHostPredicateEmptyHostsReturnsNil(t *testing.T) {
 	if buildHijackHostPredicate(nil, nil) != nil {
 		t.Fatal("expected nil predicate when no hosts requested")

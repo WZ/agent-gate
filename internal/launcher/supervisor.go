@@ -118,21 +118,22 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		fmt.Fprintln(os.Stderr, "allowlist enforcement ON: requests to non-allowlisted hosts will receive 403 from the proxy")
 	}
 
+	baseProxyRunConfig := proxyRunConfig{
+		common:                     common,
+		out:                        flowCh,
+		captureMode:                captureMode,
+		upstreamRoots:              upstreamRoots,
+		upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+		hostGuard:                  hostGuard,
+		passthroughHost:            passthroughHost,
+		hijackHost:                 hijackHost,
+		logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
+	}
+
 	proxyDone := make(chan error, 1)
 	go func() {
 		defer recoverPanic(opts.proxyHook, "proxy", cancel)
-		proxyDone <- proxy.Run(proxyOptionsForListener(proxyRunConfig{
-			listener:                   proxyLn,
-			common:                     common,
-			out:                        flowCh,
-			captureMode:                captureMode,
-			upstreamRoots:              upstreamRoots,
-			upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
-			hostGuard:                  hostGuard,
-			passthroughHost:            passthroughHost,
-			hijackHost:                 hijackHost,
-			logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-		}))
+		proxyDone <- proxy.Run(proxyOptionsForListener(proxyRunConfigWithListener(baseProxyRunConfig, proxyLn)))
 	}()
 
 	// 5b. Allocate the netns-listener channel; on Linux, spawnAirtight will send
@@ -145,17 +146,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 			if nsLn == nil {
 				return
 			}
-			if err := proxy.Run(proxyOptionsForListener(proxyRunConfig{
-				listener:                   nsLn,
-				common:                     common,
-				out:                        flowCh,
-				captureMode:                captureMode,
-				upstreamRoots:              upstreamRoots,
-				upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
-				hostGuard:                  hostGuard,
-				passthroughHost:            passthroughHost,
-				logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-			})); err != nil && !errors.Is(err, net.ErrClosed) {
+			if err := proxy.Run(proxyOptionsForListener(proxyRunConfigWithListener(baseProxyRunConfig, nsLn))); err != nil && !errors.Is(err, net.ErrClosed) {
 				fmt.Fprintf(os.Stderr, "ns proxy: %v\n", err)
 			}
 		case <-supCtx.Done():
@@ -355,6 +346,11 @@ type proxyRunConfig struct {
 	passthroughHost            func(string) bool
 	hijackHost                 func(string) bool
 	logger                     func(string, ...any)
+}
+
+func proxyRunConfigWithListener(c proxyRunConfig, listener net.Listener) proxyRunConfig {
+	c.listener = listener
+	return c
 }
 
 func proxyOptionsForListener(c proxyRunConfig) proxy.Options {
