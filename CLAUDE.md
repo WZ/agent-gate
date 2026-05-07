@@ -329,5 +329,5 @@ Key routing rules:
 
 Plus the project's superpowers skills: brainstorming → writing-plans →
 subagent-driven-development → finishing-a-development-branch is the standard
-arc for non-trivial work. Plans land as PRs; tags follow the `vX.Y.Z-<slug>`
-shape (e.g., `v0.3.0-airtight-launcher`).
+arc for non-trivial work. Plans land as PRs; release tags use the simple
+`vX.Y.Z` shape after merge (e.g., `v0.3.0`).

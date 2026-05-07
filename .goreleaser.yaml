@@ -70,8 +70,8 @@ release:
     owner: WZ
     name: agent-gate
   draft: false
-  # Tags follow vX.Y.Z-<slug>; the slug is a semver prerelease identifier,
-  # so `auto` correctly marks them as prerelease in the GitHub UI.
+  # Tags follow vX.Y.Z. `auto` still marks semver prerelease tags correctly
+  # if we ever push one.
   prerelease: auto
   name_template: 'agent-gate {{ .Tag }}'
   header: |
