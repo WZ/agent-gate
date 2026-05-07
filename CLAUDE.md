@@ -191,12 +191,12 @@ Currently shipped (oldest → newest):
 | (pre-launch) | Plan 7 | release automation via goreleaser |
 | `v0.1.0` | (launch) | public-launch polish (badges, screenshots, SECURITY.md) |
 | `v0.2.0` | Plan 5 Stream A | multi-vendor HTTP parsers (OpenAI Chat + Responses + SSE) |
+| `v0.3.0` | Plan 5 Stream B | codex visibility on `chatgpt.com`. WS hijack handler + `--hijack-host` flag landed as infrastructure, but codex 0.128.0 client-pins TLS on its WebSocket transport so visibility comes from codex's HTTP fallback (`POST /backend-api/codex/responses`) — that path decodes through the OpenAI Responses parser (extended for chatgpt.com paths + `Content-Encoding: zstd`). New `ws_pinned_upstream` info rule explains empty 101 upgrades. agentdetect seeds `chatgpt.com` for codex; doctor surfaces the pinning advisory. |
 
 Active and deferred:
 
 | Target | Plan | Status |
 |---|---|---|
-| `v0.3.0` | Plan 5 Stream B | in flight on `feat/plan5-ws-capture`. WS hijack handler + `--hijack-host` flag + chatgpt.com Responses parser (zstd) + `ws_pinned_upstream` rule + codex agentdetect+doctor updates all landed. codex 0.128.0 client-pins TLS on its WebSocket transport, so visibility comes from codex's HTTP fallback (`POST /backend-api/codex/responses`) — that path decodes through the OpenAI Responses parser. The hijack code stays as infrastructure for future non-pinning agents. |
 | `v0.4.0` | Plan 4 | Windows airtight runtime — deferred until Windows iteration loop + demand exist |
 
 See `TODOS.md` at the repo root for the publicly-tracked active +
