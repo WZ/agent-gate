@@ -55,15 +55,21 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 	}
 	defer tlsClient.Close()
 
-	tlsUpstream, err := dialUpstreamTLS(opts, hostport, serverName)
-	if err != nil {
-		opts.Logger("proxy hijack: %v", err)
-		return
-	}
-	defer tlsUpstream.Close()
-
 	clientReader := bufio.NewReader(tlsClient)
-	upstreamReader := bufio.NewReader(tlsUpstream)
+
+	// Upstream is dialed lazily on the first request that isn't blocked.
+	// Blocked-by-HostGuard CONNECTs never touch the upstream — saves a TCP
+	// round-trip and matches the standard MITM path's "block before forward"
+	// posture.
+	var (
+		tlsUpstream    *tls.Conn
+		upstreamReader *bufio.Reader
+	)
+	defer func() {
+		if tlsUpstream != nil {
+			_ = tlsUpstream.Close()
+		}
+	}()
 
 	for {
 		req, err := http.ReadRequest(clientReader)
@@ -72,6 +78,28 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 				opts.Logger("proxy hijack: read request from %s: %v", serverName, err)
 			}
 			return
+		}
+
+		if opts.HostGuard != nil {
+			host := req.URL.Hostname()
+			if host == "" {
+				host = serverName
+			}
+			if opts.HostGuard(host) {
+				if err := writeBlockedHijackResponse(opts, serverName, host, req, tlsClient); err != nil && !isPumpClose(err) {
+					opts.Logger("proxy hijack: write 403 for %s: %v", host, err)
+				}
+				return
+			}
+		}
+
+		if tlsUpstream == nil {
+			tlsUpstream, err = dialUpstreamTLS(opts, hostport, serverName)
+			if err != nil {
+				opts.Logger("proxy hijack: %v", err)
+				return
+			}
+			upstreamReader = bufio.NewReader(tlsUpstream)
 		}
 
 		if isWebSocketUpgrade(req) {
@@ -86,6 +114,55 @@ func runHijack(opts Options, hostport, serverName string, client net.Conn) {
 			return
 		}
 	}
+}
+
+// writeBlockedHijackResponse mirrors the standard MITM block path: emit a
+// RawFlow with status 403 and the synthetic body, then write the same
+// response back to the client. The response sets Connection: close because
+// we always terminate the hijack tunnel after a block — keeping it open
+// would let the agent retry the same blocked path silently.
+func writeBlockedHijackResponse(opts Options, serverName, host string, req *http.Request, tlsClient *tls.Conn) error {
+	reqBody, _, _ := readLimited(req.Body, opts.BodyLimit)
+	if req.Body != nil {
+		req.Body.Close()
+	}
+
+	body := blockedHostBody(host)
+	headers := http.Header{
+		"Content-Type":       []string{"application/json"},
+		"X-Agent-Gate-Block": []string{"host_not_allowlisted"},
+		"Connection":         []string{"close"},
+	}
+
+	now := time.Now()
+	flow := types.RawFlow{
+		ID:          opts.IDGen.New(),
+		StartedAt:   now,
+		EndedAt:     now,
+		Method:      req.Method,
+		URL:         hijackedHTTPURL(req, serverName),
+		ReqHeaders:  req.Header.Clone(),
+		ReqBody:     reqBody,
+		RespStatus:  http.StatusForbidden,
+		RespHeaders: headers.Clone(),
+		RespBody:    body,
+		CaptureMode: opts.CaptureMode,
+	}
+	opts.Out <- flow
+
+	resp := &http.Response{
+		Status:        "403 Forbidden",
+		StatusCode:    http.StatusForbidden,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        headers,
+		Body:          io.NopCloser(bytes.NewReader(body)),
+		ContentLength: int64(len(body)),
+		Close:         true,
+		Request:       req,
+	}
+	return resp.Write(tlsClient)
 }
 
 func dialUpstreamTLS(opts Options, hostport, serverName string) (*tls.Conn, error) {

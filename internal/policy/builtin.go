@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agent-gate/internal/allowlist"
+	"agent-gate/internal/bodydecode"
 	"agent-gate/internal/secrets"
 	"agent-gate/internal/types"
 )
@@ -52,7 +53,9 @@ type SecretInRequestRule struct{}
 func (SecretInRequestRule) Code() string       { return "secret_in_request" }
 func (SecretInRequestRule) Severity() Severity { return SevHigh }
 func (SecretInRequestRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
-	matches := secrets.FindAll(ev.RawFlow.ReqBody)
+	// Scan the decoded body so secrets hidden inside a zstd-compressed
+	// request (codex on chatgpt.com is the canonical case) don't slip past.
+	matches := secrets.FindAll(bodydecode.Request(&ev.RawFlow))
 	if len(matches) == 0 {
 		return false, ""
 	}

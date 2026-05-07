@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"agent-gate/internal/bodydecode"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/pii"
 	"agent-gate/internal/redactor"
@@ -426,14 +427,18 @@ func handleEventDetail(opts Options, r *renderer) http.HandlerFunc {
 			return
 		}
 
+		// Decode any Content-Encoding wrapper on the request side so codex's
+		// zstd-compressed bodies render as readable JSON instead of binary.
+		decodedReq := bodydecode.Request(&stored.RawFlow)
+
 		var reqBodyStr, respBodyStr string
 		if raw {
-			reqBodyStr = string(stored.ReqBody)
+			reqBodyStr = string(decodedReq)
 			respBodyStr = string(stored.RespBody)
 			_ = opts.Dismissals.Add(dismissals.ScopeEvent, id, "raw_peek", ix.Host,
 				"reviewer requested raw view of event "+id)
 		} else {
-			reqBodyStr = redactor.Redact(string(stored.ReqBody))
+			reqBodyStr = redactor.Redact(string(decodedReq))
 			respBodyStr = redactor.Redact(string(stored.RespBody))
 		}
 		reqBodyStr = formatBody(reqBodyStr, stored.ReqHeaders)

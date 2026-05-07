@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"bytes"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,6 +10,7 @@ import (
 	"agent-gate/internal/allowlist"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/types"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,6 +73,22 @@ func TestSecretInRequestFiresOnAnthropicKey(t *testing.T) {
 	require.Len(t, flags, 1)
 	assert.Equal(t, "secret_in_request", flags[0].Code)
 	assert.Equal(t, "high", flags[0].Severity)
+	assert.Contains(t, flags[0].Detail, "anthropic_key")
+}
+
+func TestSecretInRequestDecodesZstdRequestBody(t *testing.T) {
+	e, _ := mkengine(t, SecretInRequestRule{})
+	body := []byte(`{"prompt":"my key is sk-ant-` + strings.Repeat("a", 60) + `"}`)
+	encoded := zstdEncodeForTest(t, body)
+
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:         "e",
+		ReqHeaders: http.Header{"Content-Encoding": []string{"zstd"}},
+		ReqBody:    encoded,
+	}})
+
+	require.Len(t, flags, 1)
+	assert.Equal(t, "secret_in_request", flags[0].Code)
 	assert.Contains(t, flags[0].Detail, "anthropic_key")
 }
 
@@ -181,6 +200,17 @@ func TestWSPinnedUpstreamSilentForNon101(t *testing.T) {
 		RespHeaders: map[string][]string{"Upgrade": {"websocket"}},
 	}})
 	assert.Empty(t, flags)
+}
+
+func zstdEncodeForTest(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc, err := zstd.NewWriter(&buf)
+	require.NoError(t, err)
+	_, err = enc.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close())
+	return buf.Bytes()
 }
 
 func TestWSPinnedUpstreamSilentForOther101Switches(t *testing.T) {

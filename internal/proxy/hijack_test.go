@@ -273,6 +273,83 @@ func TestHijackForwardsNonWSHTTPRequest(t *testing.T) {
 	assert.Equal(t, []byte(`{"ok":true}`), flow.RespBody)
 }
 
+func TestHijackHostGuardBlocksBeforeUpstreamDial(t *testing.T) {
+	closedLn, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	upstreamHost := closedLn.Addr().String()
+	require.NoError(t, closedLn.Close())
+	upstreamServerName, _, err := net.SplitHostPort(upstreamHost)
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	testCA, err := ca.Ensure(dir)
+	require.NoError(t, err)
+
+	out := make(chan types.RawFlow, 4)
+	pAddr := startProxy(t, Options{
+		Addr:        "127.0.0.1:0",
+		CA:          testCA,
+		Out:         out,
+		IDGen:       idgen.NewGenerator(),
+		CaptureMode: "airtight",
+		HostGuard: func(host string) bool {
+			return host == upstreamServerName
+		},
+		HijackHost: func(host string) bool {
+			return host == upstreamServerName
+		},
+	})
+
+	clientCAs := x509.NewCertPool()
+	clientCAs.AddCert(testCA.Cert)
+
+	rawConn, err := net.DialTimeout("tcp", pAddr, 5*time.Second)
+	require.NoError(t, err)
+	defer rawConn.Close()
+
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamHost, upstreamHost)
+	_, err = rawConn.Write([]byte(connectReq))
+	require.NoError(t, err)
+
+	br := bufio.NewReader(rawConn)
+	statusLine, err := br.ReadString('\n')
+	require.NoError(t, err)
+	require.Contains(t, statusLine, "200")
+	for {
+		line, err := br.ReadString('\n')
+		require.NoError(t, err)
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	tlsClient := tls.Client(rawConn, &tls.Config{
+		ServerName: upstreamServerName,
+		RootCAs:    clientCAs,
+	})
+	require.NoError(t, tlsClient.Handshake())
+
+	httpReq := fmt.Sprintf("GET /blocked HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", upstreamHost)
+	_, err = tlsClient.Write([]byte(httpReq))
+	require.NoError(t, err)
+
+	resp, err := http.ReadResponse(bufio.NewReader(tlsClient), nil)
+	require.NoError(t, err)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	resp.Body.Close()
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	assert.Equal(t, "host_not_allowlisted", resp.Header.Get("X-Agent-Gate-Block"))
+	assert.Contains(t, string(body), "host not in allowlist")
+
+	flow := receiveFlow(t, out, "blocked hijack flow")
+	assert.Equal(t, http.StatusForbidden, flow.RespStatus)
+	assert.Equal(t, "GET", flow.Method)
+	assert.Contains(t, flow.URL, "/blocked")
+	assert.Equal(t, "host_not_allowlisted", flow.RespHeaders.Get("X-Agent-Gate-Block"))
+	assert.Contains(t, string(flow.RespBody), "host not in allowlist")
+}
+
 // fixedConnTransport is a minimal http.RoundTripper that returns a single
 // pre-established net.Conn for any DialTLSContext call. coder/websocket uses
 // the http.Client to send the upgrade request and inspect the 101; we wedge

@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"bytes"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/store"
 	"agent-gate/internal/types"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -256,6 +258,37 @@ func TestEventDetailRawShowsBytesAndLogsDismissal(t *testing.T) {
 	assert.Equal(t, "e", entries[0].EventID)
 }
 
+func TestEventDetailDecodesZstdRequestBody(t *testing.T) {
+	opts := freshOpts(t)
+	body := []byte(`{"input":"codex prompt visible after decode"}`)
+	require.NoError(t, opts.Store.Append(types.StoredEvent{ParsedEvent: types.ParsedEvent{
+		RawFlow: types.RawFlow{
+			ID:         "e",
+			Method:     "POST",
+			URL:        "https://chatgpt.com/backend-api/codex/responses",
+			RespStatus: 200,
+			ReqHeaders: http.Header{
+				"Content-Type":     []string{"application/json"},
+				"Content-Encoding": []string{"zstd"},
+			},
+			ReqBody:   zstdEncodeForTest(t, body),
+			StartedAt: time.Now(),
+		},
+		SessionID: "sess-A",
+	}}))
+
+	srv := httptest.NewServer(NewServer(opts))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/events/e")
+	require.NoError(t, err)
+	bs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	bodyStr := string(bs)
+	assert.Contains(t, bodyStr, "codex prompt visible after decode")
+	assert.Contains(t, bodyStr, "Redacted view")
+}
+
 func TestDismissFlag(t *testing.T) {
 	opts := freshOpts(t)
 	require.NoError(t, opts.Store.Append(types.StoredEvent{
@@ -447,6 +480,17 @@ func TestUntrustHandler_Removes(t *testing.T) {
 	if opts.Allowlist.Contains("api.example.com") {
 		t.Fatal("expected host to be removed from allowlist")
 	}
+}
+
+func zstdEncodeForTest(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc, err := zstd.NewWriter(&buf)
+	require.NoError(t, err)
+	_, err = enc.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close())
+	return buf.Bytes()
 }
 
 func TestUntrustHandler_RejectsGet(t *testing.T) {
