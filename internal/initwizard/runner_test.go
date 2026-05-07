@@ -13,14 +13,16 @@ import (
 )
 
 type mockPrompter struct {
-	selectedHosts      []string
-	addCustom          []string
-	confirmInstallCert bool
-	confirmSmokeTest   bool
-	callOrder          []string
-	ports              []int
-	summaryCounts      []int
-	suggestedHosts     []HostSuggestion
+	selectedHosts       []string
+	addCustom           []string
+	confirmInstallCert  bool
+	confirmSmokeTest    bool
+	hostsConfirmReplies []bool // each call pops the head; default true if empty
+	callOrder           []string
+	ports               []int
+	summaryCounts       []int
+	suggestedHosts      []HostSuggestion
+	confirmedHosts      [][]string
 }
 
 func (m *mockPrompter) PromptWelcome(port int) error {
@@ -36,6 +38,16 @@ func (m *mockPrompter) PromptHosts(suggested []HostSuggestion, port int) ([]stri
 		return m.selectedHosts, nil
 	}
 	return suggestionHosts(suggested), nil
+}
+func (m *mockPrompter) PromptHostsConfirm(selected []string) (bool, error) {
+	m.callOrder = append(m.callOrder, "hostsconfirm")
+	m.confirmedHosts = append(m.confirmedHosts, append([]string(nil), selected...))
+	if len(m.hostsConfirmReplies) == 0 {
+		return true, nil
+	}
+	reply := m.hostsConfirmReplies[0]
+	m.hostsConfirmReplies = m.hostsConfirmReplies[1:]
+	return reply, nil
 }
 func (m *mockPrompter) PromptCustomHosts(port int) ([]string, error) {
 	m.callOrder = append(m.callOrder, "custom")
@@ -247,7 +259,7 @@ dashboard = 9000
 	if err := Run(opts); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	wantOrder := []string{"welcome", "threelist", "hosts", "custom", "summary", "installcert"}
+	wantOrder := []string{"welcome", "threelist", "hosts", "hostsconfirm", "custom", "summary", "installcert"}
 	if !reflect.DeepEqual(prompter.callOrder, wantOrder) {
 		t.Fatalf("call order: got %v, want %v", prompter.callOrder, wantOrder)
 	}
@@ -276,12 +288,60 @@ func TestRunner_QuietSkipsWelcomeAndSummary(t *testing.T) {
 	if err := Run(opts); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	wantOrder := []string{"threelist", "hosts", "custom"}
+	wantOrder := []string{"threelist", "hosts", "hostsconfirm", "custom"}
 	if !reflect.DeepEqual(prompter.callOrder, wantOrder) {
 		t.Fatalf("call order: got %v, want %v", prompter.callOrder, wantOrder)
 	}
 	if len(prompter.summaryCounts) != 0 {
 		t.Fatalf("quiet mode should skip summary, got counts %v", prompter.summaryCounts)
+	}
+}
+
+func TestRunner_HostsConfirmReject_LoopsBackToMultiselect(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "config.toml")
+	prompter := &mockPrompter{
+		// First confirm rejects → wizard re-asks PromptHosts. Second
+		// confirm accepts → wizard advances. Default-tail is true.
+		hostsConfirmReplies: []bool{false, true},
+		selectedHosts:       []string{"api.anthropic.com"},
+	}
+	opts := Options{
+		ConfigPath:  cfg,
+		ConfigDir:   dir,
+		DataDir:     filepath.Join(dir, "data"),
+		Installer:   &ca.MockInstaller{},
+		Prompter:    prompter,
+		Force:       true,
+		InstallCert: InstallCertFalse,
+		Detector: func() []agentdetect.DetectedAgent {
+			return []agentdetect.DetectedAgent{
+				{Name: "claude", Source: agentdetect.SourcePath, SuggestedHosts: []string{"api.anthropic.com"}},
+			}
+		},
+	}
+	if err := Run(opts); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	// The wizard must have asked twice (rejected once, accepted once).
+	hostsCalls := 0
+	confirmCalls := 0
+	for _, c := range prompter.callOrder {
+		switch c {
+		case "hosts":
+			hostsCalls++
+		case "hostsconfirm":
+			confirmCalls++
+		}
+	}
+	if hostsCalls != 2 {
+		t.Errorf("expected 2 PromptHosts calls (reject loops back), got %d", hostsCalls)
+	}
+	if confirmCalls != 2 {
+		t.Errorf("expected 2 PromptHostsConfirm calls, got %d", confirmCalls)
+	}
+	if len(prompter.confirmedHosts) != 2 {
+		t.Errorf("expected 2 confirmedHosts records, got %v", prompter.confirmedHosts)
 	}
 }
 

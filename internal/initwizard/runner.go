@@ -21,6 +21,7 @@ var ErrConfigExists = errors.New("init: config already exists; pass --force to o
 type Prompter interface {
 	PromptWelcome(port int) error
 	PromptHosts(suggested []HostSuggestion, port int) ([]string, error)
+	PromptHostsConfirm(selected []string) (bool, error)
 	PromptCustomHosts(port int) ([]string, error)
 	PromptThreeListNote(port int) error
 	PromptPolicySummary(quietCount int, port int) error
@@ -88,9 +89,25 @@ func Run(opts Options) error {
 			_ = opts.Prompter.PromptWelcome(port)
 		}
 		_ = opts.Prompter.PromptThreeListNote(port)
-		selected, err := opts.Prompter.PromptHosts(suggestions, port)
-		if err != nil {
-			return fmt.Errorf("prompt hosts: %w", err)
+		// Loop on the host multiselect until the user confirms their
+		// selection. The first dogfood revealed users hit ENTER expecting
+		// it to toggle (huh's default is space/x toggle, enter submits),
+		// so a confirm step lets them realize "wait, I didn't mean to
+		// pre-trust everything" and back out without aborting the wizard.
+		var selected []string
+		for {
+			s, err := opts.Prompter.PromptHosts(suggestions, port)
+			if err != nil {
+				return fmt.Errorf("prompt hosts: %w", err)
+			}
+			ok, err := opts.Prompter.PromptHostsConfirm(s)
+			if err != nil {
+				return fmt.Errorf("prompt hosts confirm: %w", err)
+			}
+			if ok {
+				selected = s
+				break
+			}
 		}
 		finalHosts = selected
 		extras, perr := opts.Prompter.PromptCustomHosts(port)

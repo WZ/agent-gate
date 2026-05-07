@@ -31,10 +31,16 @@ const (
 		"once real traffic is visible."
 
 	promptHostsTitle        = "Start these hosts quiet?"
-	promptHostsDescTemplate = "Selected hosts are still audited and visible in the dashboard,\n" +
+	promptHostsDescTemplate = "Press SPACE to toggle a host, ENTER to confirm.\n\n" +
+		"Selected hosts are still audited and visible in the dashboard,\n" +
 		"just not flagged for review. Anything you don't select is still\n" +
 		"allowed - it just shows up flagged the first time it's seen.\n" +
 		"Change any time at http://localhost:%d."
+
+	promptHostsConfirmTitleAny  = "Pre-trust these hosts?"
+	promptHostsConfirmTitleNone = "Don't pre-trust any host?"
+	promptHostsConfirmDescNone  = "You'll see each host flagged the first time it appears\n" +
+		"in the dashboard, and can Trust it from there."
 
 	promptCustomHostsTitle        = "Add a custom host? (leave blank to finish)"
 	promptCustomHostsPlaceholder  = "api.example.com"
@@ -97,6 +103,31 @@ func (HuhPrompter) PromptHosts(suggested []HostSuggestion, port int) ([]string, 
 		return nil, err
 	}
 	return selected, nil
+}
+
+// PromptHostsConfirm asks the user to confirm the selection from PromptHosts.
+// Returning false re-runs the multiselect; true advances. The list of hosts
+// is shown so the user can verify what they're committing to.
+func (HuhPrompter) PromptHostsConfirm(selected []string) (bool, error) {
+	title := promptHostsConfirmTitleAny
+	desc := strings.Join(selected, "\n")
+	if len(selected) == 0 {
+		title = promptHostsConfirmTitleNone
+		desc = promptHostsConfirmDescNone
+	}
+	var ok bool
+	c := huh.NewConfirm().
+		Title(title).
+		Description(desc).
+		Affirmative("Yes, continue").
+		Negative("Back, edit selection").
+		Value(&ok)
+	if err := huh.NewForm(huh.NewGroup(c)).
+		WithTheme(initWizardTheme()).
+		Run(); err != nil {
+		return false, err
+	}
+	return ok, nil
 }
 
 func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
