@@ -5,9 +5,10 @@ name: release
 #
 # Security notes:
 # - This workflow does NOT consume any user-controlled inputs (issue titles,
-#   PR bodies, commit messages, head_ref, etc.). The only template expansion
-#   is `secrets.GITHUB_TOKEN` which is GitHub-issued and bounded by the
-#   permissions block above.
+#   PR bodies, commit messages, head_ref, etc.). The only template
+#   expansions are `secrets.GITHUB_TOKEN` (GitHub-issued, bounded by the
+#   permissions block above) and `secrets.HOMEBREW_TAP_TOKEN` (a
+#   maintainer-issued PAT scoped to the tap repo).
 # - All actions are pinned by major version; goreleaser is pinned to v2.
 # - `fetch-depth: 0` is required for goreleaser to walk the git history for
 #   the changelog generation.
@@ -46,3 +47,9 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Homebrew formula auto-publish to WZ/homebrew-tap. Required by
+          # the `brews:` block in .goreleaser.yaml. Cross-repo write needs
+          # a dedicated PAT — GITHUB_TOKEN is scoped to this repo only.
+          # Generate a fine-grained PAT with Contents: read+write on the
+          # tap repo and store as HOMEBREW_TAP_TOKEN secret.
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
