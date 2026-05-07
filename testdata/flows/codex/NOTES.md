@@ -227,3 +227,114 @@ routing is now answered.
   test of "shape-based matching."
 - Fresh-install codex with API-key only (no auth.json) — only if a
   user reports it hitting api.openai.com.
+
+## 2026-05-07 follow-up: WS hijack support landed; codex pins; HTTP fallback wins
+
+Captured: 2026-05-07 (Stream B, after T9+T10 shipped)
+agent-gate version: feat/plan5-ws-capture (HEAD: edd40c9)
+codex version: codex-cli 0.128.0 (codex-tui)
+Capture method: airtight launcher + `--hijack-host chatgpt.com` +
+`NODE_EXTRA_CA_CERTS=$(agent-gate cert path)`
+
+### Trigger
+
+```fish
+NODE_EXTRA_CA_CERTS=(agent-gate cert path) \
+NODE_OPTIONS=--use-env-proxy \
+agent-gate run --hijack-host chatgpt.com -- codex exec "say hi in one word"
+```
+
+### What happened
+
+1. **HTTP setup endpoints** (`/backend-api/wham/apps`,
+   `/wham/usage`, `/connectors/directory/list`,
+   `/plugins/featured`, `/codex/analytics-events/events`,
+   plus `github.com/openai/plugins.git`) all decoded cleanly through
+   the standard MITM path.
+2. **WebSocket upgrade** to `wss://chatgpt.com/backend-api/codex/responses`
+   (note: the path is `/responses`, not `/realtime` as Plan 5's design
+   doc speculated). Returned **`101 Switching Protocols` from
+   cloudflare** — TLS handshake and HTTP-level upgrade both
+   succeeded.
+3. **Then codex closed the conn immediately** with no WS frames in
+   either direction. Logs in the codex terminal:
+   `ERROR codex_api::endpoint::responses_websocket: failed to connect
+   to websocket: Attack attempt detected`. This message is
+   client-side: codex's Rust client inspects the upstream cert chain,
+   sees agent-gate's local CA leaf instead of cloudflare's, and
+   refuses to talk further.
+4. **codex retried 5 times**, each one a fresh upgrade with the same
+   outcome (101 from server, immediate close from client).
+5. **After WS retries exhausted, codex fell back to plain
+   `POST /backend-api/codex/responses`** — a regular HTTPS request
+   with `Accept: text/event-stream`. **This path captured cleanly.**
+   Full request (zstd-compressed JSON; system prompt; tool catalog;
+   user message) and response (146 KB SSE stream ending in
+   `response.completed` with the usage block) landed in the store.
+
+### Critical findings
+
+- **codex 0.128.0 client-pins its TLS for the WebSocket transport.**
+  The "Attack attempt detected" terminal message is from
+  `codex_api::endpoint::responses_websocket` (Rust crate), not from
+  the server. Server returns 101 happily; codex rejects post-handshake.
+  No amount of MITM / proxy work captures WS bodies for codex without
+  defeating the pin (which is out of scope for an audit gate).
+- **codex does NOT pin TLS for the HTTP fallback path.** When the WS
+  fails enough times, codex retries the same model invocation as a
+  plain HTTPS POST to the same URL. Full body capture works for that
+  path — and that's where the actual model conversation lives.
+- **Wire format on the HTTP fallback IS the OpenAI Responses API.**
+  Top-level keys: `model`, `instructions`, `input` (list of items),
+  `tools`, `tool_choice`, `parallel_tool_calls`, `reasoning`, `store`,
+  `stream`, `include`, `prompt_cache_key`, `client_metadata`.
+  Response is SSE with `response.created` →
+  `response.in_progress` → `response.output_item.done`* →
+  `response.completed`. Same shape as `/v1/responses` on
+  `api.openai.com`, just on `chatgpt.com/backend-api/codex/responses`.
+- **Request body is `Content-Encoding: zstd`** — codex compresses
+  upstream. Parser must `zstd`-decompress the request body before
+  running the OpenAI Responses-API decoder on it.
+
+### Plan 5 Stream B re-scope (locked)
+
+The original "ship a `chatgpt_realtime` parser fixture-driven from
+captured WS frames" task is **dropped** — there are no captured
+frames and the design's "no parser without ground truth" rule applies.
+Replaced by:
+
+1. Extend `openai_responses` (Stream A) to handle
+   `chatgpt.com /backend-api/codex/responses` and to decode
+   `Content-Encoding: zstd` request bodies. Existing SSE response
+   decoder (`response.completed`) applies unchanged.
+2. Add a `ws_pinned_upstream` info-level policy rule that fires on
+   any 101 upgrade flow with no child WS message events — explains
+   to the user why no body shows up under codex's WS attempts.
+3. Keep the WS hijack handler (T9 / T10 / HTTP fall-through) as
+   infrastructure. It's not load-bearing for codex visibility, but
+   it sets us up to capture WS bodies for any future agent that
+   doesn't pin (or in cases where the pin can be sidestepped).
+4. Document the codex pinning + HTTP fallback flow in README and
+   doctor's known-limitation surface.
+
+### Files added in this run
+
+- `codex_responses_post_streaming.json` — synthetic Responses-API
+  fixture with a `Content-Encoding: zstd` request and a small
+  SSE response. Real captured shape; values are synthesized to
+  avoid quoting OpenAI's product prompt or tool catalog.
+- `codex_ws_upgrade_pinned.json` — header-only upgrade fixture.
+  Real wire shape with all PII scrubbed (auth, account, session,
+  workspace path). Empty body since the pin closes the conn before
+  any frames flow. Used by the `ws_pinned_upstream` rule test.
+
+### Redaction applied (this run)
+
+Headers scrubbed: `Authorization`, `Cookie`, `Set-Cookie`,
+`Chatgpt-Account-Id`, `Session_id`, `X-Client-Request-Id`,
+`X-Codex-Window-Id`, `X-Codex-Turn-Metadata`, `Sec-Websocket-Key`,
+`Sec-Websocket-Accept`, `Cf-Ray`, `Date`, `X-Oai-Request-Id`,
+`X-Models-Etag`, `Nel`, `Report-To`. The X-Codex-Turn-Metadata
+JSON (which embeds workspace path + git remote URL +
+commit hash) was rewritten to a synthetic `/workspace/test-project`
++ `https://example.com/test/test-project.git` placeholder.

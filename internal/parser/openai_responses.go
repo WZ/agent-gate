@@ -38,8 +38,12 @@ func (OpenAIResponses) Match(flow *types.RawFlow) bool {
 	if !strings.HasSuffix(u.Path, "/responses") {
 		return false
 	}
+	body := decodeRequestBody(flow)
+	if len(body) == 0 {
+		return false
+	}
 	var probe map[string]json.RawMessage
-	if err := json.Unmarshal(flow.ReqBody, &probe); err != nil {
+	if err := json.Unmarshal(body, &probe); err != nil {
 		return false
 	}
 	_, ok := probe["input"]
@@ -99,20 +103,30 @@ type openaiResponsesResponse struct {
 }
 
 func parseOpenAIResponsesRequest(ev *types.ParsedEvent) {
+	body := decodeRequestBody(&ev.RawFlow)
+	if len(body) == 0 {
+		return
+	}
 	var req openaiResponsesRequest
-	if err := json.Unmarshal(ev.ReqBody, &req); err != nil {
+	if err := json.Unmarshal(body, &req); err != nil {
 		return
 	}
 	ev.Model = req.Model
 
 	// `user` is stable across a conversation and keeps dashboard session groups
-	// together. `previous_response_id` changes on each follow-up, so only use it
-	// when there is no stable end-user identifier.
+	// together. `previous_response_id` changes on each follow-up. The
+	// `Session_id` request header is set by codex on its chatgpt.com flows
+	// and stays stable for the duration of a turn — fall back to it when the
+	// body has neither a user nor a previous-response chain.
 	switch {
 	case req.User != "":
 		ev.SessionID = req.User
 	case req.PreviousResponseID != "":
 		ev.SessionID = req.PreviousResponseID
+	default:
+		if h := ev.RawFlow.ReqHeaders.Get("Session_id"); h != "" {
+			ev.SessionID = h
+		}
 	}
 
 	ev.ItemCount = countResponsesInput(req.Input)

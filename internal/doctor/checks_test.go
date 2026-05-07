@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"agent-gate/internal/agentdetect"
 )
 
 func TestCheckCAFiles_HappyPath(t *testing.T) {
@@ -185,6 +187,30 @@ func TestCheckAgentsDetected_Empty(t *testing.T) {
 	r := CheckAgentsDetected(nil)
 	if r.Status != StatusWarn {
 		t.Fatalf("expected WARN on empty agents, got %v: %s", r.Status, r.Detail)
+	}
+}
+
+func TestCheckCodexWebSocketPinning_Detected(t *testing.T) {
+	r := CheckCodexWebSocketPinning([]agentdetect.DetectedAgent{
+		{Name: "codex", Source: agentdetect.SourcePath},
+	})
+	if r.Status != StatusOK {
+		t.Fatalf("expected OK when codex is detected, got %v", r.Status)
+	}
+	if !strings.Contains(r.Detail, "ws_pinned_upstream") {
+		t.Errorf("detail should mention the policy rule users will see; got %q", r.Detail)
+	}
+	if !strings.Contains(r.Detail, "HTTP fallback") {
+		t.Errorf("detail should reassure that HTTP fallback IS captured; got %q", r.Detail)
+	}
+}
+
+func TestCheckCodexWebSocketPinning_NotDetected(t *testing.T) {
+	r := CheckCodexWebSocketPinning([]agentdetect.DetectedAgent{
+		{Name: "claude", Source: agentdetect.SourcePath},
+	})
+	if r.Status != StatusSkip {
+		t.Fatalf("expected Skip when codex absent, got %v", r.Status)
 	}
 }
 

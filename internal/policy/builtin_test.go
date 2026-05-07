@@ -1,6 +1,8 @@
 package policy
 
 import (
+	"bytes"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -8,6 +10,7 @@ import (
 	"agent-gate/internal/allowlist"
 	"agent-gate/internal/dismissals"
 	"agent-gate/internal/types"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,6 +73,22 @@ func TestSecretInRequestFiresOnAnthropicKey(t *testing.T) {
 	require.Len(t, flags, 1)
 	assert.Equal(t, "secret_in_request", flags[0].Code)
 	assert.Equal(t, "high", flags[0].Severity)
+	assert.Contains(t, flags[0].Detail, "anthropic_key")
+}
+
+func TestSecretInRequestDecodesZstdRequestBody(t *testing.T) {
+	e, _ := mkengine(t, SecretInRequestRule{})
+	body := []byte(`{"prompt":"my key is sk-ant-` + strings.Repeat("a", 60) + `"}`)
+	encoded := zstdEncodeForTest(t, body)
+
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:         "e",
+		ReqHeaders: http.Header{"Content-Encoding": []string{"zstd"}},
+		ReqBody:    encoded,
+	}})
+
+	require.Len(t, flags, 1)
+	assert.Equal(t, "secret_in_request", flags[0].Code)
 	assert.Contains(t, flags[0].Detail, "anthropic_key")
 }
 
@@ -153,4 +172,55 @@ func TestParseErrorFiresWhenRawFlowErrIsSet(t *testing.T) {
 	require.Len(t, flags, 1)
 	assert.Equal(t, "parse_error", flags[0].Code)
 	assert.Equal(t, "info", flags[0].Severity)
+}
+
+func TestWSPinnedUpstreamFiresOn101WebSocketUpgrade(t *testing.T) {
+	e, _ := mkengine(t, WSPinnedUpstreamRule{})
+	ev := &types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:         "e",
+		URL:        "wss://chatgpt.com/backend-api/codex/responses",
+		RespStatus: 101,
+		RespHeaders: map[string][]string{
+			"Upgrade":    {"websocket"},
+			"Connection": {"upgrade"},
+		},
+	}}
+	flags := e.Evaluate(ev)
+	require.Len(t, flags, 1)
+	assert.Equal(t, "ws_pinned_upstream", flags[0].Code)
+	assert.Equal(t, "info", flags[0].Severity)
+	assert.Contains(t, flags[0].Detail, "WebSocket")
+}
+
+func TestWSPinnedUpstreamSilentForNon101(t *testing.T) {
+	e, _ := mkengine(t, WSPinnedUpstreamRule{})
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:          "e",
+		RespStatus:  200,
+		RespHeaders: map[string][]string{"Upgrade": {"websocket"}},
+	}})
+	assert.Empty(t, flags)
+}
+
+func zstdEncodeForTest(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc, err := zstd.NewWriter(&buf)
+	require.NoError(t, err)
+	_, err = enc.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close())
+	return buf.Bytes()
+}
+
+func TestWSPinnedUpstreamSilentForOther101Switches(t *testing.T) {
+	// HTTP/2 prior-knowledge or other Upgrade: h2c switches also use 101.
+	// Don't claim them; only websocket upgrades carry the codex pinning gotcha.
+	e, _ := mkengine(t, WSPinnedUpstreamRule{})
+	flags := e.Evaluate(&types.ParsedEvent{RawFlow: types.RawFlow{
+		ID:          "e",
+		RespStatus:  101,
+		RespHeaders: map[string][]string{"Upgrade": {"h2c"}},
+	}})
+	assert.Empty(t, flags)
 }

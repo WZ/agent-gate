@@ -111,6 +111,70 @@ func TestProxyOptionsForListenerCarriesPassthroughHost(t *testing.T) {
 	}
 }
 
+func TestProxyOptionsForListenerCarriesHijackHost(t *testing.T) {
+	hijack := func(host string) bool { return host == "chatgpt.com" }
+	opts := proxyOptionsForListener(proxyRunConfig{
+		hijackHost: hijack,
+	})
+	if opts.HijackHost == nil {
+		t.Fatal("expected HijackHost to be wired")
+	}
+	if !opts.HijackHost("chatgpt.com") {
+		t.Fatal("expected HijackHost predicate to be preserved")
+	}
+}
+
+func TestProxyRunConfigWithListenerPreservesHostPredicates(t *testing.T) {
+	hostGuard := func(host string) bool { return host == "blocked.example" }
+	passthrough := func(host string) bool { return host == "mcp-proxy.anthropic.com" }
+	hijack := func(host string) bool { return host == "chatgpt.com" }
+
+	cfg := proxyRunConfigWithListener(proxyRunConfig{
+		hostGuard:       hostGuard,
+		passthroughHost: passthrough,
+		hijackHost:      hijack,
+	}, nil)
+
+	if cfg.hostGuard == nil || !cfg.hostGuard("blocked.example") {
+		t.Fatal("expected HostGuard predicate to be preserved")
+	}
+	if cfg.passthroughHost == nil || !cfg.passthroughHost("mcp-proxy.anthropic.com") {
+		t.Fatal("expected PassthroughHost predicate to be preserved")
+	}
+	if cfg.hijackHost == nil || !cfg.hijackHost("chatgpt.com") {
+		t.Fatal("expected HijackHost predicate to be preserved")
+	}
+}
+
+func TestBuildHijackHostPredicateEmptyHostsReturnsNil(t *testing.T) {
+	if buildHijackHostPredicate(nil, nil) != nil {
+		t.Fatal("expected nil predicate when no hosts requested")
+	}
+	if buildHijackHostPredicate(nil, []string{"", "  "}) != nil {
+		t.Fatal("expected nil predicate when only blank hosts requested")
+	}
+}
+
+func TestBuildHijackHostPredicateNormalizesAndMatches(t *testing.T) {
+	p := buildHijackHostPredicate(nil, []string{"ChatGPT.com", " other.example "})
+	if p == nil {
+		t.Fatal("expected non-nil predicate")
+	}
+	cases := map[string]bool{
+		"chatgpt.com":     true,
+		"CHATGPT.COM":     true,
+		"other.example":   true,
+		"api.openai.com":  false,
+		"sub.chatgpt.com": false, // exact match only — wildcard support is intentionally out of scope
+		"":                false,
+	}
+	for host, want := range cases {
+		if got := p(host); got != want {
+			t.Errorf("predicate(%q) = %v, want %v", host, got, want)
+		}
+	}
+}
+
 func TestRunStatusLine_DashboardIsClickableURL(t *testing.T) {
 	got := runStatusLine("airtight", "127.0.0.1:8888", "127.0.0.1:7878")
 	if !strings.Contains(got, "dashboard http://127.0.0.1:7878") {

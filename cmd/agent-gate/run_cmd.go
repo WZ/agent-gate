@@ -17,6 +17,7 @@ func runCmd() *cobra.Command {
 		airtightFail     bool
 		upstreamCAFile   string
 		upstreamInsecure bool
+		hijackHosts      []string
 	)
 	var enforceAllowlist *bool
 	cmd := &cobra.Command{
@@ -47,6 +48,7 @@ func runCmd() *cobra.Command {
 				UpstreamCAFile:             upstreamCAFile,
 				UpstreamInsecureSkipVerify: upstreamInsecure,
 				EnforceAllowlist:           enforceAllowlist,
+				HijackHosts:                hijackHosts,
 			}
 			exit, err := launcher.Run(context.Background(), opts)
 			if err != nil {
@@ -65,5 +67,6 @@ func runCmd() *cobra.Command {
 	cmd.Flags().StringVar(&upstreamCAFile, "upstream-ca", "", "PEM file with extra root CA(s) to trust for proxy→upstream TLS (use for self-signed ANTHROPIC_BASE_URL)")
 	cmd.Flags().BoolVar(&upstreamInsecure, "upstream-insecure-skip-verify", false, "Skip upstream cert verification entirely (testing only — captures still happen)")
 	cmd.Flags().Bool("enforce-allowlist", false, "Make the proxy return 403 for hosts not in the allowlist; overrides [allowlist].enforce in config.toml")
+	cmd.Flags().StringSliceVar(&hijackHosts, "hijack-host", nil, "Take ownership of the CONNECT for this host so the proxy can frame-decode the WebSocket session inside; repeatable. Example: --hijack-host chatgpt.com")
 	return cmd
 }

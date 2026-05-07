@@ -12,10 +12,30 @@ func TestFlagLabelForKnownCodes(t *testing.T) {
 		"unknown_mcp_endpoint": "Unknown MCP endpoint",
 		"permissive_capture":   "Permissive capture",
 		"parse_error":          "Parse error",
+		"ws_pinned_upstream":   "WS pinned upstream",
 	}
 	for code, want := range cases {
 		if got := flagLabelFor(code); got != want {
 			t.Errorf("flagLabelFor(%q) = %q, want %q", code, got, want)
+		}
+	}
+}
+
+func TestSeverityForFlagCodeKnownCodes(t *testing.T) {
+	cases := map[string]string{
+		"host_not_allowlisted": "high",
+		"secret_in_request":    "high",
+		"env_in_tool_result":   "high",
+		"oversized_request":    "medium",
+		"oversized_response":   "low",
+		"unknown_mcp_endpoint": "medium",
+		"permissive_capture":   "info",
+		"parse_error":          "info",
+		"ws_pinned_upstream":   "info",
+	}
+	for code, want := range cases {
+		if got := severityForFlagCode(code); got != want {
+			t.Errorf("severityForFlagCode(%q) = %q, want %q", code, got, want)
 		}
 	}
 }

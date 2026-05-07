@@ -45,6 +45,15 @@ type Options struct {
 	// MITM would fail. The connection still goes through the proxy port (so
 	// airtight enforcement is preserved); only inspection is skipped.
 	PassthroughHost func(host string) bool
+
+	// HijackHost, if set, is consulted on every CONNECT. Returning true makes
+	// the proxy take ownership of the raw client conn, terminate TLS itself
+	// using opts.CA, read the HTTP/1.1 request inside, and — if it's a
+	// WebSocket Upgrade — dial upstream, forward the upgrade, and run
+	// frame-aware bidirectional pumps that persist per-message events linked
+	// to the parent upgrade flow via parent_id. Used for codex on
+	// chatgpt.com, where the model invocation rides over WebSockets.
+	HijackHost func(host string) bool
 }
 
 const defaultBodyLimit = 8 << 20
@@ -243,6 +252,17 @@ func mitmConnect(opts Options) func(host string, ctx *goproxy.ProxyCtx) (*goprox
 		if opts.PassthroughHost != nil && opts.PassthroughHost(serverName) {
 			opts.Logger("proxy: passthrough (no MITM) for %s", serverName)
 			return goproxy.OkConnect, host
+		}
+
+		// Hijack hosts (e.g. chatgpt.com) get full ownership of the conn so we
+		// can frame-decode WebSocket payloads after the Upgrade handshake.
+		if opts.HijackHost != nil && opts.HijackHost(serverName) {
+			return &goproxy.ConnectAction{
+				Action: goproxy.ConnectHijack,
+				Hijack: func(_ *http.Request, client net.Conn, _ *goproxy.ProxyCtx) {
+					runHijack(opts, host, serverName, client)
+				},
+			}, host
 		}
 
 		// Sign a leaf for this hostname using our local CA.

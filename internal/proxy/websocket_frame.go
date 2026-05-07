@@ -83,6 +83,13 @@ func readFrame(r io.Reader) (*wsFrame, error) {
 	if length > maxInt {
 		return nil, fmt.Errorf("websocket payload too large for memory: %d", length)
 	}
+	// Per-frame allocation cap — refuse to make([]byte, length) for a
+	// length larger than the per-message body limit. A malicious server
+	// could otherwise advertise a 64-bit length and OOM the proxy before
+	// the reassembler ever gets a chance to enforce its own cap.
+	if length > uint64(defaultMaxWSMessageBytes) {
+		return nil, fmt.Errorf("websocket frame payload length %d exceeds per-frame cap %d", length, defaultMaxWSMessageBytes)
+	}
 	payload := make([]byte, int(length))
 	if _, err := io.ReadFull(r, payload); err != nil {
 		return nil, fmt.Errorf("read websocket payload: %w", err)

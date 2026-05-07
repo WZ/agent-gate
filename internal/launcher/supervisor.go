@@ -113,24 +113,27 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		}
 		return common.Passthrough != nil && common.Passthrough.Contains(host)
 	}
+	hijackHost := buildHijackHostPredicate(common, opts.HijackHosts)
 	if enforce {
 		fmt.Fprintln(os.Stderr, "allowlist enforcement ON: requests to non-allowlisted hosts will receive 403 from the proxy")
+	}
+
+	baseProxyRunConfig := proxyRunConfig{
+		common:                     common,
+		out:                        flowCh,
+		captureMode:                captureMode,
+		upstreamRoots:              upstreamRoots,
+		upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
+		hostGuard:                  hostGuard,
+		passthroughHost:            passthroughHost,
+		hijackHost:                 hijackHost,
+		logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 	}
 
 	proxyDone := make(chan error, 1)
 	go func() {
 		defer recoverPanic(opts.proxyHook, "proxy", cancel)
-		proxyDone <- proxy.Run(proxyOptionsForListener(proxyRunConfig{
-			listener:                   proxyLn,
-			common:                     common,
-			out:                        flowCh,
-			captureMode:                captureMode,
-			upstreamRoots:              upstreamRoots,
-			upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
-			hostGuard:                  hostGuard,
-			passthroughHost:            passthroughHost,
-			logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-		}))
+		proxyDone <- proxy.Run(proxyOptionsForListener(proxyRunConfigWithListener(baseProxyRunConfig, proxyLn)))
 	}()
 
 	// 5b. Allocate the netns-listener channel; on Linux, spawnAirtight will send
@@ -143,17 +146,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 			if nsLn == nil {
 				return
 			}
-			if err := proxy.Run(proxyOptionsForListener(proxyRunConfig{
-				listener:                   nsLn,
-				common:                     common,
-				out:                        flowCh,
-				captureMode:                captureMode,
-				upstreamRoots:              upstreamRoots,
-				upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
-				hostGuard:                  hostGuard,
-				passthroughHost:            passthroughHost,
-				logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
-			})); err != nil && !errors.Is(err, net.ErrClosed) {
+			if err := proxy.Run(proxyOptionsForListener(proxyRunConfigWithListener(baseProxyRunConfig, nsLn))); err != nil && !errors.Is(err, net.ErrClosed) {
 				fmt.Fprintf(os.Stderr, "ns proxy: %v\n", err)
 			}
 		case <-supCtx.Done():
@@ -351,7 +344,13 @@ type proxyRunConfig struct {
 	upstreamInsecureSkipVerify bool
 	hostGuard                  func(string) bool
 	passthroughHost            func(string) bool
+	hijackHost                 func(string) bool
 	logger                     func(string, ...any)
+}
+
+func proxyRunConfigWithListener(c proxyRunConfig, listener net.Listener) proxyRunConfig {
+	c.listener = listener
+	return c
 }
 
 func proxyOptionsForListener(c proxyRunConfig) proxy.Options {
@@ -364,12 +363,40 @@ func proxyOptionsForListener(c proxyRunConfig) proxy.Options {
 		UpstreamInsecureSkipVerify: c.upstreamInsecureSkipVerify,
 		HostGuard:                  c.hostGuard,
 		PassthroughHost:            c.passthroughHost,
+		HijackHost:                 c.hijackHost,
 		Logger:                     c.logger,
 	}
 	if c.common != nil {
 		opts.CA = c.common.CA
 	}
 	return opts
+}
+
+// buildHijackHostPredicate returns a closure that the proxy consults on every
+// CONNECT to decide whether to hijack the conn for frame-aware capture. Empty
+// hosts means no hijack at all. Denylisted hosts never get hijacked — they
+// flow through the standard MITM path so HostGuard can synthesize the 403.
+func buildHijackHostPredicate(common *rt.Common, hosts []string) func(string) bool {
+	if len(hosts) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(hosts))
+	for _, h := range hosts {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h != "" {
+			set[h] = struct{}{}
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return func(host string) bool {
+		if common != nil && common.Denylist != nil && common.Denylist.Contains(host) {
+			return false
+		}
+		_, ok := set[strings.ToLower(host)]
+		return ok
+	}
 }
 
 func execArgv(exe string, args []string) []string {

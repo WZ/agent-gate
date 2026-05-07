@@ -1,0 +1,96 @@
+{
+  "body_truncated": false,
+  "capture_mode": "permissive",
+  "client_conn_id": "test-conn-0002",
+  "ended_at": "2026-05-07T07:00:00.456Z",
+  "endpoint": "responses",
+  "flags": [],
+  "id": "01TESTRESPONSES0000000",
+  "is_streamed": true,
+  "item_count": 1,
+  "kind": "openai_responses",
+  "method": "POST",
+  "model": "gpt-5.5",
+  "req_body": "KLUv/QRYVQ0A9iBdIzCNqgPAowZlZVDKvNIiElNjwVkW7lFoagAdb0L4A9GDgkLBWABNAE4Abzmipy0pEk202QLk1my2kDqNnG4RSCpbLioj5dmTFkFuKaPUvI5EsjmNoqoDElgoAuYCWhwHjUdBAsJjcTSYx8J4XF3Cbc0mt4Tt6QOJAYCOkqs7bfa9EpesrW/xik9v4HpvGcN0olfXt+DT4YxIt9tPkAfyvOGNQAoXwYaagyhLXj29J9pMzwgb1IbLns4q59XVLT9dJUtKfVfXSOlXFNR7xkTHbym3fFLpVkRdeVs+PY9Yd/XmjUT0FXUJbHDlUn7Sya0unVuMcbvNOHVue66rK2vrMOaBKKg3ym0+KD89zyWwccvmMW3NGpfj05tpA8OqDwJjSUjPFQmCgEVCcXW4TbJCPL3NBphos+yS9Yr66tWs1sc01ObY0xWOg8ayMJbHwngYLBRXp6gDow5bjOn4IFe4TeJpN6Zn7LkJlXCjVL6CujbTMdgCEgBbEPKigDzvPDrXHeOTHTWXIFxJNEdWEEMYuA0pG4LeUJEVgdvlEAQmVdpfp1cO+RXQVoyZpA==",
+  "req_headers": {
+    "Accept": [
+      "text/event-stream"
+    ],
+    "Authorization": [
+      "Bearer REDACTED_OAUTH_TOKEN"
+    ],
+    "Chatgpt-Account-Id": [
+      "00000000-0000-0000-0000-000000000000"
+    ],
+    "Content-Encoding": [
+      "zstd"
+    ],
+    "Content-Type": [
+      "application/json"
+    ],
+    "Originator": [
+      "codex-tui"
+    ],
+    "Session_id": [
+      "01HTESTSESSION0000000"
+    ],
+    "User-Agent": [
+      "codex-tui/0.128.0 (test fixture)"
+    ],
+    "Version": [
+      "0.128.0"
+    ],
+    "X-Client-Request-Id": [
+      "01HTESTSESSION0000000"
+    ]
+  },
+  "resp_body": "ZXZlbnQ6IHJlc3BvbnNlLmNyZWF0ZWQKZGF0YTogeyJ0eXBlIjoicmVzcG9uc2UuY3JlYXRlZCIsInJlc3BvbnNlIjp7ImlkIjoicmVzcF90ZXN0XzAwMDAwMDAwMDAwMDAiLCJvYmplY3QiOiJyZXNwb25zZSIsImNyZWF0ZWRfYXQiOjE3MDAwMDAwMDAsInN0YXR1cyI6ImluX3Byb2dyZXNzIiwibW9kZWwiOiJncHQtNS41Iiwib3V0cHV0IjpbXSwidXNhZ2UiOnsiaW5wdXRfdG9rZW5zIjoxMDAsImlucHV0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjUwfSwib3V0cHV0X3Rva2VucyI6MTIsIm91dHB1dF90b2tlbnNfZGV0YWlscyI6eyJyZWFzb25pbmdfdG9rZW5zIjo0fSwidG90YWxfdG9rZW5zIjoxMTJ9fSwic2VxdWVuY2VfbnVtYmVyIjowfQoKZXZlbnQ6IHJlc3BvbnNlLmluX3Byb2dyZXNzCmRhdGE6IHsidHlwZSI6InJlc3BvbnNlLmluX3Byb2dyZXNzIiwicmVzcG9uc2UiOnsiaWQiOiJyZXNwX3Rlc3RfMDAwMDAwMDAwMDAwMCIsIm9iamVjdCI6InJlc3BvbnNlIiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwic3RhdHVzIjoiaW5fcHJvZ3Jlc3MiLCJtb2RlbCI6ImdwdC01LjUiLCJvdXRwdXQiOltdLCJ1c2FnZSI6eyJpbnB1dF90b2tlbnMiOjEwMCwiaW5wdXRfdG9rZW5zX2RldGFpbHMiOnsiY2FjaGVkX3Rva2VucyI6NTB9LCJvdXRwdXRfdG9rZW5zIjoxMiwib3V0cHV0X3Rva2Vuc19kZXRhaWxzIjp7InJlYXNvbmluZ190b2tlbnMiOjR9LCJ0b3RhbF90b2tlbnMiOjExMn19LCJzZXF1ZW5jZV9udW1iZXIiOjF9CgpldmVudDogcmVzcG9uc2Uub3V0cHV0X2l0ZW0uZG9uZQpkYXRhOiB7InR5cGUiOiJyZXNwb25zZS5vdXRwdXRfaXRlbS5kb25lIiwiaXRlbSI6eyJpZCI6ImZjX3Rlc3RfMDAwMDAwMDAwMCIsInR5cGUiOiJmdW5jdGlvbl9jYWxsIiwic3RhdHVzIjoiY29tcGxldGVkIiwibmFtZSI6ImV4ZWNfY29tbWFuZCIsImNhbGxfaWQiOiJjYWxsX3Rlc3RfMDAwMSIsImFyZ3VtZW50cyI6IntcImNtZFwiOlwiZWNobyBoaVwifSJ9LCJvdXRwdXRfaW5kZXgiOjAsInNlcXVlbmNlX251bWJlciI6Mn0KCmV2ZW50OiByZXNwb25zZS5jb21wbGV0ZWQKZGF0YTogeyJ0eXBlIjoicmVzcG9uc2UuY29tcGxldGVkIiwicmVzcG9uc2UiOnsiaWQiOiJyZXNwX3Rlc3RfMDAwMDAwMDAwMDAwMCIsIm9iamVjdCI6InJlc3BvbnNlIiwiY3JlYXRlZF9hdCI6MTcwMDAwMDAwMCwic3RhdHVzIjoiY29tcGxldGVkIiwibW9kZWwiOiJncHQtNS41Iiwib3V0cHV0IjpbeyJpZCI6ImZjX3Rlc3RfMDAwMDAwMDAwMCIsInR5cGUiOiJmdW5jdGlvbl9jYWxsIiwic3RhdHVzIjoiY29tcGxldGVkIiwibmFtZSI6ImV4ZWNfY29tbWFuZCIsImNhbGxfaWQiOiJjYWxsX3Rlc3RfMDAwMSIsImFyZ3VtZW50cyI6IntcImNtZFwiOlwiZWNobyBoaVwifSJ9XSwidXNhZ2UiOnsiaW5wdXRfdG9rZW5zIjoxMDAsImlucHV0X3Rva2Vuc19kZXRhaWxzIjp7ImNhY2hlZF90b2tlbnMiOjUwfSwib3V0cHV0X3Rva2VucyI6MTIsIm91dHB1dF90b2tlbnNfZGV0YWlscyI6eyJyZWFzb25pbmdfdG9rZW5zIjo0fSwidG90YWxfdG9rZW5zIjoxMTJ9fSwic2VxdWVuY2VfbnVtYmVyIjozfQoK",
+  "resp_headers": {
+    "Cache-Control": [
+      "no-cache"
+    ],
+    "Cf-Ray": [
+      "REDACTED-CF-RAY"
+    ],
+    "Connection": [
+      "keep-alive"
+    ],
+    "Content-Type": [
+      "text/event-stream"
+    ],
+    "Date": [
+      "Thu, 07 May 2026 07:00:00 GMT"
+    ],
+    "Server": [
+      "cloudflare"
+    ],
+    "X-Codex-Active-Limit": [
+      "premium"
+    ],
+    "X-Codex-Plan-Type": [
+      "prolite"
+    ],
+    "X-Oai-Request-Id": [
+      "00000000-0000-0000-0000-000000000000"
+    ]
+  },
+  "resp_status": 200,
+  "session_id": "01HTESTUSER0000000",
+  "started_at": "2026-05-07T07:00:00Z",
+  "tool_results": [],
+  "tools": [
+    {
+      "id": "call_test_0001",
+      "input": {
+        "cmd": "echo hi"
+      },
+      "name": "exec_command"
+    }
+  ],
+  "url": "https://chatgpt.com/backend-api/codex/responses",
+  "usage": {
+    "cache_read_input_tokens": 50,
+    "input_tokens": 100,
+    "output_tokens": 12
+  }
+}

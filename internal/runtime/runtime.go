@@ -86,6 +86,7 @@ func LoadCommon(configPath string) (*Common, error) {
 		policy.OversizedResponseRule{Limit: 5 << 20},
 		policy.NewUnknownMCPEndpointRule(map[string]struct{}{}),
 		policy.ParseErrorRule{},
+		policy.WSPinnedUpstreamRule{},
 	)
 
 	return &Common{

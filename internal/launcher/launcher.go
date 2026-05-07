@@ -44,6 +44,14 @@ type Options struct {
 	//   *true / *false → CLI override
 	EnforceAllowlist *bool
 
+	// HijackHosts is the set of hostnames whose CONNECTs the proxy should
+	// take ownership of for frame-aware WebSocket capture. Empty means
+	// no hijack — the standard MITM path handles every CONNECT. Initial
+	// caller: codex on chatgpt.com, where the model invocation rides over
+	// WebSockets after the upgrade. Hosts on the denylist always 403; hijack
+	// never overrides denylist.
+	HijackHosts []string
+
 	// Test seams. Production code never sets these.
 	proxyHook     func(error) // called if proxy goroutine panics
 	dashboardHook func(error) // ditto for dashboard

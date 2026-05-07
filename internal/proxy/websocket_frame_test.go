@@ -83,6 +83,19 @@ func TestReadFrameRejectsMalformedFrames(t *testing.T) {
 	}
 }
 
+func TestReadFrameRejectsOversizedPayloadBeforeAllocation(t *testing.T) {
+	var raw bytes.Buffer
+	raw.Write([]byte{0x82, 127})
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], uint64(defaultMaxWSMessageBytes+1))
+	raw.Write(b[:])
+
+	_, err := readFrame(&raw)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds per-frame cap")
+}
+
 func TestReassemblerCompletesSingleAndFragmentedMessages(t *testing.T) {
 	var r reassembler
 	r.maxBytes = 64

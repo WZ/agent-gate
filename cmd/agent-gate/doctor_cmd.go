@@ -75,6 +75,7 @@ func doctorCmd() *cobra.Command {
 			results = append(results, doctor.CheckCATrusted(installer, certPath)...)
 
 			results = append(results, doctor.CheckAgentsDetected(agents))
+			results = append(results, doctor.CheckCodexWebSocketPinning(agents))
 
 			if autoRepair != "" {
 				var mode doctor.Mode

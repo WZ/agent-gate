@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 
+	"agent-gate/internal/bodydecode"
 	"agent-gate/internal/pii"
 	"agent-gate/internal/types"
 )
@@ -21,7 +22,7 @@ const piiIndexedMarkerCode = "__indexed"
 // Best-effort by design: the caller (Store.Append) logs and discards any
 // error so a PII-index hiccup never aborts the audit-log write.
 func (s *Store) indexPII(ev types.StoredEvent) error {
-	reqMatches := pii.Find(ev.ReqBody, pii.DetectKind(ev.ReqHeaders))
+	reqMatches := pii.Find(bodydecode.Request(&ev.RawFlow), pii.DetectKind(ev.ReqHeaders))
 	respMatches := pii.Find(ev.RespBody, pii.DetectKind(ev.RespHeaders))
 
 	tx, err := s.idx.db.Begin()

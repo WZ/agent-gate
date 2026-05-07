@@ -9,48 +9,80 @@ The repo is public as of v0.1.0
 current sequencing. Plan 5 Stream B is the active next target;
 Plan 4 is deferred until ground-truth conditions exist.
 
-## Plan 5 Stream B — Codex WebSocket capture
+## Plan 5 Stream B — Codex visibility on chatgpt.com
 
 **Target:** `v0.3.0`
-**Status:** Spec written; implementation queued.
-**Why now:** v0.2.0 added HTTP parsers for everything OpenAI-compatible,
-so the dashboard now decodes codex's HTTP setup calls (`chatgpt.com/
-backend-api/*` — models list, wham/apps tool listing, analytics events)
-into "X model, Y tools, Z tokens" rows. But codex's actual model
-invocations ride over WebSockets — every model in its catalog has
-`prefer_websockets:true` (see `testdata/flows/codex/NOTES.md`). Without
-WS body capture we see the upgrade and nothing else. This closes the
-last big blind spot for codex flows.
+**Status:** Implementation landed on `feat/plan5-ws-capture` (PR #24).
+Quality gates green; awaiting merge.
+**What changed mid-stream:** The original goal was "decode codex WS
+frames." A real capture session against codex 0.128.0 confirmed that
+codex client-pins TLS on its WebSocket transport — server returns 101
+cleanly through agent-gate's hijack, but codex inspects the cert
+chain, sees the agent-gate CA leaf, and closes before any frame
+flows. So WS body capture is permanently blocked for codex without
+defeating the pin (out of scope for an audit gate).
 
-What's in:
+**The headline finding:** codex falls back to plain
+`POST /backend-api/codex/responses` after the WS retries exhaust.
+That path uses `Content-Encoding: zstd` over the OpenAI Responses API
+JSON shape, with an SSE response. agent-gate's existing `openai_responses`
+parser handles it once it knows to decompress zstd — the actual model
+conversation lands in the dashboard exactly like an `api.openai.com`
+call. The WS hijack code stays as infrastructure for future
+non-pinning agents.
 
-- `HijackConnect` handler in `internal/proxy` filtered to `chatgpt.com`
-  (Path A from the goproxy WS spike — Path B fork and Path C goproxy
-  replacement both rejected). Own TLS termination using the leaf-signer
-  exposed in v0.2.0 foundation work.
-- Thread `WantHijack` option through both `proxy.Run` callsites — the
-  host listener AND the Linux netns helper. Easy to miss; CLAUDE.md
-  flags this footgun explicitly.
-- Capture real codex WS frames using the new proxy. Fixture-driven —
-  no parser ships without ground-truth bytes.
-- `chatgpt_realtime` parser fixture-driven from the captures.
-- 2 new policy rules: `oversize_websocket`, `unknown_websocket_endpoint`.
-- Dashboard child-events endpoint so a session detail page drills into
-  the WS frames spawned by an upgrade.
-- README "WebSocket capture" section + CLAUDE.md update to drop the
-  "WS frames opaque" caveats.
+What landed:
 
-Estimated effort: 5-7 days. T9 (the hijack handler) is the bulk; spec's
-split point is clean — if T9 runs longer than expected, ship the
-remaining downstream as v0.3.1 instead of bundling.
+- `HijackConnect` handler in `internal/proxy` (`hijack.go`) — TLS
+  termination via the local CA's leaf-signer, RFC 6455 frame pumps
+  with per-message re-assembly + 16 MB cap + control-frame
+  persistence + parse-error degradation. Non-WS HTTP forwards
+  through the same handler so `--hijack-host chatgpt.com` doesn't
+  break codex's setup endpoints.
+- `--hijack-host HOST` repeatable CLI flag plumbed through
+  `launcher.Options.HijackHosts` to a denylist-aware exact-match
+  predicate, threaded through both `proxy.Run` callsites (host
+  listener + Linux netns helper — the footgun CLAUDE.md flags).
+- `openai_responses` extended to decode `Content-Encoding: zstd`
+  request bodies and to use the `Session_id` request header as a
+  third-tier SessionID fallback. Same parser now matches both
+  `api.openai.com/v1/responses` and `chatgpt.com/backend-api/codex/responses`.
+- `ws_pinned_upstream` info-level policy rule on every WS upgrade
+  (status 101 + Upgrade: websocket). Explains an empty 101 in the
+  dashboard so reviewers don't assume a parser bug.
+- agentdetect codex defaults updated to seed both `chatgpt.com` and
+  `api.openai.com`.
+- `doctor CheckCodexWebSocketPinning` advisory surface so users
+  know the limitation before they go looking for missing bodies.
+- Two new fixtures: `codex_responses_post_streaming.json` (synthetic
+  zstd Responses-API call) and `codex_ws_upgrade_pinned.json`
+  (header-only, real wire shape, scrubbed). Plus a 2026-05-07
+  follow-up section in `testdata/flows/codex/NOTES.md` documenting
+  the pinning + HTTP fallback finding.
 
-Foundation already on main from the v0.2.0 cycle:
+What got dropped from the original spec:
+
+- `chatgpt_realtime` WS frame parser — no captured frames exist
+  (codex pins them). Per the project's "no parser without ground
+  truth" rule, no parser ships.
+- Dashboard child-events endpoint — codex never produces children.
+  Existing event detail view renders the upgrade metadata
+  sufficiently.
+- `oversize_websocket` and `ws_parse_error` policy rules — no
+  captured WS frames means no fixtures to validate them. Replaced
+  by the single `ws_pinned_upstream` info rule.
+
+Foundation that was already on main from the v0.2.0 cycle and got
+reused:
 
 - RFC 6455 frame codec (`internal/proxy/websocket_frame.go`) —
-  per-message re-assembly, max 16MB, frame-parse error degrades to
-  raw passthrough mid-stream rather than killing the connection.
-- Store schema + reindex picks up WS child-event metadata.
-- CA leaf-signer exposed for hijack TLS termination.
+  per-message re-assembly, 16 MB cap, frame-parse error degrades
+  to raw passthrough.
+- Store schema + reindex pick up WS child-event metadata
+  (`parent_id`, `is_ws_message`, `direction`, `message_type`,
+  `control_op`, `close_code`).
+- CA leaf-signer (`ca.LeafSignerFunc`) exposed for hijack TLS
+  termination.
 
 ## Plan 4 — Windows airtight runtime (DEFERRED)
 

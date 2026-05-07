@@ -129,6 +129,10 @@ agent-gate init [flags]              one-command bootstrap (CA + agent detection
 agent-gate doctor [flags]            validate the install; suggest or apply repairs
                                        flags: --auto-repair=safe|aggressive, --json, --config PATH
 agent-gate run -- <cmd>              launch with airtight network capture
+                                       flags include: --upstream-ca, --upstream-insecure-skip-verify,
+                                       --enforce-allowlist, --hijack-host HOST (repeatable: take ownership
+                                       of the CONNECT for HOST so the proxy frame-decodes the WebSocket
+                                       session inside; non-WS HTTP on hijacked hosts forwards normally)
 agent-gate proxy                     standalone proxy (foreground)
 agent-gate dashboard                 standalone dashboard (foreground)
 agent-gate tail                      live-follow events
@@ -192,7 +196,7 @@ Active and deferred:
 
 | Target | Plan | Status |
 |---|---|---|
-| `v0.3.0` | Plan 5 Stream B | codex WebSocket capture — implementation queued |
+| `v0.3.0` | Plan 5 Stream B | in flight on `feat/plan5-ws-capture`. WS hijack handler + `--hijack-host` flag + chatgpt.com Responses parser (zstd) + `ws_pinned_upstream` rule + codex agentdetect+doctor updates all landed. codex 0.128.0 client-pins TLS on its WebSocket transport, so visibility comes from codex's HTTP fallback (`POST /backend-api/codex/responses`) — that path decodes through the OpenAI Responses parser. The hijack code stays as infrastructure for future non-pinning agents. |
 | `v0.4.0` | Plan 4 | Windows airtight runtime — deferred until Windows iteration loop + demand exist |
 
 See `TODOS.md` at the repo root for the publicly-tracked active +

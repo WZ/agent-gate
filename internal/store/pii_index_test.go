@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 
 	"agent-gate/internal/types"
 
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +89,34 @@ func TestIndexPIIWritesCountsForEvent(t *testing.T) {
 		{"req", "email", 1},
 		{"req", "phone", 1},
 	}, got)
+}
+
+func TestIndexPIIDecodesZstdRequestBody(t *testing.T) {
+	dir := t.TempDir()
+	s, err := Open(dir, fixedClock(time.Date(2026, 5, 3, 10, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+	defer s.Close()
+
+	ev := types.StoredEvent{
+		ParsedEvent: types.ParsedEvent{
+			RawFlow: types.RawFlow{
+				ID:         "01EVTZSTD",
+				URL:        "https://chatgpt.com/backend-api/codex/responses",
+				Method:     "POST",
+				ReqHeaders: http.Header{"Content-Type": []string{"application/json"}, "Content-Encoding": []string{"zstd"}},
+				ReqBody:    zstdEncodeForTest(t, []byte(`{"input":"email alice@example.com"}`)),
+			},
+			Kind: "openai_responses",
+		},
+	}
+
+	require.NoError(t, s.indexPII(ev))
+
+	row := s.Index().db.QueryRow(
+		`SELECT count FROM event_pii WHERE event_id = ? AND side = 'req' AND code = 'email'`, "01EVTZSTD")
+	var n int
+	require.NoError(t, row.Scan(&n))
+	assert.Equal(t, 1, n)
 }
 
 func TestIndexPIIIsIdempotent(t *testing.T) {
@@ -390,4 +420,15 @@ VALUES (?, 'req', ?, 0);`,
 		piiIndexedMarkerCode,
 	)
 	require.NoError(t, err)
+}
+
+func zstdEncodeForTest(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc, err := zstd.NewWriter(&buf)
+	require.NoError(t, err)
+	_, err = enc.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, enc.Close())
+	return buf.Bytes()
 }

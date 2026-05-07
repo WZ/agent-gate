@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agent-gate/internal/allowlist"
+	"agent-gate/internal/bodydecode"
 	"agent-gate/internal/secrets"
 	"agent-gate/internal/types"
 )
@@ -52,7 +53,9 @@ type SecretInRequestRule struct{}
 func (SecretInRequestRule) Code() string       { return "secret_in_request" }
 func (SecretInRequestRule) Severity() Severity { return SevHigh }
 func (SecretInRequestRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
-	matches := secrets.FindAll(ev.RawFlow.ReqBody)
+	// Scan the decoded body so secrets hidden inside a zstd-compressed
+	// request (codex on chatgpt.com is the canonical case) don't slip past.
+	matches := secrets.FindAll(bodydecode.Request(&ev.RawFlow))
 	if len(matches) == 0 {
 		return false, ""
 	}
@@ -155,4 +158,26 @@ func (ParseErrorRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
 		return true, ev.RawFlow.Err
 	}
 	return false, ""
+}
+
+// WSPinnedUpstreamRule fires on every WebSocket upgrade flow (status 101 with
+// Upgrade: websocket on the response). The flag explains an empty 101: when
+// the upstream client pins TLS — codex 0.128.0 is the canonical case — the
+// upgrade succeeds at the HTTP layer but the client closes the conn upon
+// detecting agent-gate's CA leaf, so no WS frames flow and no child events
+// appear. Without this flag, an empty 101 looks like a parser bug; with it,
+// reviewers can see at a glance that the body is intentionally not captured.
+type WSPinnedUpstreamRule struct{}
+
+func (WSPinnedUpstreamRule) Code() string       { return "ws_pinned_upstream" }
+func (WSPinnedUpstreamRule) Severity() Severity { return SevInfo }
+func (WSPinnedUpstreamRule) Evaluate(ev *types.ParsedEvent) (bool, string) {
+	if ev.RawFlow.RespStatus != 101 {
+		return false, ""
+	}
+	upgrade := strings.ToLower(strings.TrimSpace(ev.RawFlow.RespHeaders.Get("Upgrade")))
+	if upgrade != "websocket" {
+		return false, ""
+	}
+	return true, "WebSocket upgrade succeeded; if no child message events follow, the upstream client likely pinned TLS and the body cannot be captured through MITM"
 }
