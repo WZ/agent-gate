@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"agent-gate/internal/dashboard"
 )
 
 func writeMinimalConfig(t *testing.T) (configPath, dataDir string) {
@@ -265,5 +270,38 @@ func TestSupervisor_PermissiveSetsProxyEnv(t *testing.T) {
 	body, _ := os.ReadFile(out)
 	if !strings.Contains(string(body), "HTTPS_PROXY=http://127.0.0.1:") {
 		t.Fatalf("expected HTTPS_PROXY in env; got:\n%s", body)
+	}
+}
+
+func TestIsAgentGateDashboard_RecognizesOurSignature(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(dashboard.SignatureHeader, "1")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	if !isAgentGateDashboard(u.Host) {
+		t.Errorf("expected probe to recognize the %s response header", dashboard.SignatureHeader)
+	}
+}
+
+func TestIsAgentGateDashboard_RejectsOtherServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Body says "agent-gate" but no signature header — must NOT match,
+		// so we don't false-positive on docs/status pages that happen to
+		// mention agent-gate.
+		_, _ = w.Write([]byte("hello, agent-gate is great"))
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	if isAgentGateDashboard(u.Host) {
+		t.Errorf("probe should reject server without %s header", dashboard.SignatureHeader)
+	}
+}
+
+func TestIsAgentGateDashboard_RejectsClosedPort(t *testing.T) {
+	port := freePort(t)
+	if isAgentGateDashboard(fmt.Sprintf("127.0.0.1:%d", port)) {
+		t.Errorf("probe should return false when nothing is listening")
 	}
 }

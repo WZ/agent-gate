@@ -31,6 +31,12 @@ type Options struct {
 	LivePollInterval time.Duration          // optional; defaults to 500ms
 }
 
+// SignatureHeader is set on every dashboard response so other agent-gate
+// processes can recognize a peer dashboard via a quick HEAD/GET probe
+// without scraping HTML. Used by the supervisor when it wants to reuse
+// an existing dashboard instead of failing the run on a port collision.
+const SignatureHeader = "X-Agent-Gate"
+
 // NewServer returns an http.Handler for the dashboard. Embeds templates + static assets.
 func NewServer(opts Options) http.Handler {
 	r := newRenderer()
@@ -59,7 +65,17 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("/api/live", handleLive(opts))
 	mux.HandleFunc("/api/clear", handleClear(opts))
 
-	return mux
+	return signatureMiddleware(mux)
+}
+
+// signatureMiddleware stamps SignatureHeader on every response so peer
+// agent-gate processes can identify us. Set in headers (not body) so
+// HEAD probes and any future content-type changes still match.
+func signatureMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(SignatureHeader, "1")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // Run starts the dashboard listening on opts.Addr. Refuses non-loopback addresses.

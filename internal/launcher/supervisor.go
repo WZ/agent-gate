@@ -160,30 +160,45 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	if dashAddr == "" {
 		dashAddr = fmt.Sprintf("127.0.0.1:%d", common.Cfg.Ports.Dashboard)
 	}
-	dashHandler := dashboard.NewServer(dashboard.Options{
-		Addr:        dashAddr,
-		Store:       common.Store,
-		Allowlist:   common.Allowlist,
-		Denylist:    common.Denylist,
-		Passthrough: common.Passthrough,
-		Dismissals:  common.Dismiss,
-	})
+	// Try to bind the dashboard port. If it's already in use, probe it:
+	// if a previous `agent-gate dashboard` (or another `agent-gate run`)
+	// already owns the port, reuse it instead of failing the run. This
+	// lets users keep a long-lived dashboard open between agent runs.
+	// If the port is held by something that isn't us, surface the bind
+	// error as before — we don't want to silently route around an
+	// unrelated process listening on the audit port.
 	dashLn, err := net.Listen("tcp", dashAddr)
+	var dashHTTP *http.Server
 	if err != nil {
-		cancel()
-		_ = proxyLn.Close()
-		<-proxyDone
-		// flowCh intentionally not closed — see teardown comment.
-		<-pipelineDone
-		return 1, fmt.Errorf("dashboard listener bind %q: %w", dashAddr, err)
-	}
-	dashHTTP := &http.Server{Handler: dashHandler, ReadHeaderTimeout: 30 * time.Second}
-	go func() {
-		defer recoverPanic(opts.dashboardHook, "dashboard", func() {})
-		if err := dashHTTP.Serve(dashLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			fmt.Fprintf(os.Stderr, "dashboard: %v\n", err)
+		if isAgentGateDashboard(dashAddr) {
+			fmt.Fprintf(os.Stderr,
+				"dashboard already running at http://%s — reusing it (this run won't start a second one)\n",
+				dashAddr)
+		} else {
+			cancel()
+			_ = proxyLn.Close()
+			<-proxyDone
+			// flowCh intentionally not closed — see teardown comment.
+			<-pipelineDone
+			return 1, fmt.Errorf("dashboard listener bind %q: %w", dashAddr, err)
 		}
-	}()
+	} else {
+		dashHandler := dashboard.NewServer(dashboard.Options{
+			Addr:        dashAddr,
+			Store:       common.Store,
+			Allowlist:   common.Allowlist,
+			Denylist:    common.Denylist,
+			Passthrough: common.Passthrough,
+			Dismissals:  common.Dismiss,
+		})
+		dashHTTP = &http.Server{Handler: dashHandler, ReadHeaderTimeout: 30 * time.Second}
+		go func() {
+			defer recoverPanic(opts.dashboardHook, "dashboard", func() {})
+			if err := dashHTTP.Serve(dashLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				fmt.Fprintf(os.Stderr, "dashboard: %v\n", err)
+			}
+		}()
+	}
 
 	// 7. Carry resolved addresses back into opts so spawnAirtight/spawnPermissive
 	// can read the actual port (e.g. for the sandbox profile).
@@ -203,7 +218,9 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 	}
 	if err != nil {
 		cancel()
-		_ = dashHTTP.Close()
+		if dashHTTP != nil {
+			_ = dashHTTP.Close()
+		}
 		_ = proxyLn.Close()
 		<-proxyDone
 		// flowCh intentionally not closed — see teardown comment.
@@ -269,9 +286,31 @@ func teardown(proxyLn net.Listener, proxyDone <-chan error,
 	_ = flowCh
 	waitClose(pipelineDone, 2*time.Second)
 
-	shutdownCtx, c := context.WithTimeout(context.Background(), 1*time.Second)
-	defer c()
-	_ = dashHTTP.Shutdown(shutdownCtx)
+	if dashHTTP != nil {
+		shutdownCtx, c := context.WithTimeout(context.Background(), 1*time.Second)
+		defer c()
+		_ = dashHTTP.Shutdown(shutdownCtx)
+	}
+}
+
+// isAgentGateDashboard probes addr with a short HEAD request and returns
+// true when the response carries the dashboard's SignatureHeader. Used
+// to decide whether a port-bind collision is a friendly one (reuse) or
+// a genuine conflict (fail). Conservative: any network error or missing
+// signature returns false, so we never silently skip the dashboard when
+// something unrelated is listening.
+func isAgentGateDashboard(addr string) bool {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	req, err := http.NewRequest(http.MethodHead, "http://"+addr+"/", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.Header.Get(dashboard.SignatureHeader) != ""
 }
 
 func waitWithTimeout(ch <-chan error, d time.Duration) {

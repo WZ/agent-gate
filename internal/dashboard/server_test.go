@@ -63,6 +63,20 @@ func TestServerRendersFullPageOnGetRoot(t *testing.T) {
 	assert.Contains(t, bodyStr, `href="/static/favicon.svg"`)
 }
 
+func TestServerSetsSignatureHeader(t *testing.T) {
+	srv := httptest.NewServer(NewServer(freshOpts(t)))
+	defer srv.Close()
+
+	for _, path := range []string{"/", "/static/htmx.min.js", "/explore"} {
+		resp, err := http.Get(srv.URL + path)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		if resp.Header.Get(SignatureHeader) == "" {
+			t.Errorf("path %q missing %s response header", path, SignatureHeader)
+		}
+	}
+}
+
 func TestServerServesFavicon(t *testing.T) {
 	srv := httptest.NewServer(NewServer(freshOpts(t)))
 	defer srv.Close()
