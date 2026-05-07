@@ -189,18 +189,22 @@ agent-gate run [flags] -- <cmd> [args...]
                                        permissive      skip jail; sets HTTPS_PROXY only
                                                          — agent could ignore and bypass capture
   --enforce-allowlist                proxy returns 403 for hosts not in the allowlist
+  --config PATH                      config.toml path
+
+agent-gate run advanced flags (most users don't need these):
   --upstream-ca PEM                  extra root CA(s) to trust on proxy→upstream
                                        (use for self-signed ANTHROPIC_BASE_URL)
   --upstream-insecure-skip-verify    skip upstream cert verification entirely
                                        (testing only; captures still happen)
-  --hijack-host HOST                 advanced — most users don't need this.
-                                       Capture WebSocket message bodies for HOST.
+  --hijack-host HOST                 capture WebSocket message bodies for HOST;
                                        claude / codex / aider are captured by
-                                       default; reach for this only when auditing
-                                       a custom or internal agent that talks to
-                                       your own WebSocket backend (repeatable)
-  --config PATH                      config.toml path
+                                       default and don't need this. Reach for it
+                                       only when auditing a custom or internal
+                                       agent that talks to your own WebSocket
+                                       backend (repeatable)
 ```
+
+Run `agent-gate run --help` to see the same layout from the binary.
 
 ## Three-list policy model
 
