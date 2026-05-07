@@ -205,6 +205,26 @@ func CheckAgentsDetected(agents []agentdetect.DetectedAgent) Result {
 		Detail: strings.Join(names, ", ")}
 }
 
+// CheckCodexWebSocketPinning surfaces the known codex 0.128.0 limitation:
+// the OAuth-mode WebSocket transport on chatgpt.com client-pins TLS, so
+// the model body is not capturable through MITM. codex falls back to a
+// plain POST on the same /backend-api/codex/responses endpoint, which IS
+// captured cleanly. This check returns Skip when codex isn't detected and
+// OK with an explanatory detail when it is — the user understands what
+// to expect before they go looking for empty 101 upgrades in the dashboard.
+func CheckCodexWebSocketPinning(agents []agentdetect.DetectedAgent) Result {
+	for _, a := range agents {
+		if a.Name == "codex" {
+			return Result{
+				ID:     "codex-ws-pinning",
+				Status: StatusOK,
+				Detail: "codex 0.128.0 pins TLS on its WebSocket path; model bodies are captured via the HTTP fallback (POST /backend-api/codex/responses) instead. Empty 101 upgrades will be flagged ws_pinned_upstream and that's expected.",
+			}
+		}
+	}
+	return Result{ID: "codex-ws-pinning", Status: StatusSkip, Detail: "codex not detected"}
+}
+
 func CheckCATrusted(installer ca.Installer, certPath string) []Result {
 	probes := installer.ProbeAll(certPath)
 	out := make([]Result, 0, len(probes))
