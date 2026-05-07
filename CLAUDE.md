@@ -171,21 +171,32 @@ ubuntu/macos/windows, plus a `vet-race-fmt` job (Linux) that runs `go vet`,
 
 ## Plan-based development cadence
 
-Work lands in **plans**, each plan a self-contained branch + PR + tag:
+Work lands in **plans**, each plan a self-contained branch + PR + tag.
+Tags use the simple `vX.Y.Z` form; goreleaser publishes binaries to a
+GitHub Release on every `v*` tag push.
 
-| Plan | Tag | Focus |
+Currently shipped (oldest → newest):
+
+| Tag | Plan | Focus |
 |---|---|---|
-| Plan 1 | `v0.1.0-mvp-backbone` | proxy + parser + store + CLI scaffold |
-| Plan 2 | `v0.2.0-policy-dashboard` | policy rules + dismissals + dashboard |
-| Plan 3 | (PR #2) | airtight launcher (macOS + Linux + Windows scaffold) |
-| Plan 6 | `v0.6.0-init-umbrella` | one-command `init` + agent detection + `doctor` + cross-platform truststore + auto-seed bug fix |
-| Plan 7 | `v0.7.0-release-automation` (in flight) | GitHub Releases automation via goreleaser — cross-platform binaries on tag push |
-| Plan 5 | `v0.5.0-multi-vendor` (next) | Multi-vendor parser support — first-class decoders for OpenAI Chat/Responses, Anthropic Bedrock, Vertex; vendor registry pattern |
-| Plan 4 | `v0.4.0-windows-airtight` (deferred) | Windows airtight runtime — Job Object + WFP per-exe filters + IoCompletionPort listener for descendants + per-user sublayer DACL |
+| (pre-launch) | Plan 1 | proxy + parser + store + CLI scaffold |
+| (pre-launch) | Plan 2 | policy rules + dismissals + dashboard |
+| (pre-launch) | Plan 3 | airtight launcher (macOS + Linux; Windows scaffolded) |
+| (pre-launch) | Plan B (explore) | global `/explore` + capture-time PII indexing |
+| (pre-launch) | Plan 6 | one-command `init` + agent detection + `doctor` + truststore install |
+| (pre-launch) | Plan 7 | release automation via goreleaser |
+| `v0.1.0` | (launch) | public-launch polish (badges, screenshots, SECURITY.md) |
+| `v0.2.0` | Plan 5 Stream A | multi-vendor HTTP parsers (OpenAI Chat + Responses + SSE) |
 
-See `TODOS.md` at the repo root for the publicly-tracked Plan 4 + 5
-summaries. Detailed design specs live (gitignored) under
-`docs/superpowers/specs/`.
+Active and deferred:
+
+| Target | Plan | Status |
+|---|---|---|
+| `v0.3.0` | Plan 5 Stream B | codex WebSocket capture — implementation queued |
+| `v0.4.0` | Plan 4 | Windows airtight runtime — deferred until Windows iteration loop + demand exist |
+
+See `TODOS.md` at the repo root for the publicly-tracked active +
+deferred summaries.
 
 Specs and plans for each live (gitignored) under `docs/superpowers/`. The
 spec is the design doc; the plan is the bite-sized implementation list.
@@ -193,9 +204,10 @@ spec is the design doc; the plan is the bite-sized implementation list.
 local working material and is in `.gitignore`.
 
 For non-trivial work, the user runs in a git worktree:
-`.worktrees/plan<N>-<slug>/` off main, with the branch
-`feat/plan<N>-<slug>`. The user runs multiple Claude agents in parallel —
-worktrees prevent file drift between them.
+`.worktrees/<short-slug>/` off main, with a fresh `<type>/<slug>` branch
+(e.g. `feat/plan5-sse-decode`, `fix/dashboard-badge-polish`). The user
+runs multiple Claude agents in parallel — worktrees prevent file drift
+between them.
 
 ## Adding things — patterns to follow
 
@@ -317,5 +329,5 @@ Key routing rules:
 
 Plus the project's superpowers skills: brainstorming → writing-plans →
 subagent-driven-development → finishing-a-development-branch is the standard
-arc for non-trivial work. Plans land as PRs; tags follow the `vX.Y.Z-<slug>`
-shape (e.g., `v0.3.0-airtight-launcher`).
+arc for non-trivial work. Plans land as PRs; release tags use the simple
+`vX.Y.Z` shape after merge (e.g., `v0.3.0`).

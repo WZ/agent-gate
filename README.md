@@ -40,11 +40,11 @@ agent-gate support has three separate layers:
 
 | Agent / client | Supported today | What is rich today | TODO |
 |---|---|---|---|
-| **Claude Code** (`claude`) | Yes, primary path | `init` detects `claude` and seeds `api.anthropic.com`. Traffic to that host gets Anthropic Messages parsing: SSE streams, tool calls, tool results, system prompts, and token usage when present. | Plan 5 adds Anthropic Bedrock and Vertex variants. |
-| **Codex** (`codex`) | Capture yes, with a known WebSocket boundary | `init` detects `codex` and OpenAI base-url env vars, currently seeding `api.openai.com`. Captured OAuth-mode Codex traffic uses `chatgpt.com/backend-api/...`; agent-gate now parses model catalogs, analytics events, connector lists, plugin listings, and MCP-style tool inventory there. Direct OpenAI-compatible Chat Completions and Responses HTTP calls get rich parsing; the actual OAuth-mode model conversation uses WebSockets and is not decoded yet. | Remaining Plan 5 work covers deeper Codex WebSocket capture. `chatgpt.com` allowlist seeding also needs to catch up with observed Codex traffic. |
+| **Claude Code** (`claude`) | Yes, primary path | `init` detects `claude` and seeds `api.anthropic.com`. Traffic to that host gets Anthropic Messages parsing: SSE streams, tool calls, tool results, system prompts, and token usage when present. | Future fixtures can add Anthropic Bedrock and Vertex variants if demand appears. |
+| **Codex** (`codex`) | Capture yes, with a known WebSocket boundary | `init` detects `codex` and OpenAI base-url env vars, currently seeding `api.openai.com`. Captured OAuth-mode Codex traffic uses `chatgpt.com/backend-api/...`; agent-gate now parses model catalogs, analytics events, connector lists, plugin listings, and MCP-style tool inventory there. Direct OpenAI-compatible Chat Completions and Responses HTTP calls get rich parsing; the actual OAuth-mode model conversation uses WebSockets and is not decoded yet. | Plan 5 Stream B covers deeper Codex WebSocket capture. `chatgpt.com` allowlist seeding also needs to catch up with observed Codex traffic. |
 | **Aider** (`aider`) | Capture yes | `init` detects `aider` and seeds `api.anthropic.com` + `api.openai.com`. Traffic to `api.anthropic.com` gets rich parsing, and OpenAI-compatible Chat Completions / Responses HTTP calls now surface model, token, tool-call, and tool-result fields. Other providers are generic HTTP until fixtures land. | More providers need fixtures. |
 | **OpenCode** (`opencode`) | Capture yes | `init` detects `opencode` and seeds `api.anthropic.com`. Traffic to `api.anthropic.com` and OpenAI-compatible Chat Completions / Responses HTTP endpoints gets rich parsing; other configured providers may need manual trust and parse as generic HTTP. | Plan 5's parser registry makes new vendor decoders one-file additions. |
-| **OpenClaw / Hermes Agent** | Manual capture likely; not first-class today | Launch them with `agent-gate run -- <cmd>` or configure their proxy settings manually. `init` does not detect their binaries or seed their provider hosts yet. Anthropic and OpenAI-compatible Chat Completions / Responses HTTP calls get rich parsing; OpenRouter/custom-provider traffic is captured but mostly generic today. | Plan 5 fixture target: add binary detection, provider host seeding, more vendor decoders, and Codex/ChatGPT WebSocket validation before calling these first-class. |
+| **OpenClaw / Hermes Agent** | Manual capture likely; not first-class today | Launch them with `agent-gate run -- <cmd>` or configure their proxy settings manually. `init` does not detect their binaries or seed their provider hosts yet. Anthropic and OpenAI-compatible Chat Completions / Responses HTTP calls get rich parsing; OpenRouter/custom-provider traffic is captured but mostly generic today. | Future first-class support needs binary detection, provider host seeding, more vendor fixtures, and Codex/ChatGPT WebSocket validation. |
 | **curl, scripts, MCP clients, custom agents** | Capture yes | Any HTTPS client can be captured if launched through airtight mode or pointed at the proxy. Anthropic Messages and OpenAI-compatible Chat Completions / Responses HTTP calls get rich parsing; other hosts parse as generic HTTP today. | Add first-class decoders as real fixtures are captured. |
 
 ## Features
@@ -338,10 +338,10 @@ Same dashboard at <http://127.0.0.1:7878>. No kernel jail in this mode — the c
 
 ## What's next
 
-See [`TODOS.md`](TODOS.md). The next two cuts are:
+See [`TODOS.md`](TODOS.md). The next active and deferred cuts are:
 
-- **Plan 5 (`v0.5.0-multi-vendor`)** — OpenAI Chat Completions and Responses HTTP parsers are in place. Remaining Plan 5 work covers Anthropic Bedrock, Vertex `generateContent`, and deeper Codex/ChatGPT WebSocket traffic. Codex, Aider, OpenCode, OpenClaw, Hermes Agent, and anything else that talks HTTP already work via capture today; Plan 5 makes more of their dashboard views as rich as Anthropic's once fixtures prove the provider flows.
-- **Plan 4 (`v0.4.0-windows-airtight`)** — Windows airtight runtime: Job Object + WFP per-exe filters + completion-port listener for descendants. Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
+- **Plan 5 Stream B (`v0.3.0`)** — Codex WebSocket capture. v0.2.0 already shipped OpenAI-compatible HTTP parsing; the next blind spot is Codex OAuth-mode model traffic on `chatgpt.com` WebSockets.
+- **Plan 4 (`v0.4.0`)** — Windows airtight runtime: Job Object + WFP per-exe filters + completion-port listener for descendants. Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
 
 ## What we explicitly don't do
 

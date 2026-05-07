@@ -1,6 +1,6 @@
 name: release
 
-# Triggered by pushing a vX.Y.Z-<slug> tag. Builds binaries for darwin/linux/windows
+# Triggered by pushing a vX.Y.Z tag. Builds binaries for darwin/linux/windows
 # via goreleaser and uploads them to a GitHub Release.
 #
 # Security notes:
