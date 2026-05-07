@@ -339,9 +339,9 @@ Same dashboard at <http://127.0.0.1:7878>. No kernel jail in this mode — the c
 
 ## What's next
 
-See [`TODOS.md`](TODOS.md). The next active and deferred cuts are:
+See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
 
-- **Plan 5 Stream B (`v0.3.0`, in flight)** — Codex visibility on `chatgpt.com`. The proxy can hijack a CONNECT and frame-decode WebSocket sessions inside (new `--hijack-host` flag), but codex 0.128.0 pins TLS on its WS transport so the body never flows. Stream B's win is that codex falls back to a plain HTTP POST on the same endpoint, and that path now decodes cleanly through the existing OpenAI Responses parser (extended for chatgpt.com paths and `Content-Encoding: zstd` request bodies). New `ws_pinned_upstream` info flag explains empty 101 upgrades when they happen.
+- **Plan 5 Stream B (`v0.3.0`, shipped)** — Codex visibility on `chatgpt.com`. The proxy can hijack a CONNECT and frame-decode WebSocket sessions inside (`--hijack-host` flag), but codex 0.128.0 pins TLS on its WS transport so the body never flows. The win is that codex falls back to a plain HTTP POST on the same endpoint, and that path decodes cleanly through the existing OpenAI Responses parser (extended for chatgpt.com paths and `Content-Encoding: zstd` request bodies). New `ws_pinned_upstream` info flag explains empty 101 upgrades when they happen.
 - **Plan 4 (`v0.4.0`)** — Windows airtight runtime: Job Object + WFP per-exe filters + completion-port listener for descendants. Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
 
 ## What we explicitly don't do
