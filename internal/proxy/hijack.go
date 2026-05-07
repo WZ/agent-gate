@@ -194,12 +194,13 @@ func handleHijackedWSUpgrade(
 	clientReader, upstreamReader *bufio.Reader,
 	tlsClient, tlsUpstream *tls.Conn,
 ) {
-	if err := req.Write(tlsUpstream); err != nil {
+	upstreamReq := upstreamUpgradeRequest(req)
+	if err := upstreamReq.Write(tlsUpstream); err != nil {
 		opts.Logger("proxy hijack: forward upgrade request: %v", err)
 		return
 	}
 
-	resp, err := http.ReadResponse(upstreamReader, req)
+	resp, err := http.ReadResponse(upstreamReader, upstreamReq)
 	if err != nil {
 		opts.Logger("proxy hijack: read upgrade response: %v", err)
 		return
@@ -233,6 +234,15 @@ func handleHijackedWSUpgrade(
 		_ = tlsClient.CloseWrite()
 	}()
 	wg.Wait()
+}
+
+func upstreamUpgradeRequest(req *http.Request) *http.Request {
+	upstreamReq := req.Clone(req.Context())
+	upstreamReq.Header = req.Header.Clone()
+	// The frame reader does not implement permessage-deflate. Do not allow the
+	// upstream to negotiate RSV1-compressed frames that the pump will reject.
+	upstreamReq.Header.Del("Sec-Websocket-Extensions")
+	return upstreamReq
 }
 
 // forwardHijackedHTTP forwards a single non-WS HTTP/1.1 request to upstream,

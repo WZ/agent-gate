@@ -70,7 +70,7 @@ func severityForFlagCode(code string) string {
 		return "medium"
 	case "oversized_response":
 		return "low"
-	case "permissive_capture", "parse_error":
+	case "permissive_capture", "parse_error", "ws_pinned_upstream":
 		return "info"
 	default:
 		return "unknown"
@@ -97,6 +97,8 @@ func flagLabelFor(code string) string {
 		return "Permissive capture"
 	case "parse_error":
 		return "Parse error"
+	case "ws_pinned_upstream":
+		return "WS pinned upstream"
 	}
 	return code
 }

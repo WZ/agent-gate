@@ -19,6 +19,9 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+// Keep decoded bodies under the same default in-memory cap as raw captures.
+const maxDecodedBodyBytes = 8 << 20
+
 // Request returns the request bytes safe to scan or render, transparently
 // undoing any Content-Encoding wrapper.
 //
@@ -48,9 +51,12 @@ func Request(flow *types.RawFlow) []byte {
 			return flow.ReqBody
 		}
 		defer dec.Close()
-		out, err := io.ReadAll(dec)
+		out, err := io.ReadAll(io.LimitReader(dec, maxDecodedBodyBytes+1))
 		if err != nil {
 			return flow.ReqBody
+		}
+		if len(out) > maxDecodedBodyBytes {
+			return out[:maxDecodedBodyBytes]
 		}
 		return out
 	default:

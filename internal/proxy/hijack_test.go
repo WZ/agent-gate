@@ -36,7 +36,10 @@ import (
 //   - A server→client text message is recorded with parent_id + direction "s2c".
 //   - Frame payloads round-trip through both pumps unchanged.
 func TestHijackForwardsUpgradeAndPersistsMessages(t *testing.T) {
-	upstream := newEchoWSServer(t)
+	seenExtensions := make(chan string, 1)
+	upstream := newEchoWSServerWithObserver(t, func(r *http.Request) {
+		seenExtensions <- r.Header.Get("Sec-Websocket-Extensions")
+	})
 	defer upstream.Close()
 
 	upstreamHost := upstream.Listener.Addr().String() // 127.0.0.1:PORT
@@ -111,9 +114,11 @@ func TestHijackForwardsUpgradeAndPersistsMessages(t *testing.T) {
 		HTTPClient: &http.Client{
 			Transport: &fixedConnTransport{conn: tlsClient, host: upstreamHost},
 		},
+		CompressionMode: websocket.CompressionNoContextTakeover,
 	})
 	require.NoError(t, err)
 	defer wsConn.Close(websocket.StatusNormalClosure, "test done")
+	assert.Empty(t, <-seenExtensions, "proxy must not negotiate unsupported permessage-deflate upstream")
 
 	require.NoError(t, wsConn.Write(ctx, websocket.MessageText, []byte("ping from client")))
 
@@ -151,9 +156,16 @@ func TestHijackForwardsUpgradeAndPersistsMessages(t *testing.T) {
 // newEchoWSServer returns an httptest TLS server whose only handler is a
 // WebSocket echo. Frames received are echoed back with an "echo: " prefix.
 func newEchoWSServer(t *testing.T) *httptest.Server {
+	return newEchoWSServerWithObserver(t, nil)
+}
+
+func newEchoWSServerWithObserver(t *testing.T, observe func(*http.Request)) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		if observe != nil {
+			observe(r)
+		}
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			t.Logf("upstream accept: %v", err)
@@ -171,7 +183,19 @@ func newEchoWSServer(t *testing.T) *httptest.Server {
 		_ = c.Write(ctx, typ, append([]byte("echo: "), data...))
 		c.Close(websocket.StatusNormalClosure, "")
 	})
-	return httptest.NewTLSServer(mux)
+	return newTLSServerIPv4(t, mux)
+}
+
+func newTLSServerIPv4(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	srv := &httptest.Server{
+		Listener: ln,
+		Config:   &http.Server{Handler: handler},
+	}
+	srv.StartTLS()
+	return srv
 }
 
 // TestHijackForwardsNonWSHTTPRequest covers the request-loop fall-through:
@@ -271,6 +295,18 @@ func TestHijackForwardsNonWSHTTPRequest(t *testing.T) {
 	assert.True(t, strings.HasPrefix(flow.URL, "https://"))
 	assert.Equal(t, http.StatusOK, flow.RespStatus)
 	assert.Equal(t, []byte(`{"ok":true}`), flow.RespBody)
+}
+
+func TestUpstreamUpgradeRequestStripsUnsupportedExtensions(t *testing.T) {
+	req := httptest.NewRequest("GET", "https://chatgpt.com/backend-api/codex/responses", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-Websocket-Extensions", "permessage-deflate; client_max_window_bits")
+
+	upstreamReq := upstreamUpgradeRequest(req)
+
+	assert.Empty(t, upstreamReq.Header.Values("Sec-Websocket-Extensions"))
+	assert.Equal(t, "permessage-deflate; client_max_window_bits", req.Header.Get("Sec-Websocket-Extensions"))
 }
 
 func TestHijackHostGuardBlocksBeforeUpstreamDial(t *testing.T) {
