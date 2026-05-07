@@ -2,6 +2,7 @@ package parser
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"agent-gate/internal/types"
@@ -196,7 +197,26 @@ func TestParseOpenAIChatExtractsToolResults(t *testing.T) {
 	assert.Equal(t, "sunny, 68°F", ev.ToolResults[0].Content)
 }
 
+func TestParseOpenAIChatStreamingFixture(t *testing.T) {
+	// Real captured stream from an OpenAI-compatible gateway. The first
+	// chunk's model wins over the request's model, no tool_calls fired, and
+	// this particular gateway didn't include a usage trailer (no
+	// stream_options.include_usage on the request).
+	flow := loadFlow(t, "../../testdata/flows/openai/chat_completions_streaming.json")
+
+	ev := Parse(flow)
+
+	assert.Equal(t, "openai_chat", ev.Kind)
+	assert.True(t, ev.IsStreamed)
+	assert.Equal(t, "gpt-oss-120b", ev.Model)
+	assert.Empty(t, ev.Tools)
+	assert.Zero(t, ev.Usage.InputTokens, "no usage trailer when stream_options.include_usage is unset")
+	assert.Zero(t, ev.Usage.OutputTokens)
+}
+
 func TestParseOpenAIChatStreamingMarksFlag(t *testing.T) {
+	// Minimal SSE — request-side metadata still decodes even when the response
+	// stream is just a single content delta with no usage / tool calls.
 	flow := types.RawFlow{
 		ID:      "sse",
 		Method:  "POST",
@@ -211,7 +231,100 @@ func TestParseOpenAIChatStreamingMarksFlag(t *testing.T) {
 	ev := Parse(flow)
 
 	assert.Equal(t, "openai_chat", ev.Kind)
-	assert.True(t, ev.IsStreamed, "SSE response must be flagged as streamed")
-	// Streaming body decoding ships in a follow-up; for now request-side fields suffice.
+	assert.True(t, ev.IsStreamed)
 	assert.Equal(t, "gpt-4o", ev.Model)
+}
+
+func TestParseOpenAIChatStreamingAssemblesToolCalls(t *testing.T) {
+	// Tool-call streaming: the call's identity (id + function.name) arrives in
+	// the first delta, then arguments stream in token-by-token across many
+	// deltas. The same `index` field on each delta is the bucket key. A final
+	// optional usage chunk lands when stream_options.include_usage is set.
+	body := strings.Join([]string{
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"role":"assistant"}}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_x","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city"}}]}}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\"SF\"}"}}]}}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":7}}`,
+		`data: [DONE]`,
+		"",
+	}, "\n\n")
+
+	flow := types.RawFlow{
+		ID:          "sse-tc",
+		Method:      "POST",
+		URL:         "https://api.openai.com/v1/chat/completions",
+		ReqBody:     []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"weather in SF?"}],"stream":true}`),
+		RespHeaders: http.Header{"Content-Type": []string{"text/event-stream"}},
+		RespBody:    []byte(body),
+	}
+
+	ev := Parse(flow)
+
+	assert.Equal(t, "openai_chat", ev.Kind)
+	assert.True(t, ev.IsStreamed)
+	assert.Equal(t, "gpt-4o", ev.Model)
+	require.Len(t, ev.Tools, 1)
+	assert.Equal(t, "call_x", ev.Tools[0].ID)
+	assert.Equal(t, "get_weather", ev.Tools[0].Name)
+	assert.Equal(t, "SF", ev.Tools[0].Input["city"], "arguments concatenated across deltas and parsed")
+	assert.Equal(t, 12, ev.Usage.InputTokens)
+	assert.Equal(t, 7, ev.Usage.OutputTokens)
+}
+
+func TestParseOpenAIChatStreamingToolCallsAreScopedPerChoice(t *testing.T) {
+	// With n > 1, OpenAI scopes delta.tool_calls[*].index to each
+	// choice.index. Both choices can stream tool index 0 without referring to
+	// the same tool call.
+	body := strings.Join([]string{
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":1,"delta":{"tool_calls":[{"index":0,"id":"call_choice_1","type":"function","function":{"name":"lookup_city","arguments":""}}]}},{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_choice_0","type":"function","function":{"name":"lookup_weather","arguments":""}}]}}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":1,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":\"NYC\"}"}}]}},{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"city\":\"SF\"}"}}]}}]}`,
+		`data: [DONE]`,
+		"",
+	}, "\n\n")
+
+	flow := types.RawFlow{
+		ID:          "sse-tc-n2",
+		Method:      "POST",
+		URL:         "https://api.openai.com/v1/chat/completions",
+		ReqBody:     []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"weather"}],"stream":true,"n":2}`),
+		RespHeaders: http.Header{"Content-Type": []string{"text/event-stream"}},
+		RespBody:    []byte(body),
+	}
+
+	ev := Parse(flow)
+
+	require.Len(t, ev.Tools, 2)
+	assert.Equal(t, "call_choice_0", ev.Tools[0].ID, "choice 0 should emit before choice 1")
+	assert.Equal(t, "lookup_weather", ev.Tools[0].Name)
+	assert.Equal(t, "SF", ev.Tools[0].Input["city"])
+	assert.Equal(t, "call_choice_1", ev.Tools[1].ID)
+	assert.Equal(t, "lookup_city", ev.Tools[1].Name)
+	assert.Equal(t, "NYC", ev.Tools[1].Input["city"])
+}
+
+func TestParseOpenAIChatStreamingSkipsNegativeToolCallIndexes(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":-1,"id":"call_bad_tool","type":"function","function":{"name":"bad_tool","arguments":"{\"city\":\"LA\"}"}}]}},{"index":-1,"delta":{"tool_calls":[{"index":0,"id":"call_bad_choice","type":"function","function":{"name":"bad_choice","arguments":"{\"city\":\"SEA\"}"}}]}}]}`,
+		`data: {"id":"chunk","model":"gpt-4o","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_good","type":"function","function":{"name":"good_tool","arguments":"{\"city\":\"SF\"}"}}]}}]}`,
+		`data: [DONE]`,
+		"",
+	}, "\n\n")
+
+	flow := types.RawFlow{
+		ID:          "sse-negative-tc",
+		Method:      "POST",
+		URL:         "https://api.openai.com/v1/chat/completions",
+		ReqBody:     []byte(`{"model":"gpt-4o","messages":[{"role":"user","content":"weather"}],"stream":true}`),
+		RespHeaders: http.Header{"Content-Type": []string{"text/event-stream"}},
+		RespBody:    []byte(body),
+	}
+
+	ev := Parse(flow)
+
+	require.Len(t, ev.Tools, 1)
+	assert.Equal(t, "call_good", ev.Tools[0].ID)
+	assert.Equal(t, "good_tool", ev.Tools[0].Name)
+	assert.Equal(t, "SF", ev.Tools[0].Input["city"])
 }

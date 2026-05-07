@@ -2,6 +2,7 @@ package parser
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"agent-gate/internal/types"
@@ -148,20 +149,76 @@ func TestParseOpenAIResponsesPrefersUserForSessionGrouping(t *testing.T) {
 	assert.Equal(t, "u-42", ev.SessionID)
 }
 
-func TestParseOpenAIResponsesStreamingMarksFlag(t *testing.T) {
-	flow := types.RawFlow{
-		Method:  "POST",
-		URL:     "https://api.openai.com/v1/responses",
-		ReqBody: []byte(`{"model":"gpt-4o","input":"hi","stream":true}`),
-		RespHeaders: http.Header{
-			"Content-Type": []string{"text/event-stream"},
-		},
-		RespBody: []byte(`event: response.created` + "\n" + `data: {"type":"response.created","response":{"id":"resp_x"}}` + "\n\n"),
-	}
+func TestParseOpenAIResponsesStreamingFixture(t *testing.T) {
+	// Real captured streaming response from an OpenAI-compatible gateway.
+	// The terminal `response.completed` event carries the final response
+	// object with model, output items, and usage tokens — same shape as the
+	// non-streaming branch, so the SSE decoder re-uses that parser.
+	flow := loadFlow(t, "../../testdata/flows/openai/responses_streaming.json")
 
 	ev := Parse(flow)
 
 	assert.Equal(t, "openai_responses", ev.Kind)
 	assert.True(t, ev.IsStreamed)
+	assert.Equal(t, "gpt-oss-120b", ev.Model)
+	assert.Equal(t, 12, ev.Usage.InputTokens)
+	assert.Equal(t, 5, ev.Usage.OutputTokens)
+	assert.Empty(t, ev.Tools, "no function_call output items in this completion")
+}
+
+func TestParseOpenAIResponsesStreamingExtractsFunctionCall(t *testing.T) {
+	// Synthetic stream that ends with response.completed carrying a
+	// function_call output item — the parser should pick up the call.
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_x","model":"gpt-4o"},"model":"gpt-4o"}`,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get_weather"},"model":"gpt-4o"}`,
+		`data: {"type":"response.completed","response":{"id":"resp_x","object":"response","model":"gpt-4o-2024-08-06","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get_weather","arguments":"{\"city\":\"SF\"}"}],"usage":{"input_tokens":14,"output_tokens":9}},"model":"gpt-4o"}`,
+		`data: [DONE]`,
+		"",
+	}, "\n\n")
+
+	flow := types.RawFlow{
+		Method:      "POST",
+		URL:         "https://api.openai.com/v1/responses",
+		ReqBody:     []byte(`{"model":"gpt-4o","input":"weather in SF?","stream":true}`),
+		RespHeaders: http.Header{"Content-Type": []string{"text/event-stream"}},
+		RespBody:    []byte(body),
+	}
+
+	ev := Parse(flow)
+
+	assert.True(t, ev.IsStreamed)
+	assert.Equal(t, "gpt-4o-2024-08-06", ev.Model, "completed event's model wins over earlier deltas")
+	require.Len(t, ev.Tools, 1)
+	assert.Equal(t, "call_1", ev.Tools[0].ID)
+	assert.Equal(t, "get_weather", ev.Tools[0].Name)
+	assert.Equal(t, "SF", ev.Tools[0].Input["city"])
+	assert.Equal(t, 14, ev.Usage.InputTokens)
+	assert.Equal(t, 9, ev.Usage.OutputTokens)
+}
+
+func TestParseOpenAIResponsesStreamingTruncatedStillSurfacesModel(t *testing.T) {
+	// If the stream is cut off before response.completed arrives, fall back
+	// to the model id from earlier event envelopes so the dashboard isn't
+	// stuck rendering a streamed flow as "generic".
+	body := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_x","model":"gpt-4o"},"model":"gpt-4o"}`,
+		`data: {"type":"response.output_text.delta","delta":"Hi","model":"gpt-4o"}`,
+		"",
+	}, "\n\n")
+
+	flow := types.RawFlow{
+		Method:      "POST",
+		URL:         "https://api.openai.com/v1/responses",
+		ReqBody:     []byte(`{"model":"gpt-4o","input":"hi","stream":true}`),
+		RespHeaders: http.Header{"Content-Type": []string{"text/event-stream"}},
+		RespBody:    []byte(body),
+	}
+
+	ev := Parse(flow)
+
+	assert.True(t, ev.IsStreamed)
 	assert.Equal(t, "gpt-4o", ev.Model)
+	assert.Empty(t, ev.Tools)
+	assert.Zero(t, ev.Usage.InputTokens)
 }
