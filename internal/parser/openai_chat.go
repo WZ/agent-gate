@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
+	"sort"
 	"strings"
 
 	"agent-gate/internal/types"
@@ -202,9 +203,13 @@ func parseOpenAIChatSSEResponse(ev *types.ParsedEvent) {
 		Name    string
 		ArgsBuf strings.Builder
 	}
+	type toolBucketKey struct {
+		ChoiceIndex int
+		ToolIndex   int
+	}
 	var (
 		modelFromStream string
-		buckets         []*toolBucket
+		buckets         = map[toolBucketKey]*toolBucket{}
 		usageInput      int
 		usageOutput     int
 	)
@@ -222,6 +227,7 @@ func parseOpenAIChatSSEResponse(ev *types.ParsedEvent) {
 		var chunk struct {
 			Model   string `json:"model"`
 			Choices []struct {
+				Index int `json:"index"`
 				Delta struct {
 					ToolCalls []struct {
 						Index    int    `json:"index"`
@@ -251,11 +257,19 @@ func parseOpenAIChatSSEResponse(ev *types.ParsedEvent) {
 		}
 
 		for _, choice := range chunk.Choices {
+			if choice.Index < 0 {
+				continue
+			}
 			for _, tc := range choice.Delta.ToolCalls {
-				for tc.Index >= len(buckets) {
-					buckets = append(buckets, &toolBucket{})
+				if tc.Index < 0 {
+					continue
 				}
-				b := buckets[tc.Index]
+				key := toolBucketKey{ChoiceIndex: choice.Index, ToolIndex: tc.Index}
+				b := buckets[key]
+				if b == nil {
+					b = &toolBucket{}
+					buckets[key] = b
+				}
 				if tc.ID != "" {
 					b.ID = tc.ID
 				}
@@ -272,7 +286,18 @@ func parseOpenAIChatSSEResponse(ev *types.ParsedEvent) {
 	if modelFromStream != "" {
 		ev.Model = modelFromStream
 	}
-	for _, b := range buckets {
+	keys := make([]toolBucketKey, 0, len(buckets))
+	for key := range buckets {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].ChoiceIndex != keys[j].ChoiceIndex {
+			return keys[i].ChoiceIndex < keys[j].ChoiceIndex
+		}
+		return keys[i].ToolIndex < keys[j].ToolIndex
+	})
+	for _, key := range keys {
+		b := buckets[key]
 		if b.ID == "" && b.Name == "" {
 			// Empty bucket — only happens if a delta referenced an out-of-range
 			// index without ever providing identity. Skip rather than emit a
