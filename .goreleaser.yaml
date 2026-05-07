@@ -43,10 +43,11 @@ archives:
       - goos: windows
         formats: [zip]
     files:
+      # End-user release artifact: ship the binary + LICENSE only. README,
+      # CLAUDE.md, and TODOS.md are repo-level docs that live on GitHub.
+      # Bundling them in every platform tarball just inflates the archive
+      # and ships internal roadmap text in user downloads.
       - LICENSE*
-      - README.md
-      - CLAUDE.md
-      - TODOS.md
 
 checksum:
   name_template: 'checksums.txt'
@@ -77,8 +78,9 @@ release:
   header: |
     ## agent-gate {{ .Tag }}
 
-    Single-user audit gate for AI agent HTTPS traffic. See `CLAUDE.md`
-    for what this is and `README.md` for getting started.
+    Single-user audit gate for AI agent HTTPS traffic. See the
+    [README](https://github.com/WZ/agent-gate/blob/main/README.md) for
+    what this is and how to get started.
 
     ### Install
 
