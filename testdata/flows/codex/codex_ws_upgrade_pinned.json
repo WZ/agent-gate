@@ -1,0 +1,133 @@
+{
+  "body_truncated": false,
+  "capture_mode": "permissive",
+  "client_conn_id": "test-conn-0001",
+  "ended_at": "2026-05-07T07:00:00.123Z",
+  "endpoint": "",
+  "flags": [],
+  "id": "01TESTUPGRADE0000000000000",
+  "is_streamed": false,
+  "item_count": 0,
+  "kind": "generic",
+  "method": "GET",
+  "model": "",
+  "req_body": null,
+  "req_headers": {
+    "Authorization": [
+      "Bearer REDACTED_OAUTH_TOKEN"
+    ],
+    "Chatgpt-Account-Id": [
+      "00000000-0000-0000-0000-000000000000"
+    ],
+    "Connection": [
+      "Upgrade"
+    ],
+    "Openai-Beta": [
+      "responses_websockets=2026-02-06"
+    ],
+    "Originator": [
+      "codex-tui"
+    ],
+    "Sec-Websocket-Extensions": [
+      "permessage-deflate; client_max_window_bits"
+    ],
+    "Sec-Websocket-Key": [
+      "REDACTED_WS_KEY=="
+    ],
+    "Sec-Websocket-Version": [
+      "13"
+    ],
+    "Session_id": [
+      "01HTESTSESSION0000000"
+    ],
+    "Upgrade": [
+      "websocket"
+    ],
+    "User-Agent": [
+      "codex-tui/0.128.0 (Mac OS 26.4.0; arm64) ghostty/1.3.0-HEAD_80d3fa0 (codex-tui; 0.128.0)"
+    ],
+    "Version": [
+      "0.128.0"
+    ],
+    "X-Client-Request-Id": [
+      "01HTESTSESSION0000000"
+    ],
+    "X-Codex-Beta-Features": [
+      "terminal_resize_reflow"
+    ],
+    "X-Codex-Turn-Metadata": [
+      "{\"session_id\": \"01HTESTSESSION0000000\", \"thread_source\": \"user\", \"turn_id\": \"01HTESTTURN0000000\", \"workspaces\": {\"/workspace/test-project\": {\"associated_remote_urls\": [{\"origin\": \"https://example.com/test/test-project.git\"}], \"latest_git_commit_hash\": \"0000000000000000000000000000000000000000\", \"has_changes\": false}}, \"sandbox\": \"seatbelt\", \"turn_started_at_unix_ms\": 1234567890000}"
+    ],
+    "X-Codex-Window-Id": [
+      "01HTESTSESSION0000000:0"
+    ]
+  },
+  "resp_body": null,
+  "resp_headers": {
+    "Alt-Svc": [
+      "h3=\":443\"; ma=86400"
+    ],
+    "Cf-Cache-Status": [
+      "DYNAMIC"
+    ],
+    "Cf-Ray": [
+      "REDACTED-CF-RAY"
+    ],
+    "Connection": [
+      "upgrade"
+    ],
+    "Cross-Origin-Opener-Policy": [
+      "same-origin-allow-popups"
+    ],
+    "Date": [
+      "Thu, 07 May 2026 07:00:00 GMT"
+    ],
+    "Nel": [
+      "{\"report_to\": \"cf-nel\", \"success_fraction\": 0.01, \"max_age\": 604800}"
+    ],
+    "Referrer-Policy": [
+      "strict-origin-when-cross-origin"
+    ],
+    "Report-To": [
+      "{\"group\": \"cf-nel\", \"max_age\": 604800, \"endpoints\": [{\"url\": \"https://example.com/report/redacted\"}]}"
+    ],
+    "Sec-Websocket-Accept": [
+      "REDACTED_WS_ACCEPT="
+    ],
+    "Sec-Websocket-Extensions": [
+      "permessage-deflate"
+    ],
+    "Server": [
+      "cloudflare"
+    ],
+    "Set-Cookie": [
+      "__cf_bm=REDACTED_COOKIE; path=/; max-age=1800"
+    ],
+    "Strict-Transport-Security": [
+      "max-age=31536000; includeSubDomains; preload"
+    ],
+    "Upgrade": [
+      "websocket"
+    ],
+    "X-Content-Type-Options": [
+      "nosniff"
+    ],
+    "X-Models-Etag": [
+      "W/\"REDACTED\""
+    ],
+    "X-Openai-Proxy-Wasm": [
+      "v0.1"
+    ]
+  },
+  "resp_status": 101,
+  "session_id": "01HTESTSESSION0000000",
+  "started_at": "2026-05-07T07:00:00Z",
+  "tool_results": [],
+  "tools": [],
+  "url": "wss://chatgpt.com/backend-api/codex/responses",
+  "usage": {
+    "cache_read_input_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0
+  }
+}
