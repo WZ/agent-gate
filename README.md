@@ -182,24 +182,6 @@ default → MITM, decrypt, capture, forward
 | `parse_error` | info | Parser annotated an error on the flow |
 | `ws_pinned_upstream` | info | WebSocket upgrade succeeded (101) — empty body capture is expected when the upstream client pins TLS, e.g. codex on `chatgpt.com` |
 
-## Install
-
-```bash
-brew tap WZ/tap
-brew install agent-gate
-brew upgrade agent-gate   # later, to pick up new releases
-```
-
-For the binary download, build-from-source, and the full file-by-file list of where agent-gate stores config and data, see [Install in the runbook](docs/RUNBOOK.md#install).
-
-## What's next
-
-See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
-
-- **`v0.3.1` (shipped)** — Homebrew distribution. `brew tap WZ/tap && brew install agent-gate` is now the default Mac install path; `brew upgrade agent-gate` picks up new releases automatically. The formula publishes from goreleaser on every stable tag, so future releases stay in sync with no extra steps. Linux side benefit: Linuxbrew users get the same formula.
-- **Plan 5 Stream B (`v0.3.0`, shipped)** — Codex visibility on `chatgpt.com`. The proxy can hijack a CONNECT and frame-decode WebSocket sessions inside (`--hijack-host` flag), but codex 0.128.0 pins TLS on its WS transport so the body never flows. The win is that codex falls back to a plain HTTP POST on the same endpoint, and that path decodes cleanly through the existing OpenAI Responses parser (extended for chatgpt.com paths and `Content-Encoding: zstd` request bodies). New `ws_pinned_upstream` info flag explains empty 101 upgrades when they happen.
-- **Plan 4 (`v0.4.0`)** — Windows airtight runtime: Job Object + WFP per-exe filters + completion-port listener for descendants. Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
-
 ## What we explicitly don't do
 
 - **Block at the network layer for non-allowlisted hosts unless `--enforce-allowlist` is on.** The default posture is *audit, don't drop*. Allowlist is an annotation, not a firewall, by default.
@@ -207,31 +189,6 @@ See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
 - **Detect filesystem exfiltration.** agent-gate audits network. If the agent reads `.env` and writes it somewhere on disk, we don't see it.
 - **Run as a service / agent / daemon.** Single-shot supervisor + dashboard per `agent-gate run`. The lockfile enforces "one instance at a time."
 - **Ship to a remote backend.** No telemetry, no upload, no cross-machine collation. Everything stays local.
-
-## Project layout
-
-```
-cmd/agent-gate/        CLI entrypoint (one file per subcommand)
-internal/runtime/      Shared startup; XDG-aware paths; lockfile
-internal/launcher/     Cross-platform supervisor + per-OS jail
-internal/proxy/        goproxy-based TLS-intercepting forward proxy
-internal/parser/       RawFlow → ParsedEvent (Anthropic-aware + generic)
-internal/policy/       Rule engine + 8 built-ins
-internal/store/        JSONL writer + SQLite index + PII index
-internal/dashboard/    HTTP server, HTMX templates, embedded assets
-internal/{allowlist,denylist,passthrough}/  file-backed host lists
-internal/dismissals/   flag dismissals (JSON file)
-internal/redactor/     secret-mask render layer
-internal/pii/          PII detection
-internal/secrets/      single regex set (shared by policy + redactor)
-internal/ca/           local CA mint + leaf signing; cross-platform truststore install
-internal/agentdetect/  detect installed agents via $PATH + env vars (IDN-safe)
-internal/initwizard/   `agent-gate init` orchestrator
-internal/doctor/       `agent-gate doctor` checks + repair
-internal/idgen/        ULID
-internal/types/        shared structs
-internal/e2e/          end-to-end tests
-```
 
 ## Development
 
