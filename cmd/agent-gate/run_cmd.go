@@ -67,6 +67,6 @@ func runCmd() *cobra.Command {
 	cmd.Flags().StringVar(&upstreamCAFile, "upstream-ca", "", "PEM file with extra root CA(s) to trust for proxy→upstream TLS (use for self-signed ANTHROPIC_BASE_URL)")
 	cmd.Flags().BoolVar(&upstreamInsecure, "upstream-insecure-skip-verify", false, "Skip upstream cert verification entirely (testing only — captures still happen)")
 	cmd.Flags().Bool("enforce-allowlist", false, "Make the proxy return 403 for hosts not in the allowlist; overrides [allowlist].enforce in config.toml")
-	cmd.Flags().StringSliceVar(&hijackHosts, "hijack-host", nil, "Take ownership of the CONNECT for this host so the proxy can frame-decode the WebSocket session inside; repeatable. Example: --hijack-host chatgpt.com")
+	cmd.Flags().StringSliceVar(&hijackHosts, "hijack-host", nil, "Take ownership of the CONNECT for this host so the proxy frame-decodes WebSocket sessions inside. Use only for non-TLS-pinned WS upstreams (typically internal/custom agents). Codex on chatgpt.com pins TLS, so its WS is invisible — its HTTP fallback is captured by default without this flag. Repeatable.")
 	return cmd
 }

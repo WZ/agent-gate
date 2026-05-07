@@ -188,6 +188,10 @@ agent-gate run [flags] -- <cmd> [args...]
                                        (use for self-signed ANTHROPIC_BASE_URL)
   --upstream-insecure-skip-verify    skip upstream cert verification entirely
                                        (testing only; captures still happen)
+  --hijack-host HOST                 frame-decode WebSocket sessions on HOST
+                                       (repeatable; non-pinned WS upstreams only —
+                                       codex on chatgpt.com pins TLS, captured
+                                       via HTTP fallback without this flag)
   --config PATH                      config.toml path
 ```
 
