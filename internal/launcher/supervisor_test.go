@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"agent-gate/internal/dashboard"
 )
 
 func writeMinimalConfig(t *testing.T) (configPath, dataDir string) {
@@ -273,24 +275,27 @@ func TestSupervisor_PermissiveSetsProxyEnv(t *testing.T) {
 
 func TestIsAgentGateDashboard_RecognizesOurSignature(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set(dashboard.SignatureHeader, "1")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`<html><head><title>agent-gate</title></head></html>`))
 	}))
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
 	if !isAgentGateDashboard(u.Host) {
-		t.Errorf("expected probe to recognize a body containing 'agent-gate'")
+		t.Errorf("expected probe to recognize the %s response header", dashboard.SignatureHeader)
 	}
 }
 
 func TestIsAgentGateDashboard_RejectsOtherServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte("hello from nginx"))
+		// Body says "agent-gate" but no signature header — must NOT match,
+		// so we don't false-positive on docs/status pages that happen to
+		// mention agent-gate.
+		_, _ = w.Write([]byte("hello, agent-gate is great"))
 	}))
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
 	if isAgentGateDashboard(u.Host) {
-		t.Errorf("probe should reject non-agent-gate server")
+		t.Errorf("probe should reject server without %s header", dashboard.SignatureHeader)
 	}
 }
 

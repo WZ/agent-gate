@@ -293,25 +293,24 @@ func teardown(proxyLn net.Listener, proxyDone <-chan error,
 	}
 }
 
-// isAgentGateDashboard probes addr with a short HTTP GET and returns true
-// when the response looks like an agent-gate dashboard. Used to decide
-// whether a port-bind collision is a friendly one (reuse) or a genuine
-// conflict (fail). Conservative: any non-2xx, missing signature, or
-// network error returns false so we don't silently skip the dashboard
-// when something else is listening on the port.
+// isAgentGateDashboard probes addr with a short HEAD request and returns
+// true when the response carries the dashboard's SignatureHeader. Used
+// to decide whether a port-bind collision is a friendly one (reuse) or
+// a genuine conflict (fail). Conservative: any network error or missing
+// signature returns false, so we never silently skip the dashboard when
+// something unrelated is listening.
 func isAgentGateDashboard(addr string) bool {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
-	resp, err := client.Get("http://" + addr + "/")
+	req, err := http.NewRequest(http.MethodHead, "http://"+addr+"/", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return false
-	}
-	buf := make([]byte, 4096)
-	n, _ := resp.Body.Read(buf)
-	return strings.Contains(string(buf[:n]), "agent-gate")
+	return resp.Header.Get(dashboard.SignatureHeader) != ""
 }
 
 func waitWithTimeout(ch <-chan error, d time.Duration) {

@@ -93,14 +93,6 @@ func Run(opts Options) error {
 			selected []string
 			extras   []string
 		)
-		const (
-			stageWelcome = iota
-			stageThreeList
-			stageHostsLoop
-			stageCustomHosts
-			stagePolicySummary
-			stageDone
-		)
 		stage := stageWelcome
 		for stage != stageDone {
 			var err error
