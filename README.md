@@ -62,11 +62,12 @@ agent-gate support has three separate layers:
 
 ## Quick Start
 
+**macOS:**
+
 ```bash
-# 1. Install — grab the binary for your platform from the latest release
-#    (download from https://github.com/WZ/agent-gate/releases/latest)
-tar xz < agent-gate_<ver>_<os>_<arch>.tar.gz
-sudo mv agent-gate /usr/local/bin/
+# 1. Install
+brew tap WZ/tap
+brew install agent-gate
 
 # 2. Bootstrap (one-time): writes config, mints a local CA, installs it into your trust stores
 agent-gate init
@@ -75,7 +76,19 @@ agent-gate init
 agent-gate run -- claude
 ```
 
-Then open <http://127.0.0.1:7878> to review what your agent is doing. See [Install](#install) below for the exact archive names.
+**Linux / Windows / Mac without Homebrew:** grab the binary from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
+
+```bash
+# 1. Install — pick the archive for your platform
+tar xz < agent-gate_<ver>_<os>_<arch>.tar.gz
+sudo mv agent-gate /usr/local/bin/
+
+# 2 & 3. Same as above
+agent-gate init
+agent-gate run -- claude
+```
+
+Then open <http://127.0.0.1:7878> to review what your agent is doing. See [Install](#install) below for the exact archive names and other options.
 
 On macOS and supported Linux hosts this runs in airtight mode by default. On Windows today it falls back to permissive capture; use the standalone proxy flow below or track Plan 4 for the airtight runtime.
 
