@@ -42,16 +42,19 @@ const (
 	promptHostsConfirmDescNone  = "You'll see each host flagged the first time it appears\n" +
 		"in the dashboard, where you can mark it quiet from there."
 
-	promptCustomHostsTitle        = "Add a custom host? (leave blank to finish)"
-	promptCustomHostsTitleAgain   = "Add another? (leave blank to finish)"
-	promptCustomHostsPlaceholder  = "api.example.com"
-	promptCustomHostsDescTemplate = "Anything you add joins the set you just picked. Skip if\n" +
+	promptCustomHostsConfirmTitleFirst = "Add a custom host?"
+	promptCustomHostsConfirmTitleAgain = "Add another?"
+	promptCustomHostsConfirmDesc       = "Anything you add joins the set you just picked. Skip if\n" +
 		"you're not sure - you can add hosts from http://localhost:%d\n" +
 		"whenever you spot one in the dashboard."
 	promptCustomHostsAddedPrefix = "Added so far: %s\n\n"
 
+	promptCustomHostsInputTitle  = "Type a hostname (Enter to add):"
+	promptCustomHostsPlaceholder = "api.example.com"
+
 	promptPolicySummaryTitle        = "Your starting policy:"
 	promptPolicySummaryDescTemplate = "  Quiet (allowed, audited, not flagged):  %s\n" +
+		"%s" +
 		"  Blocked (403 at the proxy):              0 hosts\n" +
 		"  Passthrough (no HTTPS inspection):       0 hosts\n\n" +
 		"  Everything else: allowed, audited, and flagged for review.\n\n" +
@@ -117,7 +120,9 @@ func (HuhPrompter) PromptHostsConfirm(selected []string) (bool, error) {
 		title = promptHostsConfirmTitleNone
 		desc = promptHostsConfirmDescNone
 	}
-	var ok bool
+	// Start with ok=true so the affirmative button is the default focus —
+	// "Continue with this set" is the common path; "Back" is the rare one.
+	ok := true
 	c := huh.NewConfirm().
 		Title(title).
 		Description(desc).
@@ -132,31 +137,52 @@ func (HuhPrompter) PromptHostsConfirm(selected []string) (bool, error) {
 	return ok, nil
 }
 
-// customHostsPromptText returns the title + description for the custom-host
-// input on a given iteration. Pure (no TTY) so it can be tested directly.
+// customHostsConfirmText returns the title + description for the Y/N gate
+// before each custom-host input. Pure (no TTY) so it can be tested directly.
 //
-// First iteration (alreadyAdded empty): the original title + description.
-// Subsequent iterations: the title flips to "Add another?" and the
-// description leads with "Added so far: foo, bar" so the user gets visual
-// confirmation that their previous Enter actually captured the host instead
-// of clearing the field into the void.
-func customHostsPromptText(port int, alreadyAdded []string) (title, desc string) {
-	desc = fmt.Sprintf(promptCustomHostsDescTemplate, port)
+// First iteration (alreadyAdded empty): "Add a custom host?" with the
+// general description. Subsequent iterations: "Add another?" with a
+// "Added so far: foo, bar" line above the description so the user
+// sees their previous adds confirmed before deciding to keep going.
+func customHostsConfirmText(port int, alreadyAdded []string) (title, desc string) {
+	desc = fmt.Sprintf(promptCustomHostsConfirmDesc, port)
 	if len(alreadyAdded) == 0 {
-		return promptCustomHostsTitle, desc
+		return promptCustomHostsConfirmTitleFirst, desc
 	}
 	tally := fmt.Sprintf(promptCustomHostsAddedPrefix, strings.Join(alreadyAdded, ", "))
-	return promptCustomHostsTitleAgain, tally + desc
+	return promptCustomHostsConfirmTitleAgain, tally + desc
 }
 
+// PromptCustomHosts runs a Y/N gate before each input box so users
+// don't have to discover that "leave blank to finish" is the way out.
+// "No" exits the loop; "Yes" opens an input box; submitting that input
+// (blank or not) returns to the Y/N gate.
 func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
 	var hosts []string
 	for {
-		var host string
-		title, desc := customHostsPromptText(port, hosts)
-		input := huh.NewInput().
+		title, desc := customHostsConfirmText(port, hosts)
+		// Default focus on "No" — most users skip this step entirely,
+		// and accidental Enter from the previous prompt shouldn't drop
+		// them into a textbox they didn't ask for.
+		addMore := false
+		c := huh.NewConfirm().
 			Title(title).
 			Description(desc).
+			Affirmative("Yes, add one").
+			Negative("No, continue").
+			Value(&addMore)
+		if err := huh.NewForm(huh.NewGroup(c)).
+			WithTheme(initWizardTheme()).
+			Run(); err != nil {
+			return hosts, err
+		}
+		if !addMore {
+			return hosts, nil
+		}
+
+		var host string
+		input := huh.NewInput().
+			Title(promptCustomHostsInputTitle).
 			Placeholder(promptCustomHostsPlaceholder).
 			Value(&host)
 		if err := huh.NewForm(huh.NewGroup(input)).
@@ -166,36 +192,69 @@ func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
 		}
 		host = strings.TrimSpace(host)
 		if host == "" {
-			return hosts, nil
+			continue
 		}
 		hosts = append(hosts, host)
 	}
 }
 
-func (HuhPrompter) PromptThreeListNote(port int) error {
-	note := huh.NewNote().
-		Title(promptThreeListTitle).
-		Description(fmt.Sprintf(promptThreeListDescTemplate, port)).
-		Next(true).
-		NextLabel("Continue")
-	return huh.NewForm(huh.NewGroup(note)).
+// backableNote runs a note-style page that has both Continue and Back
+// buttons. Returns nil on Continue, ErrPromptBack on Back. Default focus
+// is Continue, since "go forward" is the common path.
+func backableNote(title, desc, continueLabel string) error {
+	goForward := true
+	c := huh.NewConfirm().
+		Title(title).
+		Description(desc).
+		Affirmative(continueLabel).
+		Negative("Back").
+		Value(&goForward)
+	if err := huh.NewForm(huh.NewGroup(c)).
 		WithTheme(initWizardTheme()).
-		Run()
+		Run(); err != nil {
+		return err
+	}
+	if !goForward {
+		return ErrPromptBack
+	}
+	return nil
 }
 
-func (HuhPrompter) PromptPolicySummary(quietCount int, port int) error {
-	note := huh.NewNote().
-		Title(promptPolicySummaryTitle).
-		Description(fmt.Sprintf(promptPolicySummaryDescTemplate, hostCountLabel(quietCount), port)).
-		Next(true).
-		NextLabel("Continue")
-	return huh.NewForm(huh.NewGroup(note)).
-		WithTheme(initWizardTheme()).
-		Run()
+func (HuhPrompter) PromptThreeListNote(port int) error {
+	return backableNote(
+		promptThreeListTitle,
+		fmt.Sprintf(promptThreeListDescTemplate, port),
+		"Continue",
+	)
+}
+
+// policySummaryDescription renders the policy-summary body with the actual
+// host names indented under the "Quiet" line so the user sees what's
+// being committed instead of just a count. Pure (no TTY) so we can test it.
+func policySummaryDescription(hosts []string, port int) string {
+	var b strings.Builder
+	for _, h := range hosts {
+		b.WriteString("    ")
+		b.WriteString(h)
+		b.WriteByte('\n')
+	}
+	return fmt.Sprintf(promptPolicySummaryDescTemplate, hostCountLabel(len(hosts)), b.String(), port)
+}
+
+func (HuhPrompter) PromptPolicySummary(hosts []string, port int) error {
+	return backableNote(
+		promptPolicySummaryTitle,
+		policySummaryDescription(hosts, port),
+		"Continue",
+	)
 }
 
 func (HuhPrompter) PromptInstallCert() (bool, error) {
-	var ok bool
+	// Default focus on Install — the wizard's whole point is to set up an
+	// auditable HTTPS gate, and that requires the local CA in the trust
+	// store. Skipping is rare; making it the default would surprise users
+	// who hit Enter expecting "yes, do the thing".
+	ok := true
 	c := huh.NewConfirm().
 		Title(promptInstallCertTitle).
 		Description(promptInstallCertDesc).

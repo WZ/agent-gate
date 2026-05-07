@@ -24,7 +24,7 @@ type Prompter interface {
 	PromptHostsConfirm(selected []string) (bool, error)
 	PromptCustomHosts(port int) ([]string, error)
 	PromptThreeListNote(port int) error
-	PromptPolicySummary(quietCount int, port int) error
+	PromptPolicySummary(hosts []string, port int) error
 	PromptInstallCert() (bool, error)
 	PromptSmokeTest() (bool, error)
 }
@@ -85,39 +85,74 @@ func Run(opts Options) error {
 
 	finalHosts := suggestionHosts(suggestions)
 	if opts.Prompter != nil {
-		if !opts.Quiet {
-			_ = opts.Prompter.PromptWelcome(port)
-		}
-		_ = opts.Prompter.PromptThreeListNote(port)
-		// Loop on the host multiselect until the user confirms their
-		// selection. The first dogfood revealed users hit ENTER expecting
-		// it to toggle (huh's default is space/x toggle, enter submits),
-		// so a confirm step lets them realize "wait, I didn't mean to
-		// pre-trust everything" and back out without aborting the wizard.
-		var selected []string
-		for {
-			s, err := opts.Prompter.PromptHosts(suggestions, port)
-			if err != nil {
-				return fmt.Errorf("prompt hosts: %w", err)
+		// Stage machine — supports ErrPromptBack on stages flagged
+		// backable. Stages always advance to the next on success;
+		// ErrPromptBack rewinds to the previous backable stage and
+		// clears any state that stage produced.
+		var (
+			selected []string
+			extras   []string
+		)
+		const (
+			stageWelcome = iota
+			stageThreeList
+			stageHostsLoop
+			stageCustomHosts
+			stagePolicySummary
+			stageDone
+		)
+		stage := stageWelcome
+		for stage != stageDone {
+			var err error
+			switch stage {
+			case stageWelcome:
+				if !opts.Quiet {
+					_ = opts.Prompter.PromptWelcome(port)
+				}
+				stage = stageThreeList
+			case stageThreeList:
+				err = opts.Prompter.PromptThreeListNote(port)
+				if errors.Is(err, ErrPromptBack) {
+					stage = stageWelcome
+					continue
+				}
+				if err != nil {
+					return fmt.Errorf("prompt three-list: %w", err)
+				}
+				stage = stageHostsLoop
+			case stageHostsLoop:
+				selected, err = runHostsLoop(opts.Prompter, suggestions, port)
+				if err != nil {
+					return err
+				}
+				stage = stageCustomHosts
+			case stageCustomHosts:
+				extras, err = opts.Prompter.PromptCustomHosts(port)
+				if err != nil {
+					return fmt.Errorf("prompt custom hosts: %w", err)
+				}
+				stage = stagePolicySummary
+			case stagePolicySummary:
+				finalHosts = dedupSort(append(append([]string(nil), selected...), extras...))
+				if !opts.Quiet {
+					err = opts.Prompter.PromptPolicySummary(finalHosts, port)
+					if errors.Is(err, ErrPromptBack) {
+						// Re-do custom hosts; users typically want to add
+						// or remove an extra rather than redo the agent
+						// detection. Clear extras so the loop starts fresh.
+						extras = nil
+						stage = stageCustomHosts
+						continue
+					}
+					if err != nil {
+						return fmt.Errorf("prompt policy summary: %w", err)
+					}
+				}
+				stage = stageDone
 			}
-			ok, err := opts.Prompter.PromptHostsConfirm(s)
-			if err != nil {
-				return fmt.Errorf("prompt hosts confirm: %w", err)
-			}
-			if ok {
-				selected = s
-				break
-			}
 		}
-		finalHosts = selected
-		extras, perr := opts.Prompter.PromptCustomHosts(port)
-		if perr == nil {
-			finalHosts = append(finalHosts, extras...)
-		}
-	}
-	finalHosts = dedupSort(finalHosts)
-	if opts.Prompter != nil && !opts.Quiet {
-		_ = opts.Prompter.PromptPolicySummary(len(finalHosts), port)
+	} else {
+		finalHosts = dedupSort(finalHosts)
 	}
 
 	tomlBytes := renderConfig(cfg)
@@ -166,6 +201,25 @@ func Run(opts Options) error {
 	return nil
 }
 
+// runHostsLoop drives the multiselect + confirm loop for the host-trust
+// step. Returns the user's final selection. The loop catches "Back, edit
+// selection" from the confirm and re-asks the multiselect.
+func runHostsLoop(p Prompter, suggestions []HostSuggestion, port int) ([]string, error) {
+	for {
+		s, err := p.PromptHosts(suggestions, port)
+		if err != nil {
+			return nil, fmt.Errorf("prompt hosts: %w", err)
+		}
+		ok, err := p.PromptHostsConfirm(s)
+		if err != nil {
+			return nil, fmt.Errorf("prompt hosts confirm: %w", err)
+		}
+		if ok {
+			return s, nil
+		}
+	}
+}
+
 func initCompleteMessage(dashboardPort int) string {
 	return fmt.Sprintf(`agent-gate init: complete
 
@@ -173,7 +227,10 @@ Next:
   Run an agent through the gate:
     agent-gate run -- claude
 
-  Review captured traffic once a run is active:
+  Or keep a long-running dashboard open between runs:
+    agent-gate dashboard
+
+  Review captured traffic at:
     http://localhost:%d
 
   Check or repair the install:
