@@ -113,6 +113,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 		}
 		return common.Passthrough != nil && common.Passthrough.Contains(host)
 	}
+	hijackHost := buildHijackHostPredicate(common, opts.HijackHosts)
 	if enforce {
 		fmt.Fprintln(os.Stderr, "allowlist enforcement ON: requests to non-allowlisted hosts will receive 403 from the proxy")
 	}
@@ -129,6 +130,7 @@ func runSupervised(ctx context.Context, opts Options) (int, error) {
 			upstreamInsecureSkipVerify: opts.UpstreamInsecureSkipVerify,
 			hostGuard:                  hostGuard,
 			passthroughHost:            passthroughHost,
+			hijackHost:                 hijackHost,
 			logger:                     func(f string, a ...any) { fmt.Fprintf(os.Stderr, f+"\n", a...) },
 		}))
 	}()
@@ -351,6 +353,7 @@ type proxyRunConfig struct {
 	upstreamInsecureSkipVerify bool
 	hostGuard                  func(string) bool
 	passthroughHost            func(string) bool
+	hijackHost                 func(string) bool
 	logger                     func(string, ...any)
 }
 
@@ -364,12 +367,40 @@ func proxyOptionsForListener(c proxyRunConfig) proxy.Options {
 		UpstreamInsecureSkipVerify: c.upstreamInsecureSkipVerify,
 		HostGuard:                  c.hostGuard,
 		PassthroughHost:            c.passthroughHost,
+		HijackHost:                 c.hijackHost,
 		Logger:                     c.logger,
 	}
 	if c.common != nil {
 		opts.CA = c.common.CA
 	}
 	return opts
+}
+
+// buildHijackHostPredicate returns a closure that the proxy consults on every
+// CONNECT to decide whether to hijack the conn for frame-aware capture. Empty
+// hosts means no hijack at all. Denylisted hosts never get hijacked — they
+// flow through the standard MITM path so HostGuard can synthesize the 403.
+func buildHijackHostPredicate(common *rt.Common, hosts []string) func(string) bool {
+	if len(hosts) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(hosts))
+	for _, h := range hosts {
+		h = strings.ToLower(strings.TrimSpace(h))
+		if h != "" {
+			set[h] = struct{}{}
+		}
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	return func(host string) bool {
+		if common != nil && common.Denylist != nil && common.Denylist.Contains(host) {
+			return false
+		}
+		_, ok := set[strings.ToLower(host)]
+		return ok
+	}
 }
 
 func execArgv(exe string, args []string) []string {
