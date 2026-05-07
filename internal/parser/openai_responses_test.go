@@ -197,6 +197,54 @@ func TestParseOpenAIResponsesStreamingExtractsFunctionCall(t *testing.T) {
 	assert.Equal(t, 9, ev.Usage.OutputTokens)
 }
 
+func TestParseOpenAIResponsesCodexZstdFixture(t *testing.T) {
+	// codex's HTTP fallback path: chatgpt.com /backend-api/codex/responses
+	// with a `Content-Encoding: zstd` request body. Same wire shape as
+	// /v1/responses on api.openai.com once the body is decompressed.
+	flow := loadFlow(t, "../../testdata/flows/codex/codex_responses_post_streaming.json")
+
+	require.True(t, OpenAIResponses{}.Match(&flow), "should match codex chatgpt.com /codex/responses with zstd body")
+
+	ev := Parse(flow)
+
+	assert.Equal(t, "openai_responses", ev.Kind)
+	assert.True(t, ev.IsStreamed)
+	assert.Equal(t, "gpt-5.5", ev.Model)
+	assert.Equal(t, 1, ev.ItemCount, "fixture has one input message")
+	assert.Equal(t, 100, ev.Usage.InputTokens)
+	assert.Equal(t, 12, ev.Usage.OutputTokens)
+	require.Len(t, ev.Tools, 1)
+	assert.Equal(t, "call_test_0001", ev.Tools[0].ID)
+	assert.Equal(t, "exec_command", ev.Tools[0].Name)
+	assert.Equal(t, "echo hi", ev.Tools[0].Input["cmd"])
+}
+
+func TestParseOpenAIResponsesSessionIDHeaderFallback(t *testing.T) {
+	// codex's POST /backend-api/codex/responses doesn't carry a `user` field
+	// in the request body; instead, a `Session_id` request header is the
+	// stable per-turn identifier. Verify that fallback wins over ClientConnID
+	// while still letting `user` win when both are present.
+	noUser := types.RawFlow{
+		Method: "POST",
+		URL:    "https://chatgpt.com/backend-api/codex/responses",
+		ReqHeaders: http.Header{
+			"Session_id": []string{"01CODEXSESSION00000"},
+		},
+		ReqBody:      []byte(`{"model":"gpt-5.5","input":[{"role":"user","content":"hi"}]}`),
+		RespStatus:   200,
+		RespHeaders:  http.Header{"Content-Type": []string{"application/json"}},
+		RespBody:     []byte(`{"id":"r","object":"response","model":"gpt-5.5","output":[],"usage":{"input_tokens":1,"output_tokens":1}}`),
+		ClientConnID: "conn-fallback",
+	}
+	ev := Parse(noUser)
+	assert.Equal(t, "01CODEXSESSION00000", ev.SessionID, "Session_id header is the stable identifier when body lacks user")
+
+	withUser := noUser
+	withUser.ReqBody = []byte(`{"model":"gpt-5.5","input":[{"role":"user","content":"hi"}],"user":"u-stable"}`)
+	ev = Parse(withUser)
+	assert.Equal(t, "u-stable", ev.SessionID, "explicit user field still wins over Session_id header")
+}
+
 func TestParseOpenAIResponsesStreamingTruncatedStillSurfacesModel(t *testing.T) {
 	// If the stream is cut off before response.completed arrives, fall back
 	// to the model id from earlier event envelopes so the dashboard isn't
