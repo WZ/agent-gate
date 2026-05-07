@@ -37,16 +37,18 @@ const (
 		"allowed - it just shows up flagged the first time it's seen.\n" +
 		"Change any time at http://localhost:%d."
 
-	promptHostsConfirmTitleAny  = "Pre-trust these hosts?"
-	promptHostsConfirmTitleNone = "Don't pre-trust any host?"
+	promptHostsConfirmTitleAny  = "Mark these hosts quiet?"
+	promptHostsConfirmTitleNone = "Start with no quiet hosts?"
 	promptHostsConfirmDescNone  = "You'll see each host flagged the first time it appears\n" +
-		"in the dashboard, and can Trust it from there."
+		"in the dashboard, where you can mark it quiet from there."
 
 	promptCustomHostsTitle        = "Add a custom host? (leave blank to finish)"
+	promptCustomHostsTitleAgain   = "Add another? (leave blank to finish)"
 	promptCustomHostsPlaceholder  = "api.example.com"
 	promptCustomHostsDescTemplate = "Anything you add joins the set you just picked. Skip if\n" +
 		"you're not sure - you can add hosts from http://localhost:%d\n" +
 		"whenever you spot one in the dashboard."
+	promptCustomHostsAddedPrefix = "Added so far: %s\n\n"
 
 	promptPolicySummaryTitle        = "Your starting policy:"
 	promptPolicySummaryDescTemplate = "  Quiet (allowed, audited, not flagged):  %s\n" +
@@ -130,13 +132,31 @@ func (HuhPrompter) PromptHostsConfirm(selected []string) (bool, error) {
 	return ok, nil
 }
 
+// customHostsPromptText returns the title + description for the custom-host
+// input on a given iteration. Pure (no TTY) so it can be tested directly.
+//
+// First iteration (alreadyAdded empty): the original title + description.
+// Subsequent iterations: the title flips to "Add another?" and the
+// description leads with "Added so far: foo, bar" so the user gets visual
+// confirmation that their previous Enter actually captured the host instead
+// of clearing the field into the void.
+func customHostsPromptText(port int, alreadyAdded []string) (title, desc string) {
+	desc = fmt.Sprintf(promptCustomHostsDescTemplate, port)
+	if len(alreadyAdded) == 0 {
+		return promptCustomHostsTitle, desc
+	}
+	tally := fmt.Sprintf(promptCustomHostsAddedPrefix, strings.Join(alreadyAdded, ", "))
+	return promptCustomHostsTitleAgain, tally + desc
+}
+
 func (HuhPrompter) PromptCustomHosts(port int) ([]string, error) {
 	var hosts []string
 	for {
 		var host string
+		title, desc := customHostsPromptText(port, hosts)
 		input := huh.NewInput().
-			Title(promptCustomHostsTitle).
-			Description(fmt.Sprintf(promptCustomHostsDescTemplate, port)).
+			Title(title).
+			Description(desc).
 			Placeholder(promptCustomHostsPlaceholder).
 			Value(&host)
 		if err := huh.NewForm(huh.NewGroup(input)).

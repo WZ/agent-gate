@@ -15,8 +15,12 @@ func renderedPromptCopy(port int) map[string]string {
 		"hosts title":                promptHostsTitle,
 		"hosts description":          fmt.Sprintf(promptHostsDescTemplate, port),
 		"custom hosts title":         promptCustomHostsTitle,
+		"custom hosts title again":   promptCustomHostsTitleAgain,
 		"custom hosts placeholder":   promptCustomHostsPlaceholder,
 		"custom hosts description":   fmt.Sprintf(promptCustomHostsDescTemplate, port),
+		"hosts confirm title any":    promptHostsConfirmTitleAny,
+		"hosts confirm title none":   promptHostsConfirmTitleNone,
+		"hosts confirm desc none":    promptHostsConfirmDescNone,
 		"policy summary title":       promptPolicySummaryTitle,
 		"policy summary description": fmt.Sprintf(promptPolicySummaryDescTemplate, "3 hosts", port),
 		"install cert title":         promptInstallCertTitle,
@@ -63,6 +67,28 @@ func TestCopy_PortSubstitutionWorks(t *testing.T) {
 		}
 		if strings.Contains(text, "http://localhost:7878") {
 			t.Errorf("%s description kept default dashboard port: %q", name, text)
+		}
+	}
+}
+
+func TestCustomHostsPromptText_FirstIteration_NoTally(t *testing.T) {
+	title, desc := customHostsPromptText(7878, nil)
+	if title != promptCustomHostsTitle {
+		t.Errorf("first-iteration title: got %q, want %q", title, promptCustomHostsTitle)
+	}
+	if strings.Contains(desc, "Added so far") {
+		t.Errorf("first-iteration description should not show tally; got: %q", desc)
+	}
+}
+
+func TestCustomHostsPromptText_SubsequentIteration_ShowsTally(t *testing.T) {
+	title, desc := customHostsPromptText(7878, []string{"foo.com", "bar.com"})
+	if title != promptCustomHostsTitleAgain {
+		t.Errorf("followup title: got %q, want %q", title, promptCustomHostsTitleAgain)
+	}
+	for _, want := range []string{"Added so far:", "foo.com", "bar.com"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("followup description missing %q; got: %q", want, desc)
 		}
 	}
 }
