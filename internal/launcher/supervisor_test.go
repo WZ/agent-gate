@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -265,5 +268,35 @@ func TestSupervisor_PermissiveSetsProxyEnv(t *testing.T) {
 	body, _ := os.ReadFile(out)
 	if !strings.Contains(string(body), "HTTPS_PROXY=http://127.0.0.1:") {
 		t.Fatalf("expected HTTPS_PROXY in env; got:\n%s", body)
+	}
+}
+
+func TestIsAgentGateDashboard_RecognizesOurSignature(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`<html><head><title>agent-gate</title></head></html>`))
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	if !isAgentGateDashboard(u.Host) {
+		t.Errorf("expected probe to recognize a body containing 'agent-gate'")
+	}
+}
+
+func TestIsAgentGateDashboard_RejectsOtherServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("hello from nginx"))
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	if isAgentGateDashboard(u.Host) {
+		t.Errorf("probe should reject non-agent-gate server")
+	}
+}
+
+func TestIsAgentGateDashboard_RejectsClosedPort(t *testing.T) {
+	port := freePort(t)
+	if isAgentGateDashboard(fmt.Sprintf("127.0.0.1:%d", port)) {
+		t.Errorf("probe should return false when nothing is listening")
 	}
 }
