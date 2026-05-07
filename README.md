@@ -350,6 +350,7 @@ Same dashboard at <http://127.0.0.1:7878>. No kernel jail in this mode — the c
 
 See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
 
+- **`v0.3.1` (shipped)** — Homebrew distribution. `brew tap WZ/tap && brew install agent-gate` is now the default Mac install path; `brew upgrade agent-gate` picks up new releases automatically. The formula publishes from goreleaser on every stable tag, so future releases stay in sync with no extra steps. Linux side benefit: Linuxbrew users get the same formula.
 - **Plan 5 Stream B (`v0.3.0`, shipped)** — Codex visibility on `chatgpt.com`. The proxy can hijack a CONNECT and frame-decode WebSocket sessions inside (`--hijack-host` flag), but codex 0.128.0 pins TLS on its WS transport so the body never flows. The win is that codex falls back to a plain HTTP POST on the same endpoint, and that path decodes cleanly through the existing OpenAI Responses parser (extended for chatgpt.com paths and `Content-Encoding: zstd` request bodies). New `ws_pinned_upstream` info flag explains empty 101 upgrades when they happen.
 - **Plan 4 (`v0.4.0`)** — Windows airtight runtime: Job Object + WFP per-exe filters + completion-port listener for descendants. Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
 

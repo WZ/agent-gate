@@ -176,8 +176,10 @@ ubuntu/macos/windows, plus a `vet-race-fmt` job (Linux) that runs `go vet`,
 ## Plan-based development cadence
 
 Work lands in **plans**, each plan a self-contained branch + PR + tag.
-Tags use the simple `vX.Y.Z` form; goreleaser publishes binaries to a
-GitHub Release on every `v*` tag push.
+Tags use the simple `vX.Y.Z` form. On every stable `v*` tag push,
+goreleaser publishes binaries to a GitHub Release AND bumps the
+Homebrew formula in `WZ/homebrew-tap` (which users install from with
+`brew tap WZ/tap && brew install agent-gate`).
 
 Currently shipped (oldest → newest):
 
@@ -192,6 +194,7 @@ Currently shipped (oldest → newest):
 | `v0.1.0` | (launch) | public-launch polish (badges, screenshots, SECURITY.md) |
 | `v0.2.0` | Plan 5 Stream A | multi-vendor HTTP parsers (OpenAI Chat + Responses + SSE) |
 | `v0.3.0` | Plan 5 Stream B | codex visibility on `chatgpt.com`. WS hijack handler + `--hijack-host` flag landed as infrastructure, but codex 0.128.0 client-pins TLS on its WebSocket transport so visibility comes from codex's HTTP fallback (`POST /backend-api/codex/responses`) — that path decodes through the OpenAI Responses parser (extended for chatgpt.com paths + `Content-Encoding: zstd`). New `ws_pinned_upstream` info rule explains empty 101 upgrades. agentdetect seeds `chatgpt.com` for codex; doctor surfaces the pinning advisory. |
+| `v0.3.1` | (build) | Homebrew distribution. New tap repo at `WZ/homebrew-tap` with an auto-generated `agent-gate.rb` formula that goreleaser bumps on every stable `v*` tag. Users install with `brew tap WZ/tap && brew install agent-gate`; `brew upgrade agent-gate` picks up new releases. Linux side benefit: Linuxbrew users get the same formula. Workflow gains a `HOMEBREW_TAP_TOKEN` secret (fine-grained PAT scoped to the tap repo). |
 
 Active and deferred:
 

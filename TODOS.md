@@ -43,6 +43,25 @@ feedback (no Windows machine in our usual loop, slow CI iteration).
 
 ## Completed
 
+- **v0.3.1** — Homebrew distribution. New tap repo at
+  [`WZ/homebrew-tap`](https://github.com/WZ/homebrew-tap) with an
+  auto-generated `agent-gate.rb` formula. goreleaser pushes a fresh
+  formula on every stable `v*` tag, pointing at the same darwin (and
+  Linux, as a side benefit for Linuxbrew users) tarballs already on
+  the GitHub Release page. End-user install:
+
+      brew tap WZ/tap
+      brew install agent-gate
+      # `brew upgrade agent-gate` picks up new releases
+
+  Plumbing: new `brews:` block in `.goreleaser.yaml`, a
+  `HOMEBREW_TAP_TOKEN` repo secret holding a fine-grained PAT scoped
+  to the tap repo, and the release workflow threading that token
+  through to goreleaser. README install section grew a "Homebrew
+  (macOS, recommended)" header above the binary download path; the
+  per-release notes header on each GitHub release also leads with
+  the brew install command.
+
 - **v0.3.0** — Codex visibility on `chatgpt.com` (Plan 5 Stream B).
   - `HijackConnect` handler (`internal/proxy/hijack.go`) — TLS
     termination via the local CA's leaf-signer, RFC 6455 frame pumps
