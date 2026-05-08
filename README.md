@@ -32,9 +32,9 @@ agent-gate support has three separate layers:
 
 | Platform | Supported today | Current behavior | TODO |
 |---|---|---|---|
-| **macOS** | Yes | Airtight `agent-gate run` via `sandbox-exec`; proxy, dashboard, `init`, `doctor`, and cert install are supported. | ✅ **None.** Platform parity is complete. |
-| **Linux** | Yes, when unprivileged user namespaces are allowed | Airtight `agent-gate run` via user + network namespace. Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set. | Better hardened-distro story if demand justifies it. |
-| **Windows** | Partial | Windows binaries, `init`, `doctor`, cert install, proxy, dashboard, and permissive proxy capture exist. Airtight `agent-gate run` is not wired yet and falls back to permissive with a clear message. | **Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants. |
+| **macOS** | Yes | <ul><li>Airtight `agent-gate run` via `sandbox-exec`</li><li>Proxy, dashboard, `init`, `doctor`, cert install all supported</li></ul> | <ul><li>✅ Platform parity complete</li></ul> |
+| **Linux** | Yes, when unprivileged user namespaces are allowed | <ul><li>Airtight `agent-gate run` via user + network namespace</li><li>Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set</li></ul> | <ul><li>Better hardened-distro story if demand justifies it</li></ul> |
+| **Windows** | Partial | <ul><li>Binaries, `init`, `doctor`, cert install, proxy, dashboard, permissive capture all work</li><li>Airtight `agent-gate run` not wired yet — falls back to permissive with a clear message</li></ul> | <ul><li>**Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants</li></ul> |
 
 ### Agents and API Parsing
 
