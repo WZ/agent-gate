@@ -24,6 +24,10 @@ events.db-*
 docs/superpowers/
 .gstack/
 
+# One-shot dev tools (e.g. screenshot data seeders) — not part of the
+# distributed binary or test surface.
+/tools/
+
 # Local skill / tool state — gstack, Playwright, superpowers, scheduling
 .claude/
 .playwright-mcp/
