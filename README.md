@@ -28,25 +28,6 @@ agent-gate support has three separate layers:
 - **Permissive capture** means the proxy, dashboard, policy engine, and store work, but the target must honor `HTTP_PROXY` / `HTTPS_PROXY`.
 - **Rich parsing** means the dashboard extracts AI-specific fields such as model, token counts, tool calls, tool results, streamed message content, or protocol-specific inventory counts. Today that rich path applies to Anthropic Messages traffic on `api.anthropic.com`, OpenAI-compatible Chat Completions and Responses HTTP calls, and selected Codex/ChatGPT backend setup endpoints on `chatgpt.com`; everything else still gets audited as generic HTTP.
 
-### Platforms
-
-| Platform | Supported today | Current behavior | TODO |
-|---|---|---|---|
-| **macOS** | Yes | <ul><li>Airtight `agent-gate run` via `sandbox-exec`</li><li>Proxy, dashboard, `init`, `doctor`, cert install all supported</li></ul> | <ul><li>✅ Platform parity complete</li></ul> |
-| **Linux** | Yes, when unprivileged user namespaces are allowed | <ul><li>Airtight `agent-gate run` via user + network namespace</li><li>Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set</li></ul> | <ul><li>Better hardened-distro story if demand justifies it</li></ul> |
-| **Windows** | Partial | <ul><li>Binaries, `init`, `doctor`, cert install, proxy, dashboard, permissive capture all work</li><li>Airtight `agent-gate run` not wired yet — falls back to permissive with a clear message</li></ul> | <ul><li>**Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants</li></ul> |
-
-### Agents and API Parsing
-
-| Agent / client | Supported today | What is rich today | TODO |
-|---|---|---|---|
-| **Claude Code** (`claude`) | Yes, primary path | <ul><li>`init` detects `claude` + seeds `api.anthropic.com`</li><li>Anthropic Messages parser: SSE streams, tool calls, tool results, system prompts, token usage</li></ul> | <ul><li>✅ None for the local CLI</li><li>Bedrock / Vertex transports would land as their own fixture-driven parsers when a real capture turns up</li></ul> |
-| **Codex** (`codex`) | Capture yes (via HTTP fallback) | <ul><li>`init` detects `codex` + seeds `chatgpt.com` (OAuth) and `api.openai.com` (API-key)</li><li>Setup endpoints on `chatgpt.com/backend-api/...` parsed (model catalog, MCP tool inventory, etc.)</li><li>Model conversation captured via the HTTP fallback `POST /backend-api/codex/responses` (zstd request, SSE response) — same Responses parser as `api.openai.com`</li><li>WebSocket transport pins TLS in 0.128.0 → empty 101 + `ws_pinned_upstream` flag</li></ul> | <ul><li>✅ None — HTTP fallback covers the model conversation</li><li>WS hijack handler ships as infrastructure for future non-pinning agents</li></ul> |
-| **Aider** (`aider`) | Capture yes | <ul><li>`init` detects `aider` + seeds `api.anthropic.com` and `api.openai.com`</li><li>Anthropic Messages + OpenAI Chat Completions / Responses get rich parsing (model, tokens, tool calls, tool results)</li><li>Other providers parse as generic HTTP</li></ul> | <ul><li>More providers as fixtures land</li></ul> |
-| **OpenCode** (`opencode`) | Capture yes | <ul><li>`init` detects `opencode` + seeds `api.anthropic.com`</li><li>Anthropic Messages + OpenAI Chat Completions / Responses get rich parsing</li><li>Other configured providers may need manual trust + parse as generic HTTP</li></ul> | <ul><li>Plan 5's parser registry makes new vendor decoders one-file additions</li></ul> |
-| **OpenClaw / Hermes Agent** | Manual capture; not first-class today | <ul><li>Launch via `agent-gate run -- <cmd>` or point at the proxy manually</li><li>`init` does not detect their binaries</li><li>Anthropic + OpenAI HTTP calls get rich parsing; OpenRouter / custom providers parse as generic</li></ul> | <ul><li>Binary detection</li><li>Provider host seeding</li><li>More vendor fixtures</li><li>Codex/ChatGPT WebSocket validation</li></ul> |
-| **curl, scripts, MCP clients, custom agents** | Capture yes | <ul><li>Any HTTPS client works through airtight mode or `HTTPS_PROXY`</li><li>Anthropic + OpenAI HTTP calls get rich parsing; other hosts parse as generic HTTP</li></ul> | <ul><li>First-class decoders as real fixtures are captured</li></ul> |
-
 ## Features
 
 - **Airtight launcher** — per-OS network jail forces every byte of egress through the local proxy. Subprocesses inherit it; tools that ignore `HTTPS_PROXY` get kernel-level deny.
@@ -74,6 +55,25 @@ Then open <http://127.0.0.1:7878> to review what your agent is doing.
 On macOS and supported Linux hosts this runs in airtight mode by default; Windows currently falls back to permissive capture. To validate the install at any time: `agent-gate doctor`.
 
 For binary download, build-from-source, headless/CI install, and every flag the binary takes, see the [runbook](docs/RUNBOOK.md).
+
+### Platforms
+
+| Platform | Supported today | Current behavior | TODO |
+|---|---|---|---|
+| **macOS** | Yes | <ul><li>Airtight `agent-gate run` via `sandbox-exec`</li><li>Proxy, dashboard, `init`, `doctor`, cert install all supported</li></ul> | <ul><li>✅ Platform parity complete</li></ul> |
+| **Linux** | Yes, when unprivileged user namespaces are allowed | <ul><li>Airtight `agent-gate run` via user + network namespace</li><li>Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set</li></ul> | <ul><li>Better hardened-distro story if demand justifies it</li></ul> |
+| **Windows** | Partial | <ul><li>Binaries, `init`, `doctor`, cert install, proxy, dashboard, permissive capture all work</li><li>Airtight `agent-gate run` not wired yet — falls back to permissive with a clear message</li></ul> | <ul><li>**Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants</li></ul> |
+
+### Agents and API Parsing
+
+| Agent / client | Supported today | What is rich today | TODO |
+|---|---|---|---|
+| **Claude Code** (`claude`) | Yes, primary path | <ul><li>`init` detects `claude` + seeds `api.anthropic.com`</li><li>Anthropic Messages parser: SSE streams, tool calls, tool results, system prompts, token usage</li></ul> | <ul><li>✅ None for the local CLI</li><li>Bedrock / Vertex transports would land as their own fixture-driven parsers when a real capture turns up</li></ul> |
+| **Codex** (`codex`) | Capture yes (via HTTP fallback) | <ul><li>`init` detects `codex` + seeds `chatgpt.com` (OAuth) and `api.openai.com` (API-key)</li><li>Setup endpoints on `chatgpt.com/backend-api/...` parsed (model catalog, MCP tool inventory, etc.)</li><li>Model conversation captured via the HTTP fallback `POST /backend-api/codex/responses` (zstd request, SSE response) — same Responses parser as `api.openai.com`</li><li>WebSocket transport pins TLS in 0.128.0 → empty 101 + `ws_pinned_upstream` flag</li></ul> | <ul><li>✅ None — HTTP fallback covers the model conversation</li><li>WS hijack handler ships as infrastructure for future non-pinning agents</li></ul> |
+| **Aider** (`aider`) | Capture yes | <ul><li>`init` detects `aider` + seeds `api.anthropic.com` and `api.openai.com`</li><li>Anthropic Messages + OpenAI Chat Completions / Responses get rich parsing (model, tokens, tool calls, tool results)</li><li>Other providers parse as generic HTTP</li></ul> | <ul><li>More providers as fixtures land</li></ul> |
+| **OpenCode** (`opencode`) | Capture yes | <ul><li>`init` detects `opencode` + seeds `api.anthropic.com`</li><li>Anthropic Messages + OpenAI Chat Completions / Responses get rich parsing</li><li>Other configured providers may need manual trust + parse as generic HTTP</li></ul> | <ul><li>Plan 5's parser registry makes new vendor decoders one-file additions</li></ul> |
+| **OpenClaw / Hermes Agent** | Manual capture; not first-class today | <ul><li>Launch via `agent-gate run -- <cmd>` or point at the proxy manually</li><li>`init` does not detect their binaries</li><li>Anthropic + OpenAI HTTP calls get rich parsing; OpenRouter / custom providers parse as generic</li></ul> | <ul><li>Binary detection</li><li>Provider host seeding</li><li>More vendor fixtures</li><li>Codex/ChatGPT WebSocket validation</li></ul> |
+| **curl, scripts, MCP clients, custom agents** | Capture yes | <ul><li>Any HTTPS client works through airtight mode or `HTTPS_PROXY`</li><li>Anthropic + OpenAI HTTP calls get rich parsing; other hosts parse as generic HTTP</li></ul> | <ul><li>First-class decoders as real fixtures are captured</li></ul> |
 
 ## How It Works
 
