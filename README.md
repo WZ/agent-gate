@@ -32,77 +32,48 @@ agent-gate support has three separate layers:
 
 | Platform | Supported today | Current behavior | TODO |
 |---|---|---|---|
-| **macOS** | Yes | Airtight `agent-gate run` via `sandbox-exec`; proxy, dashboard, `init`, `doctor`, and cert install are supported. | ✅ **None.** Platform parity is complete. |
-| **Linux** | Yes, when unprivileged user namespaces are allowed | Airtight `agent-gate run` via user + network namespace. Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set. | Better hardened-distro story if demand justifies it. |
-| **Windows** | Partial | Windows binaries, `init`, `doctor`, cert install, proxy, dashboard, and permissive proxy capture exist. Airtight `agent-gate run` is not wired yet and falls back to permissive with a clear message. | **Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants. |
+| **macOS** | Yes | <ul><li>Airtight `agent-gate run` via `sandbox-exec`</li><li>Proxy, dashboard, `init`, `doctor`, cert install all supported</li></ul> | <ul><li>✅ Platform parity complete</li></ul> |
+| **Linux** | Yes, when unprivileged user namespaces are allowed | <ul><li>Airtight `agent-gate run` via user + network namespace</li><li>Hardened hosts fall back to permissive unless `--mode=airtight-strict` is set</li></ul> | <ul><li>Better hardened-distro story if demand justifies it</li></ul> |
+| **Windows** | Partial | <ul><li>Binaries, `init`, `doctor`, cert install, proxy, dashboard, permissive capture all work</li><li>Airtight `agent-gate run` not wired yet — falls back to permissive with a clear message</li></ul> | <ul><li>**Plan 4:** Job Object + WFP per-exe filters + completion-port listener for descendants</li></ul> |
 
 ### Agents and API Parsing
 
 | Agent / client | Supported today | What is rich today | TODO |
 |---|---|---|---|
-| **Claude Code** (`claude`) | Yes, primary path | `init` detects `claude` and seeds `api.anthropic.com`. Traffic to that host gets Anthropic Messages parsing: SSE streams, tool calls, tool results, system prompts, and token usage when present. | ✅ **None for the local CLI itself.** It targets `api.anthropic.com` directly. Anthropic on AWS Bedrock and GCP Vertex are separate transports used by other Anthropic-aware clients (Anthropic SDK, custom scripts), and would land as their own fixture-driven parsers when a real capture turns up. |
-| **Codex** (`codex`) | Capture yes — model conversation lands via the HTTP fallback path | `init` detects `codex` and seeds both `chatgpt.com` (OAuth path) and `api.openai.com` (API-key path). agent-gate parses Codex's `chatgpt.com/backend-api/...` setup endpoints (model catalog, MCP tool inventory, analytics, connector list, plugins). codex 0.128.0 client-pins TLS on its WebSocket transport so the WS body isn't capturable, but codex falls back to plain `POST /backend-api/codex/responses` (zstd-compressed Responses-API request, SSE response) and that's where the model conversation lands — agent-gate decodes it like any other Responses-API call. | ✅ **None.** The HTTP fallback path covers the actual model invocation; the WS hijack handler ships as infrastructure for future non-pinning agents. |
-| **Aider** (`aider`) | Capture yes | `init` detects `aider` and seeds `api.anthropic.com` + `api.openai.com`. Traffic to `api.anthropic.com` gets rich parsing, and OpenAI-compatible Chat Completions / Responses HTTP calls now surface model, token, tool-call, and tool-result fields. Other providers are generic HTTP until fixtures land. | More providers need fixtures. |
-| **OpenCode** (`opencode`) | Capture yes | `init` detects `opencode` and seeds `api.anthropic.com`. Traffic to `api.anthropic.com` and OpenAI-compatible Chat Completions / Responses HTTP endpoints gets rich parsing; other configured providers may need manual trust and parse as generic HTTP. | Plan 5's parser registry makes new vendor decoders one-file additions. |
-| **OpenClaw / Hermes Agent** | Manual capture likely; not first-class today | Launch them with `agent-gate run -- <cmd>` or configure their proxy settings manually. `init` does not detect their binaries or seed their provider hosts yet. Anthropic and OpenAI-compatible Chat Completions / Responses HTTP calls get rich parsing; OpenRouter/custom-provider traffic is captured but mostly generic today. | Future first-class support needs binary detection, provider host seeding, more vendor fixtures, and Codex/ChatGPT WebSocket validation. |
-| **curl, scripts, MCP clients, custom agents** | Capture yes | Any HTTPS client can be captured if launched through airtight mode or pointed at the proxy. Anthropic Messages and OpenAI-compatible Chat Completions / Responses HTTP calls get rich parsing; other hosts parse as generic HTTP today. | Add first-class decoders as real fixtures are captured. |
+| **Claude Code** (`claude`) | Yes, primary path | <ul><li>`init` detects `claude` + seeds `api.anthropic.com`</li><li>Anthropic Messages parser: SSE streams, tool calls, tool results, system prompts, token usage</li></ul> | <ul><li>✅ None for the local CLI</li><li>Bedrock / Vertex transports would land as their own fixture-driven parsers when a real capture turns up</li></ul> |
+| **Codex** (`codex`) | Capture yes (via HTTP fallback) | <ul><li>`init` detects `codex` + seeds `chatgpt.com` (OAuth) and `api.openai.com` (API-key)</li><li>Setup endpoints on `chatgpt.com/backend-api/...` parsed (model catalog, MCP tool inventory, etc.)</li><li>Model conversation captured via the HTTP fallback `POST /backend-api/codex/responses` (zstd request, SSE response) — same Responses parser as `api.openai.com`</li><li>WebSocket transport pins TLS in 0.128.0 → empty 101 + `ws_pinned_upstream` flag</li></ul> | <ul><li>✅ None — HTTP fallback covers the model conversation</li><li>WS hijack handler ships as infrastructure for future non-pinning agents</li></ul> |
+| **Aider** (`aider`) | Capture yes | <ul><li>`init` detects `aider` + seeds `api.anthropic.com` and `api.openai.com`</li><li>Anthropic Messages + OpenAI Chat Completions / Responses get rich parsing (model, tokens, tool calls, tool results)</li><li>Other providers parse as generic HTTP</li></ul> | <ul><li>More providers as fixtures land</li></ul> |
+| **OpenCode** (`opencode`) | Capture yes | <ul><li>`init` detects `opencode` + seeds `api.anthropic.com`</li><li>Anthropic Messages + OpenAI Chat Completions / Responses get rich parsing</li><li>Other configured providers may need manual trust + parse as generic HTTP</li></ul> | <ul><li>Plan 5's parser registry makes new vendor decoders one-file additions</li></ul> |
+| **OpenClaw / Hermes Agent** | Manual capture; not first-class today | <ul><li>Launch via `agent-gate run -- <cmd>` or point at the proxy manually</li><li>`init` does not detect their binaries</li><li>Anthropic + OpenAI HTTP calls get rich parsing; OpenRouter / custom providers parse as generic</li></ul> | <ul><li>Binary detection</li><li>Provider host seeding</li><li>More vendor fixtures</li><li>Codex/ChatGPT WebSocket validation</li></ul> |
+| **curl, scripts, MCP clients, custom agents** | Capture yes | <ul><li>Any HTTPS client works through airtight mode or `HTTPS_PROXY`</li><li>Anthropic + OpenAI HTTP calls get rich parsing; other hosts parse as generic HTTP</li></ul> | <ul><li>First-class decoders as real fixtures are captured</li></ul> |
 
 ## Features
 
-- **Airtight launcher** — `agent-gate run -- claude` spawns the target inside a per-OS network jail on macOS and Linux that physically forces every byte of egress through the local proxy. Subprocesses inherit the jail. Tools that don't honor `HTTPS_PROXY` get kernel-level network deny. Windows currently falls back to permissive capture; see the support matrix above.
-- **TLS-MITM proxy with passthrough escape hatch** — every HTTPS request is decrypted, parsed, flagged, and re-encrypted toward the upstream. Cert-pinned hosts (`mcp-proxy.anthropic.com` and friends) get raw TCP tunneling instead, so MITM-rejecters still work — connection metadata gets audited even when bodies can't.
-- **Three-list policy model** — `allowlist.txt`, `denylist.txt`, `passthrough.txt` in `~/.config/agent-gate/`. Mutated only by `init`, the dashboard, or your editor — never by the runtime. Resolution order: deny wins, then passthrough, then enforce-mode allowlist gate, then default audit-and-forward.
-- **Nine built-in policy rules** — `host_not_allowlisted`, `secret_in_request`, `env_in_tool_result`, `oversized_request`, `oversized_response`, `unknown_mcp_endpoint`, `permissive_capture`, `parse_error`, `ws_pinned_upstream`. Per-flag dismiss with reason + timestamp.
-- **PII detection across the wire** — every captured event is scanned for SSN, credit cards, DOB, email, phone, name, address, JWT, UUID, IPv4. The Explore page colors body text by kind so you can spot what slipped through at a glance.
-- **Parser registry** — Anthropic Messages SSE streams are reassembled into single review-ready events, tool calls and tool results are split out, and system prompts are surfaced. OpenAI-compatible Chat Completions and Responses HTTP calls surface model, token counts, tool calls, and tool results — including codex's `chatgpt.com/backend-api/codex/responses` POST with its `Content-Encoding: zstd` request body. Selected Codex/ChatGPT backend setup endpoints are parsed into inventory-style events. Generic HTTP fallback covers the remaining Aider, OpenCode, OpenClaw, Hermes Agent, MCP, and custom-agent traffic until more Plan 5 parsers land.
-- **One-command bootstrap** — `agent-gate init` writes the config, mints a local CA, detects which agents you have installed (`claude`, `codex`, `aider`, `opencode`), seeds their upstream hosts into your allowlist, and installs the CA into Keychain (macOS), `ca-certificates` + Firefox NSS (Linux), or wincrypt (Windows). OpenClaw and Hermes Agent are manual-capture paths until their profiles land.
-- **`doctor` validate-and-repair** — checks every moving part (CA files, ports, lockfile, host-list permissions, agents detected, CA trusted across all stores) and prints one line per check. `--auto-repair=safe` for filesystem fixes; `--auto-repair=aggressive` will retry trust-store install.
-- **JSONL + SQLite store** — every captured flow lands on disk. JSONL is the source of truth; SQLite is an index over it. `agent-gate reindex` rebuilds the index from JSONL whenever you want.
-- **Single binary, pure Go** — no CGO, cross-compiles cleanly to darwin/linux/windows × amd64/arm64. Distributed via [GitHub Releases](https://github.com/WZ/agent-gate/releases/latest) on every tag.
+- **Airtight launcher** — per-OS network jail forces every byte of egress through the local proxy. Subprocesses inherit it; tools that ignore `HTTPS_PROXY` get kernel-level deny.
+- **TLS-MITM proxy with passthrough escape hatch** — decrypts and parses every request. Cert-pinned hosts get raw TCP tunneling so MITM-rejecters still work.
+- **Three-list policy model** — `allowlist.txt`, `denylist.txt`, `passthrough.txt`. Mutated only by `init`, the dashboard, or your editor — never by the runtime.
+- **Nine built-in policy rules** — host not allowlisted, secrets in body, env leakage, oversize, parse errors, more. Per-flag dismiss with reason.
+- **PII detection across the wire** — SSN, cards, email, phone, JWT, UUID, IPv4, etc. The Explore page colors body text by kind.
+- **Parser registry** — Anthropic Messages SSE reassembled into single events; OpenAI Chat Completions and Responses HTTP surface model, tokens, tool calls. Generic HTTP fallback for everything else.
+- **One-command bootstrap** — `agent-gate init` writes config, mints a CA, detects your agents, seeds their hosts, installs the CA into your trust store.
+- **`doctor` validate-and-repair** — one line per check across config, CA, ports, lockfile, agents, trust stores. `--auto-repair` for filesystem fixes.
+- **JSONL + SQLite store** — JSONL is the source of truth; SQLite is an index. `agent-gate reindex` rebuilds the index whenever.
+- **Single binary, pure Go** — no CGO. Cross-compiles to darwin/linux/windows × amd64/arm64.
 
 ## Quick Start
 
-**macOS:**
-
 ```bash
-# 1. Install
 brew tap WZ/tap
 brew install agent-gate
-
-# 2. Bootstrap (one-time): writes config, mints a local CA, installs it into your trust stores
-agent-gate init
-
-# 3. Run your agent through it
-agent-gate run -- claude
-
-# Later, to pick up new releases:
-brew upgrade agent-gate
+agent-gate init               # one-time bootstrap: config + CA + agent detection + cert install
+agent-gate run -- claude      # launch your agent through the gate
 ```
 
-**Linux / Windows / Mac without Homebrew:** grab the binary from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
+Then open <http://127.0.0.1:7878> to review what your agent is doing.
 
-```bash
-# 1. Install — pick the archive for your platform
-tar xz < agent-gate_<ver>_<os>_<arch>.tar.gz
-sudo mv agent-gate /usr/local/bin/
+On macOS and supported Linux hosts this runs in airtight mode by default; Windows currently falls back to permissive capture. To validate the install at any time: `agent-gate doctor`.
 
-# 2 & 3. Same as above
-agent-gate init
-agent-gate run -- claude
-```
-
-Then open <http://127.0.0.1:7878> to review what your agent is doing. See [Install](#install) below for the exact archive names and other options.
-
-On macOS and supported Linux hosts this runs in airtight mode by default. On Windows today it falls back to permissive capture; use the standalone proxy flow below or track Plan 4 for the airtight runtime.
-
-For headless / CI use:
-
-```bash
-agent-gate init --non-interactive --allow-host api.anthropic.com --install-cert=false
-agent-gate cert install   # run later from a TTY
-```
-
-To validate the install at any time: `agent-gate doctor`.
+For binary download, build-from-source, headless/CI install, and every flag the binary takes, see the [runbook](docs/RUNBOOK.md).
 
 ## How It Works
 
@@ -150,240 +121,89 @@ Three host-policy buttons sit at the top of the page: **Trust** (allowlist), **B
 
 ## Airtight launcher
 
-`agent-gate run -- <cmd>` is the recommended way in. On macOS and supported Linux hosts, it spawns the target inside a per-platform network jail that physically forces all egress through the proxy. On Windows today, `run` falls back to permissive capture until Plan 4 lands the runtime path.
+`agent-gate run -- <cmd>` spawns the target inside a per-OS network jail that physically forces all egress through the proxy. macOS and Linux work today; Windows falls back to permissive capture until Plan 4.
 
 | Platform | Mechanism | Notes |
 |---|---|---|
-| **macOS** | `sandbox-exec` profile denies all `network*` ops except loopback to the proxy port | No installation step. Descendants inherit the sandbox automatically. |
-| **Linux** | Hidden `__netns-helper` subprocess enters an unprivileged user + network namespace, binds the proxy port inside it, passes the listener FD back via `SCM_RIGHTS` | Requires `kernel.unprivileged_userns_clone=1` (default on Ubuntu/Fedora). Falls back to `--mode=permissive` on hardened distros unless `--mode=airtight-strict` is set. |
-| **Windows** | WFP provider/sublayer registered by `agent-gate init`; runtime path scaffolded for Plan 4 | Currently stubs to `--mode=permissive` with a clear message. |
+| **macOS** | `sandbox-exec` profile denies all `network*` ops except loopback to the proxy port | <ul><li>No installation step</li><li>Descendants inherit the sandbox automatically</li></ul> |
+| **Linux** | `__netns-helper` subprocess enters an unprivileged user + network namespace, binds the proxy port inside it, passes the listener FD back via `SCM_RIGHTS` | <ul><li>Requires `kernel.unprivileged_userns_clone=1` (default on Ubuntu/Fedora)</li><li>Falls back to `--mode=permissive` on hardened distros unless `--mode=airtight-strict` is set</li></ul> |
+| **Windows** | WFP provider/sublayer registered by `agent-gate init`; runtime path scaffolded for Plan 4 | <ul><li>Currently stubs to `--mode=permissive` with a clear message</li></ul> |
 
-### Threat model
+For the full flag reference, mode-picking guide, and run recipes, see the [runbook](docs/RUNBOOK.md#agent-gate-run).
 
-agent-gate's airtight mode defends against:
+## Threat model
 
-- **Tools that ignore `HTTPS_PROXY`.** They get kernel-level network deny.
-- **Subprocess descendants.** The jail is inherited (sandbox profile, network namespace).
+agent-gate is a **network audit gate**, not a sandbox or RBAC system. It captures and audits HTTP egress; it does not isolate filesystem, IPC, or privileges.
 
-It does **not** defend against:
+**Defends against:**
 
-- **Local IPC** — UNIX sockets, named pipes, abstract sockets, shared memory. Out of the proxy's view by design.
-- **Root/admin agents.** The user can lift the jail.
-- **Filesystem reads.** If the agent reads `.env` and writes it somewhere on disk, agent-gate doesn't see it. The proxy is a network audit, not a filesystem audit.
-- **Steganographic exfiltration through allowed hosts.**
+- Tools that ignore `HTTPS_PROXY` — kernel-level network deny in airtight mode
+- Subprocess descendants — the jail is inherited (sandbox profile / network namespace)
 
-If your threat model needs filesystem isolation or RBAC, agent-gate alone is insufficient.
+**Does NOT defend against:**
 
-### Flags
+- Local IPC — UNIX sockets, named pipes, abstract sockets, shared memory are out of the proxy's view by design
+- Root or admin agents — the user can lift the jail
+- Filesystem reads — agent-gate sees the network, not the disk; an agent reading `.env` and writing it elsewhere on disk is invisible
+- Steganographic exfiltration through allowed hosts
 
-```
-agent-gate init [flags]
-  --quiet                           skip welcome and policy summary notes
-
-agent-gate run [flags] -- <cmd> [args...]
-  --mode VALUE                       egress enforcement mode (default airtight):
-                                       airtight        per-OS network jail; falls back to
-                                                         permissive with a warning if unsupported
-                                       airtight-strict require the jail; abort if unsupported
-                                                         (use in CI)
-                                       permissive      skip jail; sets HTTPS_PROXY only
-                                                         — agent could ignore and bypass capture
-  --enforce-allowlist                proxy returns 403 for hosts not in the allowlist
-  --upstream-ca PEM                  extra root CA(s) to trust on proxy→upstream
-                                       (use for self-signed ANTHROPIC_BASE_URL)
-  --upstream-insecure-skip-verify    skip upstream cert verification entirely
-                                       (testing only; captures still happen)
-  --hijack-host HOST                 advanced — most users don't need this.
-                                       Capture WebSocket message bodies for HOST.
-                                       claude / codex / aider are captured by
-                                       default; reach for this only when auditing
-                                       a custom or internal agent that talks to
-                                       your own WebSocket backend (repeatable)
-  --config PATH                      config.toml path
-```
+If your threat model needs filesystem isolation or RBAC, agent-gate alone is insufficient — pair it with OS-level sandboxing.
 
 ## Three-list policy model
 
-Three file-backed host lists, all in `~/.config/agent-gate/`, mutated only by `init`, the dashboard, or your editor:
+Each request hits the proxy and gets routed by three plain-text host lists. Resolution order is fixed:
 
-| File | Effect | How to mutate |
+```
+1. denylist hit                          → 403 (always wins)
+2. passthrough hit (and not denylisted)  → raw TCP tunnel; no TLS interception
+3. enforce mode + not allowlisted        → 403
+4. default                               → MITM, decrypt, capture, forward
+```
+
+The lists live in `~/.config/agent-gate/` and are mutated only by `init`, the dashboard, or your editor — never by the runtime:
+
+| File | Add a host when… | How to add |
 |---|---|---|
-| `allowlist.txt` | Host is OK; suppresses `host_not_allowlisted`, lets through under `--enforce-allowlist` | Dashboard **Trust** → `POST /api/trust`; or `agent-gate init --allow-host HOST` |
-| `denylist.txt` | Proxy returns synthetic 403; never contacts upstream | Dashboard **Block** → `POST /api/block` |
-| `passthrough.txt` | Proxy tunnels TCP raw — no TLS interception | Dashboard **Passthrough** → `POST /api/passthrough` |
-
-Resolution order in `mitmConnect`:
-
-```
-denylist hit  → 403 (always wins)
-passthrough hit (and not denylisted) → raw TCP tunnel
-enforce mode + not allowlisted → 403
-default → MITM, decrypt, capture, forward
-```
+| `allowlist.txt` | …it's a known-good upstream you don't want flagged | Dashboard **Trust** → `POST /api/trust`, or `agent-gate init --allow-host HOST` |
+| `denylist.txt` | …you want it blocked at the proxy with a 403, no upstream contact | Dashboard **Block** → `POST /api/block` |
+| `passthrough.txt` | …it pins TLS or otherwise rejects MITM (e.g. `mcp-proxy.anthropic.com`) and you still want the connection metadata audited | Dashboard **Passthrough** → `POST /api/passthrough` |
 
 `agent-gate help allowlist|denylist|passthrough` prints the long-form explanation in your terminal.
 
 ## Built-in policy rules
 
-| Code | Severity | Fires when |
-|---|---|---|
-| `host_not_allowlisted` | high | Request host is not in the allowlist |
-| `secret_in_request` | high | Request body matches a credential pattern |
-| `env_in_tool_result` | high | Tool result contains ≥3 KEY=VALUE lines |
-| `oversized_request` | medium | Request body > 5 MB |
-| `oversized_response` | low | Response body > 5 MB |
-| `unknown_mcp_endpoint` | medium | Response is `text/event-stream` and host is unknown |
-| `permissive_capture` | info | Session captured under env-only enforcement |
-| `parse_error` | info | Parser annotated an error on the flow |
-| `ws_pinned_upstream` | info | WebSocket upgrade succeeded (101) — empty body capture is expected when the upstream client pins TLS, e.g. codex on `chatgpt.com` |
+Every captured event runs through nine rules. Severity drives the dashboard's risk feed and sort order — `high` floats to the top, `info` stays out of your way unless filtered.
 
-## Install
+**High** — likely worth a look:
 
-### Homebrew (macOS, recommended)
-
-```bash
-brew tap WZ/tap
-brew install agent-gate
-```
-
-To upgrade in place:
-
-```bash
-brew upgrade agent-gate
-```
-
-The formula is published automatically on every `vX.Y.Z` tag and points at the same darwin archives as the binary download path below, so `brew upgrade` always tracks the newest release.
-
-### Download the binary
-
-Grab the archive for your platform from the [latest release](https://github.com/WZ/agent-gate/releases/latest):
-
-| Platform | Archive |
+| Code | Fires when |
 |---|---|
-| macOS Apple Silicon | `agent-gate_<ver>_darwin_arm64.tar.gz` |
-| macOS Intel | `agent-gate_<ver>_darwin_x86_64.tar.gz` |
-| Linux arm64 | `agent-gate_<ver>_linux_arm64.tar.gz` |
-| Linux x86_64 | `agent-gate_<ver>_linux_x86_64.tar.gz` |
-| Windows x86_64 | `agent-gate_<ver>_windows_x86_64.zip` (permissive capture today; airtight is Plan 4) |
+| `host_not_allowlisted` | Request host is not in the allowlist |
+| `secret_in_request` | Request body matches a credential pattern |
+| `env_in_tool_result` | Tool result contains ≥3 `KEY=VALUE` lines |
 
-Extract, then move `agent-gate` to a directory on your `PATH`. On macOS, the first run may need `xattr -d com.apple.quarantine ./agent-gate` to clear Gatekeeper.
+**Medium** — usually benign but unusual:
 
-### Or build from source
+| Code | Fires when |
+|---|---|
+| `oversized_request` | Request body > 5 MB |
+| `unknown_mcp_endpoint` | Response is `text/event-stream` and host is unknown |
 
-```bash
-git clone https://github.com/WZ/agent-gate.git
-cd agent-gate
+**Low** — noise tracking:
 
-# Plain build — produces "agent-gate 0.0.1-dev (commit unknown, built unknown)"
-go build -o agent-gate ./cmd/agent-gate
+| Code | Fires when |
+|---|---|
+| `oversized_response` | Response body > 5 MB |
 
-# Or with version metadata baked in (matches what goreleaser ships):
-VERSION=$(git describe --tags --always)
-COMMIT=$(git rev-parse --short HEAD)
-DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-go build -trimpath \
-  -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
-  -o agent-gate ./cmd/agent-gate
+**Info** — context, not concern:
 
-sudo mv agent-gate /usr/local/bin/
-```
+| Code | Fires when |
+|---|---|
+| `permissive_capture` | Session captured under env-only enforcement |
+| `parse_error` | Parser annotated an error on the flow |
+| `ws_pinned_upstream` | WebSocket upgrade succeeded (101) but the upstream client pins TLS — empty body capture is expected here (e.g. codex on `chatgpt.com`) |
 
-> `go install agent-gate/cmd/agent-gate@latest` does **not** work today — the module path in `go.mod` is the bare name `agent-gate` rather than a domain-prefixed path, so the toolchain can't fetch it from a remote. Use the binary download or `go build` from a clone.
-
-## CLI summary
-
-```
-Getting started:
-  agent-gate init                  one-command bootstrap (config + CA + agent detection + cert install)
-  agent-gate doctor                validate the install; suggest or apply repairs
-
-Daily use:
-  agent-gate run -- <cmd>          launch a command with airtight network capture
-  agent-gate dashboard             run the local web dashboard (foreground)
-  agent-gate proxy                 run the proxy alone (foreground)
-  agent-gate tail                  live-follow events in the terminal
-  agent-gate stop                  send SIGTERM to a stuck `agent-gate run`
-
-Maintenance:
-  agent-gate cert install          install the local CA into trust stores
-  agent-gate cert uninstall        remove the local CA from trust stores
-  agent-gate cert path             print the CA cert path
-  agent-gate reindex               rebuild the PII count index from JSONL
-  agent-gate uninstall             (Windows) remove the WFP provider/sublayer
-  agent-gate version               print version info
-
-Help topics:
-  agent-gate help allowlist        explain allowlist semantics
-  agent-gate help denylist         explain denylist semantics
-  agent-gate help passthrough      explain passthrough semantics
-```
-
-Each takes `--config PATH` to point at a non-default `config.toml`.
-
-## Workflow
-
-### Recommended: launch through `agent-gate run`
-
-One command starts the proxy + dashboard + jail and runs your agent inside it:
-
-```bash
-agent-gate run -- claude
-```
-
-While Claude is running, open <http://127.0.0.1:7878> — sessions, events, and flags appear live. When Claude exits, agent-gate tears everything down and releases the lockfile.
-
-If your shell aliases `claude` with flags (fish/zsh aliases aren't visible to `exec`), invoke through your shell so the alias resolves:
-
-```bash
-agent-gate run -- fish -ic 'claude'
-```
-
-For a self-hosted Anthropic-compatible endpoint with a non-standard cert:
-
-```bash
-echo | openssl s_client -connect your-anthropic-endpoint.example:443 -servername your-anthropic-endpoint.example 2>/dev/null \
-  | openssl x509 -outform PEM > /tmp/upstream.pem
-ANTHROPIC_BASE_URL=https://your-anthropic-endpoint.example \
-ANTHROPIC_API_KEY=$YOUR_KEY \
-  agent-gate run --upstream-ca /tmp/upstream.pem -- claude
-```
-
-### Alternative: standalone proxy + dashboard
-
-For ad-hoc captures (curl, an existing daemon, a script), run the proxy and dashboard separately and point a client at the proxy via env:
-
-```bash
-agent-gate proxy --capture-mode permissive   # terminal 1
-agent-gate dashboard                          # terminal 2
-
-HTTPS_PROXY=http://127.0.0.1:8888 \
-HTTP_PROXY=http://127.0.0.1:8888 \
-NO_PROXY="" \
-  curl https://api.anthropic.com/v1/messages \
-       -H "x-api-key: $ANTHROPIC_API_KEY" \
-       -H "anthropic-version: 2023-06-01" \
-       -H "content-type: application/json" \
-       -d '{"model":"claude-opus-4-7","max_tokens":50,"messages":[{"role":"user","content":"hi"}]}'
-```
-
-Same dashboard at <http://127.0.0.1:7878>. No kernel jail in this mode — the client must honor `HTTPS_PROXY`.
-
-## Where things live
-
-- Config: `~/.config/agent-gate/config.toml`
-- CA: `~/.config/agent-gate/ca/{cert.pem,key.pem}` (key is 0600 on macOS/Linux; Windows skips the unix-mode check)
-- Allowlist / denylist / passthrough: `~/.config/agent-gate/{allowlist,denylist,passthrough}.txt`
-- Dismissals: `~/.config/agent-gate/dismissals.json` (also logs `raw_peek` events)
-- Lockfile: `~/.local/share/agent-gate/agent-gate.lock` — auto-reclaimed if stale
-- Data: `~/.local/share/agent-gate/{events.db, YYYY-MM-DD.jsonl}`
-
-## What's next
-
-See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
-
-- **`v0.3.1` (shipped)** — Homebrew distribution. `brew tap WZ/tap && brew install agent-gate` is now the default Mac install path; `brew upgrade agent-gate` picks up new releases automatically. The formula publishes from goreleaser on every stable tag, so future releases stay in sync with no extra steps. Linux side benefit: Linuxbrew users get the same formula.
-- **Plan 5 Stream B (`v0.3.0`, shipped)** — Codex visibility on `chatgpt.com`. The proxy can hijack a CONNECT and frame-decode WebSocket sessions inside (`--hijack-host` flag), but codex 0.128.0 pins TLS on its WS transport so the body never flows. The win is that codex falls back to a plain HTTP POST on the same endpoint, and that path decodes cleanly through the existing OpenAI Responses parser (extended for chatgpt.com paths and `Content-Encoding: zstd` request bodies). New `ws_pinned_upstream` info flag explains empty 101 upgrades when they happen.
-- **Plan 4 (`v0.4.0`)** — Windows airtight runtime: Job Object + WFP per-exe filters + completion-port listener for descendants. Removes the "pending Plan 4" stub from `agent-gate run` on Windows.
+Per-flag dismiss-with-reason on the dashboard writes to `dismissals.json` so the same flag doesn't keep nagging you on subsequent runs.
 
 ## What we explicitly don't do
 
@@ -392,42 +212,6 @@ See [`TODOS.md`](TODOS.md). Most recent ship + the deferred cut:
 - **Detect filesystem exfiltration.** agent-gate audits network. If the agent reads `.env` and writes it somewhere on disk, we don't see it.
 - **Run as a service / agent / daemon.** Single-shot supervisor + dashboard per `agent-gate run`. The lockfile enforces "one instance at a time."
 - **Ship to a remote backend.** No telemetry, no upload, no cross-machine collation. Everything stays local.
-
-## Limitations
-
-- HTTP/1.1 client-facing; upstream HTTP/2 transparent.
-- Windows airtight is stubbed — Windows targets fall back to `--permissive` with a clear message. Plan 4 lands the Job Object + WFP filter runtime path.
-- macOS airtight only matches loopback to the proxy port (no other localhost ports). MCP-over-localhost-HTTP works because the proxy reaches into the child's loopback, not the other direction.
-- Linux airtight requires `kernel.unprivileged_userns_clone=1`. Hardened distros (Ubuntu 24+ with `apparmor_restrict_unprivileged_userns=1`, hardened kernels) fall back to `--permissive` unless `--airtight-fail` is set.
-- Codex 0.128.0 client-pins TLS on its WebSocket transport. Empty 101 upgrades on `chatgpt.com` are expected and get flagged `ws_pinned_upstream` for clarity. The actual model conversation lands via codex's HTTP fallback path (`POST /backend-api/codex/responses`), which agent-gate decodes through the same OpenAI Responses parser used for `api.openai.com`.
-- Cert-pinned upstreams reject TLS interception. Add them to `passthrough.txt` so agent-gate tunnels TCP raw — body capture is skipped, only the CONNECT host + byte counts get audited.
-- Some TUIs (Claude Code) catch SIGINT and don't propagate exit on Ctrl-C. Type `/exit` inside Claude or run `agent-gate stop` from another terminal.
-- Custom rules via TOML config: schema is reserved but not yet wired.
-
-## Project layout
-
-```
-cmd/agent-gate/        CLI entrypoint (one file per subcommand)
-internal/runtime/      Shared startup; XDG-aware paths; lockfile
-internal/launcher/     Cross-platform supervisor + per-OS jail
-internal/proxy/        goproxy-based TLS-intercepting forward proxy
-internal/parser/       RawFlow → ParsedEvent (Anthropic-aware + generic)
-internal/policy/       Rule engine + 8 built-ins
-internal/store/        JSONL writer + SQLite index + PII index
-internal/dashboard/    HTTP server, HTMX templates, embedded assets
-internal/{allowlist,denylist,passthrough}/  file-backed host lists
-internal/dismissals/   flag dismissals (JSON file)
-internal/redactor/     secret-mask render layer
-internal/pii/          PII detection
-internal/secrets/      single regex set (shared by policy + redactor)
-internal/ca/           local CA mint + leaf signing; cross-platform truststore install
-internal/agentdetect/  detect installed agents via $PATH + env vars (IDN-safe)
-internal/initwizard/   `agent-gate init` orchestrator
-internal/doctor/       `agent-gate doctor` checks + repair
-internal/idgen/        ULID
-internal/types/        shared structs
-internal/e2e/          end-to-end tests
-```
 
 ## Development
 
