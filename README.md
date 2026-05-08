@@ -121,66 +121,89 @@ Three host-policy buttons sit at the top of the page: **Trust** (allowlist), **B
 
 ## Airtight launcher
 
-`agent-gate run -- <cmd>` is the recommended way in. On macOS and supported Linux hosts, it spawns the target inside a per-platform network jail that physically forces all egress through the proxy. On Windows today, `run` falls back to permissive capture until Plan 4 lands the runtime path.
+`agent-gate run -- <cmd>` spawns the target inside a per-OS network jail that physically forces all egress through the proxy. macOS and Linux work today; Windows falls back to permissive capture until Plan 4.
 
 | Platform | Mechanism | Notes |
 |---|---|---|
-| **macOS** | `sandbox-exec` profile denies all `network*` ops except loopback to the proxy port | No installation step. Descendants inherit the sandbox automatically. |
-| **Linux** | Hidden `__netns-helper` subprocess enters an unprivileged user + network namespace, binds the proxy port inside it, passes the listener FD back via `SCM_RIGHTS` | Requires `kernel.unprivileged_userns_clone=1` (default on Ubuntu/Fedora). Falls back to `--mode=permissive` on hardened distros unless `--mode=airtight-strict` is set. |
-| **Windows** | WFP provider/sublayer registered by `agent-gate init`; runtime path scaffolded for Plan 4 | Currently stubs to `--mode=permissive` with a clear message. |
+| **macOS** | `sandbox-exec` profile denies all `network*` ops except loopback to the proxy port | <ul><li>No installation step</li><li>Descendants inherit the sandbox automatically</li></ul> |
+| **Linux** | `__netns-helper` subprocess enters an unprivileged user + network namespace, binds the proxy port inside it, passes the listener FD back via `SCM_RIGHTS` | <ul><li>Requires `kernel.unprivileged_userns_clone=1` (default on Ubuntu/Fedora)</li><li>Falls back to `--mode=permissive` on hardened distros unless `--mode=airtight-strict` is set</li></ul> |
+| **Windows** | WFP provider/sublayer registered by `agent-gate init`; runtime path scaffolded for Plan 4 | <ul><li>Currently stubs to `--mode=permissive` with a clear message</li></ul> |
 
-### Threat model
+For the full flag reference, mode-picking guide, and run recipes, see the [runbook](docs/RUNBOOK.md#agent-gate-run).
 
-agent-gate's airtight mode defends against:
+## Threat model
 
-- **Tools that ignore `HTTPS_PROXY`.** They get kernel-level network deny.
-- **Subprocess descendants.** The jail is inherited (sandbox profile, network namespace).
+agent-gate is a **network audit gate**, not a sandbox or RBAC system. It captures and audits HTTP egress; it does not isolate filesystem, IPC, or privileges.
 
-It does **not** defend against:
+**Defends against:**
 
-- **Local IPC** — UNIX sockets, named pipes, abstract sockets, shared memory. Out of the proxy's view by design.
-- **Root/admin agents.** The user can lift the jail.
-- **Filesystem reads.** If the agent reads `.env` and writes it somewhere on disk, agent-gate doesn't see it. The proxy is a network audit, not a filesystem audit.
-- **Steganographic exfiltration through allowed hosts.**
+- Tools that ignore `HTTPS_PROXY` — kernel-level network deny in airtight mode
+- Subprocess descendants — the jail is inherited (sandbox profile / network namespace)
 
-If your threat model needs filesystem isolation or RBAC, agent-gate alone is insufficient.
+**Does NOT defend against:**
 
-For the full flag reference, mode-picking guide, and run recipes, see the [runbook](docs/RUNBOOK.md#agent-gate-run). Or run `agent-gate run --help` from the binary.
+- Local IPC — UNIX sockets, named pipes, abstract sockets, shared memory are out of the proxy's view by design
+- Root or admin agents — the user can lift the jail
+- Filesystem reads — agent-gate sees the network, not the disk; an agent reading `.env` and writing it elsewhere on disk is invisible
+- Steganographic exfiltration through allowed hosts
+
+If your threat model needs filesystem isolation or RBAC, agent-gate alone is insufficient — pair it with OS-level sandboxing.
 
 ## Three-list policy model
 
-Three file-backed host lists, all in `~/.config/agent-gate/`, mutated only by `init`, the dashboard, or your editor:
+Each request hits the proxy and gets routed by three plain-text host lists. Resolution order is fixed:
 
-| File | Effect | How to mutate |
+```
+1. denylist hit                          → 403 (always wins)
+2. passthrough hit (and not denylisted)  → raw TCP tunnel; no TLS interception
+3. enforce mode + not allowlisted        → 403
+4. default                               → MITM, decrypt, capture, forward
+```
+
+The lists live in `~/.config/agent-gate/` and are mutated only by `init`, the dashboard, or your editor — never by the runtime:
+
+| File | Add a host when… | How to add |
 |---|---|---|
-| `allowlist.txt` | Host is OK; suppresses `host_not_allowlisted`, lets through under `--enforce-allowlist` | Dashboard **Trust** → `POST /api/trust`; or `agent-gate init --allow-host HOST` |
-| `denylist.txt` | Proxy returns synthetic 403; never contacts upstream | Dashboard **Block** → `POST /api/block` |
-| `passthrough.txt` | Proxy tunnels TCP raw — no TLS interception | Dashboard **Passthrough** → `POST /api/passthrough` |
-
-Resolution order in `mitmConnect`:
-
-```
-denylist hit  → 403 (always wins)
-passthrough hit (and not denylisted) → raw TCP tunnel
-enforce mode + not allowlisted → 403
-default → MITM, decrypt, capture, forward
-```
+| `allowlist.txt` | …it's a known-good upstream you don't want flagged | Dashboard **Trust** → `POST /api/trust`, or `agent-gate init --allow-host HOST` |
+| `denylist.txt` | …you want it blocked at the proxy with a 403, no upstream contact | Dashboard **Block** → `POST /api/block` |
+| `passthrough.txt` | …it pins TLS or otherwise rejects MITM (e.g. `mcp-proxy.anthropic.com`) and you still want the connection metadata audited | Dashboard **Passthrough** → `POST /api/passthrough` |
 
 `agent-gate help allowlist|denylist|passthrough` prints the long-form explanation in your terminal.
 
 ## Built-in policy rules
 
-| Code | Severity | Fires when |
-|---|---|---|
-| `host_not_allowlisted` | high | Request host is not in the allowlist |
-| `secret_in_request` | high | Request body matches a credential pattern |
-| `env_in_tool_result` | high | Tool result contains ≥3 KEY=VALUE lines |
-| `oversized_request` | medium | Request body > 5 MB |
-| `oversized_response` | low | Response body > 5 MB |
-| `unknown_mcp_endpoint` | medium | Response is `text/event-stream` and host is unknown |
-| `permissive_capture` | info | Session captured under env-only enforcement |
-| `parse_error` | info | Parser annotated an error on the flow |
-| `ws_pinned_upstream` | info | WebSocket upgrade succeeded (101) — empty body capture is expected when the upstream client pins TLS, e.g. codex on `chatgpt.com` |
+Every captured event runs through nine rules. Severity drives the dashboard's risk feed and sort order — `high` floats to the top, `info` stays out of your way unless filtered.
+
+**High** — likely worth a look:
+
+| Code | Fires when |
+|---|---|
+| `host_not_allowlisted` | Request host is not in the allowlist |
+| `secret_in_request` | Request body matches a credential pattern |
+| `env_in_tool_result` | Tool result contains ≥3 `KEY=VALUE` lines |
+
+**Medium** — usually benign but unusual:
+
+| Code | Fires when |
+|---|---|
+| `oversized_request` | Request body > 5 MB |
+| `unknown_mcp_endpoint` | Response is `text/event-stream` and host is unknown |
+
+**Low** — noise tracking:
+
+| Code | Fires when |
+|---|---|
+| `oversized_response` | Response body > 5 MB |
+
+**Info** — context, not concern:
+
+| Code | Fires when |
+|---|---|
+| `permissive_capture` | Session captured under env-only enforcement |
+| `parse_error` | Parser annotated an error on the flow |
+| `ws_pinned_upstream` | WebSocket upgrade succeeded (101) but the upstream client pins TLS — empty body capture is expected here (e.g. codex on `chatgpt.com`) |
+
+Per-flag dismiss-with-reason on the dashboard writes to `dismissals.json` so the same flag doesn't keep nagging you on subsequent runs.
 
 ## What we explicitly don't do
 
