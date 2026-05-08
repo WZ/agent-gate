@@ -49,16 +49,16 @@ agent-gate support has three separate layers:
 
 ## Features
 
-- **Airtight launcher** — `agent-gate run -- claude` spawns the target inside a per-OS network jail on macOS and Linux that physically forces every byte of egress through the local proxy. Subprocesses inherit the jail. Tools that don't honor `HTTPS_PROXY` get kernel-level network deny. Windows currently falls back to permissive capture; see the support matrix above.
-- **TLS-MITM proxy with passthrough escape hatch** — every HTTPS request is decrypted, parsed, flagged, and re-encrypted toward the upstream. Cert-pinned hosts (`mcp-proxy.anthropic.com` and friends) get raw TCP tunneling instead, so MITM-rejecters still work — connection metadata gets audited even when bodies can't.
-- **Three-list policy model** — `allowlist.txt`, `denylist.txt`, `passthrough.txt` in `~/.config/agent-gate/`. Mutated only by `init`, the dashboard, or your editor — never by the runtime. Resolution order: deny wins, then passthrough, then enforce-mode allowlist gate, then default audit-and-forward.
-- **Nine built-in policy rules** — `host_not_allowlisted`, `secret_in_request`, `env_in_tool_result`, `oversized_request`, `oversized_response`, `unknown_mcp_endpoint`, `permissive_capture`, `parse_error`, `ws_pinned_upstream`. Per-flag dismiss with reason + timestamp.
-- **PII detection across the wire** — every captured event is scanned for SSN, credit cards, DOB, email, phone, name, address, JWT, UUID, IPv4. The Explore page colors body text by kind so you can spot what slipped through at a glance.
-- **Parser registry** — Anthropic Messages SSE streams are reassembled into single review-ready events, tool calls and tool results are split out, and system prompts are surfaced. OpenAI-compatible Chat Completions and Responses HTTP calls surface model, token counts, tool calls, and tool results — including codex's `chatgpt.com/backend-api/codex/responses` POST with its `Content-Encoding: zstd` request body. Selected Codex/ChatGPT backend setup endpoints are parsed into inventory-style events. Generic HTTP fallback covers the remaining Aider, OpenCode, OpenClaw, Hermes Agent, MCP, and custom-agent traffic until more Plan 5 parsers land.
-- **One-command bootstrap** — `agent-gate init` writes the config, mints a local CA, detects which agents you have installed (`claude`, `codex`, `aider`, `opencode`), seeds their upstream hosts into your allowlist, and installs the CA into Keychain (macOS), `ca-certificates` + Firefox NSS (Linux), or wincrypt (Windows). OpenClaw and Hermes Agent are manual-capture paths until their profiles land.
-- **`doctor` validate-and-repair** — checks every moving part (CA files, ports, lockfile, host-list permissions, agents detected, CA trusted across all stores) and prints one line per check. `--auto-repair=safe` for filesystem fixes; `--auto-repair=aggressive` will retry trust-store install.
-- **JSONL + SQLite store** — every captured flow lands on disk. JSONL is the source of truth; SQLite is an index over it. `agent-gate reindex` rebuilds the index from JSONL whenever you want.
-- **Single binary, pure Go** — no CGO, cross-compiles cleanly to darwin/linux/windows × amd64/arm64. Distributed via [GitHub Releases](https://github.com/WZ/agent-gate/releases/latest) on every tag.
+- **Airtight launcher** — per-OS network jail forces every byte of egress through the local proxy. Subprocesses inherit it; tools that ignore `HTTPS_PROXY` get kernel-level deny.
+- **TLS-MITM proxy with passthrough escape hatch** — decrypts and parses every request. Cert-pinned hosts get raw TCP tunneling so MITM-rejecters still work.
+- **Three-list policy model** — `allowlist.txt`, `denylist.txt`, `passthrough.txt`. Mutated only by `init`, the dashboard, or your editor — never by the runtime.
+- **Nine built-in policy rules** — host not allowlisted, secrets in body, env leakage, oversize, parse errors, more. Per-flag dismiss with reason.
+- **PII detection across the wire** — SSN, cards, email, phone, JWT, UUID, IPv4, etc. The Explore page colors body text by kind.
+- **Parser registry** — Anthropic Messages SSE reassembled into single events; OpenAI Chat Completions and Responses HTTP surface model, tokens, tool calls. Generic HTTP fallback for everything else.
+- **One-command bootstrap** — `agent-gate init` writes config, mints a CA, detects your agents, seeds their hosts, installs the CA into your trust store.
+- **`doctor` validate-and-repair** — one line per check across config, CA, ports, lockfile, agents, trust stores. `--auto-repair` for filesystem fixes.
+- **JSONL + SQLite store** — JSONL is the source of truth; SQLite is an index. `agent-gate reindex` rebuilds the index whenever.
+- **Single binary, pure Go** — no CGO. Cross-compiles to darwin/linux/windows × amd64/arm64.
 
 ## Quick Start
 
