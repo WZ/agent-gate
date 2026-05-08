@@ -31,12 +31,12 @@
   <rect width="1200" height="540" fill="#f8f6f3"/>
 
   <!-- Outer "single binary" container -->
-  <rect x="40" y="40" width="1120" height="460" rx="16" fill="#ffffff" stroke="#d8d2c8" stroke-width="1.5"/>
+  <rect x="40" y="40" width="1120" height="460" rx="16" fill="#ffffff" stroke="#9ca3af" stroke-width="1.5"/>
   <text x="64" y="72" class="label-section">SINGLE BINARY · LOOPBACK ONLY · LOCAL DISK</text>
 
   <!-- Launcher box -->
   <g>
-    <rect x="80" y="110" width="220" height="120" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <rect x="80" y="110" width="220" height="120" rx="10" fill="url(#cardBg)" stroke="#9ca3af" stroke-width="1.5"/>
     <text x="100" y="138" class="label-eyebrow">SUBSYSTEM</text>
     <text x="100" y="166" class="label-title">launcher</text>
     <text x="100" y="190" class="label-sub">per-OS network jail</text>
@@ -45,7 +45,7 @@
 
   <!-- Agent (child) box -->
   <g>
-    <rect x="380" y="110" width="240" height="120" rx="10" fill="url(#cardBg)" stroke="#d8d2c8" stroke-dasharray="4 3"/>
+    <rect x="380" y="110" width="240" height="120" rx="10" fill="url(#cardBg)" stroke="#9ca3af" stroke-width="1.5" stroke-dasharray="4 3"/>
     <text x="400" y="138" class="label-eyebrow">CHILD PROCESS</text>
     <text x="400" y="166" class="label-title">your agent</text>
     <text x="400" y="190" class="label-sub">claude · codex · curl · gh</text>
@@ -59,10 +59,10 @@
   <!-- Proxy (centerpiece) -->
   <g>
     <rect x="700" y="110" width="380" height="120" rx="12" fill="url(#proxyBg)"/>
-    <text x="724" y="138" class="label-eyebrow" fill="#bff5dd" opacity="0.85">CORE</text>
-    <text x="724" y="166" class="label-title" fill="#ffffff">proxy :8888</text>
-    <text x="724" y="190" class="label-sub" fill="#ffffff" opacity="0.85">TLS-intercept · CONNECT · passthrough</text>
-    <text x="724" y="210" class="label-mono" fill="#bff5dd">parse → policy → store</text>
+    <text x="724" y="138" class="label-eyebrow" style="fill:#86efac">CORE</text>
+    <text x="724" y="166" class="label-title" style="fill:#ffffff">proxy :8888</text>
+    <text x="724" y="190" class="label-sub" style="fill:#ffffff">TLS-intercept · CONNECT · passthrough</text>
+    <text x="724" y="210" class="label-mono" style="fill:#86efac">parse → policy → store</text>
   </g>
 
   <!-- Arrow: agent -> proxy -->
@@ -71,19 +71,19 @@
 
   <!-- Pipeline: parser -> policy -> store -->
   <g transform="translate(80,300)">
-    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#9ca3af" stroke-width="1.5"/>
     <text x="20" y="26" class="label-eyebrow">STAGE 1</text>
     <text x="20" y="52" class="label-title">parser</text>
     <text x="20" y="76" class="label-sub">RawFlow → ParsedEvent</text>
   </g>
   <g transform="translate(330,300)">
-    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#9ca3af" stroke-width="1.5"/>
     <text x="20" y="26" class="label-eyebrow">STAGE 2</text>
     <text x="20" y="52" class="label-title">policy</text>
     <text x="20" y="76" class="label-sub">8 built-in rules · flags</text>
   </g>
   <g transform="translate(580,300)">
-    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#d8d2c8"/>
+    <rect x="0" y="0" width="220" height="100" rx="10" fill="url(#cardBg)" stroke="#9ca3af" stroke-width="1.5"/>
     <text x="20" y="26" class="label-eyebrow">STAGE 3</text>
     <text x="20" y="52" class="label-title">store</text>
     <text x="20" y="76" class="label-sub">JSONL + SQLite index</text>
